@@ -9,7 +9,7 @@ const loader = await createServer({
 try {
   const { TeachingSession } = await loader.ssrLoadModule("/src/teaching/TeachingSession.ts");
   const { createHttpPlanningModel } = await loader.ssrLoadModule("/src/teaching/modelAdapter.ts");
-  const topic = process.argv[2] || "Why do shadows get longer when the sun is low?";
+  const topic = process.argv[2] || "Why does doubling the width of a rectangle double its area?";
   const session = new TeachingSession({ sessionId: crypto.randomUUID(), age: 9, topic }, createHttpPlanningModel("http://127.0.0.1:5173/api/teaching/plan"));
   const started = Date.now();
   if (!await session.plan()) throw new Error(session.getSnapshot().error);
