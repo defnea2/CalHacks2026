@@ -35,7 +35,7 @@ describe("integrated lesson experience", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     render(<LessonWorkspace />);
     fireEvent.change(screen.getByLabelText("What would you like to understand?"), { target: { value: "How do shadows work?" } });
-    fireEvent.click(screen.getByRole("button", { name: /Explore my question/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Start/ }));
     await screen.findByRole("alert");
     expect(screen.getByRole("button", { name: /Try again/ })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /rows of/ })).not.toBeInTheDocument();

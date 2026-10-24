@@ -8,7 +8,7 @@ export default function App() {
   const [mode, setMode] = useState<"math" | "guided" | "components">("math");
   return <main className="product-shell">
     <header className="product-header">
-      <div className="product-identity"><span className="product-monogram" aria-hidden="true">t</span><strong>Tutor</strong><small>Think in pictures.</small></div>
+      <div className="product-identity"><span className="product-monogram" aria-hidden="true">t</span><strong>Tutor</strong></div>
       <button aria-pressed={tools} onClick={() => setTools(!tools)}>{tools ? "Back to my lesson" : "Development tools"}</button>
     </header>
     <div hidden={tools}><LessonWorkspace /></div>
@@ -22,6 +22,6 @@ export default function App() {
         {mode === "math" ? <MathWorkbench /> : mode === "guided" ? <GuidedWorkbench /> : <VisualSandbox />}
       </Suspense>
     </section>}
-    <footer>Visual learning workspace · Refresh starts a new session</footer>
+    <footer>Refresh starts a new session</footer>
   </main>;
 }

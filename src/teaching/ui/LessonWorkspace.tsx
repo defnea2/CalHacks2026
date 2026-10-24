@@ -8,13 +8,13 @@ import { demoPlanningModel, demoTopics } from "../dev/demoModel";
 
 const subjects = [
   { title: "Equal groups", area: "Multiplication", detail: "Why multiplying is more than adding two numbers.", kind: "groups" },
-  { title: "Small numbers, big ideas", area: "Decimals", detail: "Why more digits don't always mean a larger number.", kind: "line" },
+  { title: "Comparing decimals", area: "Decimals", detail: "Why more digits don't always mean a larger number.", kind: "line" },
   { title: "Where does a puddle go?", area: "Science", detail: "Follow water as it changes and moves around us.", kind: "cycle" },
 ];
 const phaseLabels: Record<TeachingPhase, string> = {
-  diagnose: "Start with your idea", intuition: "See it another way", formalize: "Connect the idea",
-  worked_example: "Work one together", repair: "Look a little closer", solo: "Your turn",
-  transfer: "Try somewhere new", return_to_problem: "Take it with you",
+  diagnose: "What do you think?", intuition: "Use the picture", formalize: "Write it in math",
+  worked_example: "An example", repair: "Try this", solo: "Your turn",
+  transfer: "A new example", return_to_problem: "Your original question",
 };
 function Sketch({ kind }: { kind: string }) {
   return <svg viewBox="0 0 260 110" aria-hidden="true" className="lesson-sketch">
@@ -32,12 +32,12 @@ export function LessonWorkspace() {
   const [homework, setHomework] = useState("");
   const [endpoint, setEndpoint] = useState("/api/teaching/plan");
   const [setupError, setSetupError] = useState("");
-  const [bridge, setBridge] = useState("Checking local model bridge…");
+  const [bridge, setBridge] = useState("Checking connection…");
   useEffect(() => {
     const controller = new AbortController();
     void fetch("/api/teaching/status", { signal: controller.signal })
       .then(async response => { if (!response.ok) throw new Error(); return response.json(); })
-      .then(status => { if (!controller.signal.aborted) setBridge(status.provider === "codex" ? "Codex bridge ready · uses your ChatGPT sign-in" : "Use a connected planning endpoint"); })
+      .then(status => { if (!controller.signal.aborted) setBridge(status.provider === "codex" ? `Connected to ${status.model ?? "Codex"} using your ChatGPT sign-in` : "Use a connected planning endpoint"); })
       .catch(() => { if (!controller.signal.aborted) setBridge("Start npm run dev to connect the local model bridge."); });
     return () => controller.abort();
   }, []);
@@ -59,27 +59,27 @@ export function LessonWorkspace() {
   return <section className="lesson-workspace" aria-label="Learning session">
     {studio ? <MathStudio onExit={() => setStudio(false)} /> : session ? <Lesson key={session.planner.getSnapshot().config.sessionId} session={session} source={source} onExit={() => { session.cancel(); setSession(null); }} />
       : <div className="lesson-welcome">
-        <div className="lesson-intro"><span className="lesson-eyebrow">LOOK · TRY · UNDERSTAND</span><h1>What are you <br />wondering about?</h1><p>Ask your question. Build a picture. Work through it together.</p></div>
+        <div className="lesson-intro"><span className="lesson-eyebrow">MATH TUTOR</span><h1>What are you <br />wondering about?</h1><p>What part of your math work is confusing? We can use a picture to work through it.</p></div>
         <form className="lesson-topic-entry" onSubmit={e => { e.preventDefault(); start(); }}>
           <label htmlFor="topic-question">What would you like to understand?</label>
-          <div className="lesson-topic-row"><input id="topic-question" required maxLength={1200} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Why does a bigger rectangle have more area?" /><button className="lesson-primary" type="submit">Explore my question <span aria-hidden="true">→</span></button></div>
-          <p className="lesson-connection" role="status">{bridge}</p>
-          <small>No API key or microphone needed. Your question and lesson context are sent to the model through Codex.</small>
-          <details className="lesson-model-setup"><summary>Original question and connection settings</summary>
+          <div className="lesson-topic-row"><input id="topic-question" required maxLength={1200} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Why does a bigger rectangle have more area?" /><button className="lesson-primary" type="submit">Start <span aria-hidden="true">→</span></button></div>
+          <small>Questions and answers are sent to OpenAI.</small>
+          <details className="lesson-model-setup"><summary>Homework and settings</summary>
+            <p className="lesson-connection" role="status">{bridge}</p>
             <label>Your original homework question (optional)<input maxLength={2000} value={homework} onChange={e => setHomework(e.target.value)} /></label>
             <label>Planning endpoint<input required value={endpoint} onChange={e => setEndpoint(e.target.value)} /></label>
           </details>
           {setupError && <p role="alert">{setupError}</p>}
         </form>
-        <div className="studio-invitation"><div><span className="lesson-eyebrow">START WITH YOUR HANDS</span><h2>Stretch a shape. Split a group. Find a pattern.</h2><p>Five interactive math explorations, ready immediately.</p></div><button type="button" className="lesson-primary" onClick={() => setStudio(true)}>Open math studio →</button></div>
-        <div className="lesson-samples-heading"><h2>Or explore an offline sample</h2><span>Three scripted lessons · no model calls</span></div>
+        <div className="studio-invitation"><div><h2>Try the pictures</h2><p>Change shapes, split groups, or compare fractions.</p></div><button type="button" className="lesson-primary" onClick={() => setStudio(true)}>Open math studio →</button></div>
+        <div className="lesson-samples-heading"><h2>Try a sample lesson</h2><span>Works offline</span></div>
         <div className="lesson-catalog" aria-label="Sample lessons">
           {subjects.map((subject, i) => <button className="lesson-card" key={subject.kind} onClick={() => start(i)}>
             <span className="lesson-card-top"><span>{subject.area}</span><span>0{i + 1}</span></span>
-            <Sketch kind={subject.kind} /><h2>{subject.title}</h2><p>{subject.detail}</p><span className="lesson-card-link">Explore this idea <span aria-hidden="true">↗</span></span>
+            <Sketch kind={subject.kind} /><h2>{subject.title}</h2><p>{subject.detail}</p><span className="lesson-card-link">Start lesson <span aria-hidden="true">↗</span></span>
           </button>)}
         </div>
-        <p className="lesson-sample-note">Three offline sample lessons. Read the tutor's words and respond at your own pace. Voice is not connected.</p>
+        <p className="lesson-sample-note">You can type your answers. Voice is not connected yet.</p>
 
       </div>}
   </section>;
@@ -95,41 +95,40 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
   const waiting = teaching.status === "awaiting_response" && !state.busy;
   const complete = teaching.status === "completed";
   const check = step?.check;
-  const narration = visual.beat?.narration ?? "Let's find a starting point together.";
+  const narration = visual.beat?.narration ?? "";
   const spoken = check && narration.endsWith(check.prompt) ? narration.slice(0, -check.prompt.length).trim() : narration;
   const empty = !visual.canvas.math && !visual.canvas.activity && !visual.canvas.nodes.length;
   useEffect(() => { setAnswer(""); heading.current?.focus({ preventScroll: true }); }, [step?.id, state.beatIndex]);
   const respond = (response: LearnerResponse["response"]) => { void session.respond(response); };
   return <>
-    <div className="lesson-topline"><button className="lesson-back" onClick={onExit}>← All topics</button><span>{source === "sample" ? "Offline sample" : "Generated lesson"} · Text mode</span></div>
-    <div className="lesson-title"><h1>{teaching.config.topic}</h1><p>One idea at a time. You set the pace.</p></div>
+    <div className="lesson-topline"><button className="lesson-back" onClick={onExit}>← All topics</button><span>{source === "sample" ? "Offline sample" : "Math lesson"}</span></div>
+    <div className="lesson-title"><h1>{teaching.config.topic}</h1></div>
     <div className="lesson-stage">
       <div className="lesson-paper">
-        {empty ? <section className="lesson-think" aria-label="Thinking space"><span className="lesson-eyebrow">{complete ? "BACK TO YOUR QUESTION" : "A MOMENT TO THINK"}</span><h2>{complete ? teaching.config.originalQuestion || "Where could you use this idea?" : visual.canvas.title}</h2><div className="lesson-pencil-rule" /><p>{complete ? "Try it yourself. Use the ideas you explored here to explain your thinking." : "Start with what you think. We'll build the picture together."}</p></section>
+        {empty ? <section className="lesson-think" aria-label="Thinking space"><span className="lesson-eyebrow">{complete ? "YOUR QUESTION" : "PICTURE"}</span><h2>{complete ? teaching.config.originalQuestion || "Where could you use this idea?" : step ? visual.canvas.title : "Your picture will appear here"}</h2><div className="lesson-pencil-rule" /><p>{complete ? "Try it yourself. Use the ideas you explored here to explain your thinking." : ""}</p></section>
           : <TeachingCanvas canvas={visual.canvas} interactionEnabled={session.canInteract()} onMathAction={session.interactMath} onActivityAction={session.interactActivity} />}
         {!complete && teaching.config.originalQuestion && <div className="lesson-saved-question"><span>Saved for you</span><p>{teaching.config.originalQuestion}</p><small>We'll practice on other examples first.</small></div>}
       </div>
       <aside className="lesson-conversation" aria-label="Tutor conversation">
         <div className="lesson-turn-label"><span className="lesson-tutor-mark" aria-hidden="true">↗</span><span>{step ? phaseLabels[step.phase] : "Let's begin"}</span><span className="lesson-turn-number">{String(teaching.history.length || 1).padStart(2, "0")}</span></div>
-        <h2 ref={heading} tabIndex={-1} className="lesson-narration">{spoken || check?.prompt || narration}</h2>
+        {narration && <h2 ref={heading} tabIndex={-1} className="lesson-narration">{spoken || check?.prompt || narration}</h2>}
         {waiting && check && <form className="lesson-response" onSubmit={e => { e.preventDefault(); if (answer.trim()) respond({ kind: "answer", text: answer.trim() }); }}>
           {spoken && <p className="lesson-question">{check.prompt}</p>}
           {check.kind === "choice" ? <div className="lesson-choices">{check.options.map((option, i) => <button key={option.id} type="button" onClick={() => respond({ kind: "choice", optionId: option.id })}><span aria-hidden="true">{String.fromCharCode(65+i)}</span>{option.label}<span aria-hidden="true">↗</span></button>)}</div>
-            : ["math_value", "placement", "order"].includes(check.kind) ? <><p className="lesson-response-hint">Make your changes in the picture, then share your answer.</p><button className="lesson-primary" type="button" onClick={() => respond({ kind: "interaction" })}>Check my picture →</button></>
-              : <><label htmlFor="lesson-answer">Your thinking</label><div className="lesson-answer-row"><input id="lesson-answer" autoComplete="off" maxLength={2000} value={answer} onChange={e => setAnswer(e.target.value)} placeholder={check.kind === "number" ? "A number, or write it in words…" : "Tell me how you see it…"} /><button className="lesson-primary" type="submit" disabled={!answer.trim()} aria-label="Send answer">→</button></div></>}
+            : ["math_value", "placement", "order"].includes(check.kind) ? <><p className="lesson-response-hint">When you are ready, check your picture.</p><button className="lesson-primary" type="button" onClick={() => respond({ kind: "interaction" })}>Check my picture →</button></>
+              : <><label htmlFor="lesson-answer">Your thinking</label><div className="lesson-answer-row"><input id="lesson-answer" autoComplete="off" maxLength={2000} value={answer} onChange={e => setAnswer(e.target.value)} placeholder={check.kind === "number" ? "Your answer…" : "What do you think?"} /><button className="lesson-primary" type="submit" disabled={!answer.trim()} aria-label="Send answer">→</button></div></>}
           <div className="lesson-help"><span>Need a different approach?</span><div><button type="button" onClick={() => respond({ kind: "help", request: "another_way" })}>Show another way</button><button type="button" onClick={() => respond({ kind: "help", request: "simpler" })}>Smaller step</button><button type="button" onClick={() => respond({ kind: "help", request: "repeat" })}>Repeat</button></div></div>
         </form>}
-        {state.busy ? <div className="lesson-planning" role="status"><span>Preparing the next picture…</span><button onClick={session.cancel}>Cancel</button></div>
+        {state.busy ? <div className="lesson-planning" role="status"><span>{step ? "Loading the next step…" : "Loading…"}</span><button onClick={session.cancel}>Cancel</button></div>
           : teaching.status === "presenting" ? <button className="lesson-primary" onClick={session.presentNext}>Continue <span aria-hidden="true">→</span></button>
           : teaching.status === "needs_plan" && <button className="lesson-primary" onClick={() => void session.plan()}>{state.error ? "Try again" : "Continue"} <span aria-hidden="true">→</span></button>}
-        {complete && <div className="lesson-finish"><p>You tried {session.planner.recap().independentChecksPassed.length} independent examples successfully. Your original question is ready for you.</p><button className="lesson-primary" onClick={onExit}>Explore another idea →</button></div>}
+        {complete && <div className="lesson-finish"><p>{teaching.config.originalQuestion ? "Now try your original question without help." : "Try explaining how you would solve another example."}</p><button className="lesson-primary" onClick={onExit}>Another question →</button></div>}
         {state.error && <div className="lesson-error" role="alert"><strong>This step couldn't load.</strong><p>Your picture is still here. Try again, or choose another topic.</p><details><summary>Technical details</summary><p>{state.error}</p></details></div>}
-        <p className="lesson-voice-note">Read, explore, respond. No microphone needed.</p>
       </aside>
     </div>
     {teaching.history.length > 0 && <details className="lesson-notebook"><summary>Your lesson notes <span>{teaching.history.length} {teaching.history.length === 1 ? "step" : "steps"}</span></summary><ol>{teaching.history.map((item, i) => {
       const evidence = teaching.evidence.filter(e => e.stepId === item.id).at(-1);
-      return <li key={item.id}><span className="lesson-note-index">{String(i+1).padStart(2,"0")}</span><div><h3>{phaseLabels[item.phase]}</h3>{item.beats.map(beat => <p key={beat.id}>{beat.narration}</p>)}{evidence && <small>{evidence.response.kind === "help" ? "You asked for a different approach." : evidence.source === "model_tentative" ? "Tutor interpretation — still tentative." : evidence.outcome === "correct" ? "Your answer matched the check." : evidence.outcome === "incorrect" ? "We revisited this idea." : "We needed more detail."}</small>}</div></li>;
+      return <li key={item.id}><span className="lesson-note-index">{String(i+1).padStart(2,"0")}</span><div><h3>{phaseLabels[item.phase]}</h3>{item.beats.map(beat => <p key={beat.id}>{beat.narration}</p>)}{evidence && <small>{evidence.response.kind === "help" ? "You asked for a different approach." : evidence.source === "model_tentative" ? "Explanation discussed; not scored." : evidence.outcome === "correct" ? "Correct answer." : evidence.outcome === "incorrect" ? "We revisited this idea." : "We needed more detail."}</small>}</div></li>;
     })}</ol></details>}
   </>;
 }
