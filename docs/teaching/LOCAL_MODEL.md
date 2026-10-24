@@ -15,6 +15,12 @@ The CLI executable defaults to `codex` on PATH. If needed, set `TUTOR_CODEX_BIN`
 
 The status label confirms the local bridge is reachable. It does not prove that authentication, model access or account allowance will succeed; those are checked by an actual generation request.
 
+## Teaching language
+
+`src/teaching/language.ts` supplies the same language guidance to compact planning and the full TeachingStep contract used by the voice integration. It asks for short explanations tied to visible quantities, one question at a time, and feedback based on the learner's actual reasoning. A request for help should reduce the conceptual demand, not merely change the numbers. The original homework stays unsolved for independent practice.
+
+The interface keeps connection details in settings, uses ordinary loading labels, and avoids generic praise or claims of mastery. These instructions guide the model; they do not certify its mathematical accuracy or educational effectiveness. Review actual lessons as well as schema validation.
+
 ## Request lifecycle
 
 1. The browser captures current planner and canvas context, retaining the director's context version.
@@ -52,6 +58,16 @@ The response/visual schemas provide structural and some mathematical checks, not
 ## References
 
 Official documentation describes [non-interactive execution and structured outputs](https://learn.chatgpt.com/docs/non-interactive-mode), [Codex authentication](https://learn.chatgpt.com/docs/auth), and [configuration controls](https://learn.chatgpt.com/docs/config-file/config-reference). The implementation was exercised with locally installed `codex-cli 0.145.0`; no API credential is extracted from its login.
+
+## Luna verification (2026-10-24)
+
+The running endpoint reported `gpt-5.6-luna`. A two-turn area lesson passed server and browser-planner validation: approximately 5 seconds for the first turn and 9 seconds total. After “smaller step,” the tutor changed from reasoning about doubling width to counting the six squares in a 2-by-3 rectangle, with a deterministic product check. These are individual observations, not a controlled speed benchmark.
+
+A separate browser check used the misconception “1/4 is bigger because 4 is bigger than 3.” The tutor retained equal-sized wholes and directed the learner to compare the shaded pieces rather than endorsing the mistaken rule. An earlier area response misstated the number of added squares; the instructions were tightened to distinguish per-row counts from whole-rectangle totals. Free-form mathematical narration still needs review.
+
+Compact lessons with a question mark in narration alongside a check are rejected and given the existing single repair attempt. This catches the repeated-question failure observed in a live run; it does not guarantee that every sentence has only one instructional demand. There is no extra model call for valid responses.
+
+Validation: 145 tests, TypeScript and main build pass. The standalone teaching build also passed after the language integration.
 
 ## Earlier free-form verification
 

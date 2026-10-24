@@ -23,7 +23,7 @@ Choose **Open math studio** for local area, triangle, group, fraction and number
 
 ## Start with a lesson
 
-The default app is a voice-free tutoring session. Enter a conceptual math question and select **Explore my question** to generate a new explanation and diagram with the real model. **Equal groups**, **Small numbers, big ideas**, and **Where does a puddle go?** remain explicitly scripted offline samples.
+The default app is a voice-free tutoring session. Enter a conceptual math question and select **Start** to generate a new explanation and diagram with the real model. **Equal groups**, **Comparing decimals**, and **Where does a puddle go?** remain explicitly scripted offline samples.
 
 Answer a question to get the next explanation automatically. **Show another way** changes representation, **Smaller step** requests help, and **Continue** advances explanations without a question. Manipulate enabled visuals, then answer or submit the picture when invited. **Your lesson notes** keeps the sequence and recorded evidence; the original homework question stays unsolved for the learner. Refresh clears the session.
 

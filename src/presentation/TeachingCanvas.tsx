@@ -141,15 +141,15 @@ export function TeachingCanvas({
     <section className="teaching-canvas" aria-label="Tutor's visual canvas">
       <div className="canvas-heading">
         <span>
-          {canvas.math ? "Mathematical workspace" : "Teaching canvas"}
+          {canvas.math ? "Math picture" : "Picture"}
         </span>
         <span className="canvas-interaction-hint">
           {choiceIds.length ||
           (interactionEnabled &&
             (canvas.math?.visual.interactive ||
               canvas.activity?.activity.allowedInteractions.length))
-            ? "Explore the diagram"
-            : "Observe"}
+            ? "You can change this picture"
+            : "Look at the picture"}
         </span>
       </div>
       <h2>{canvas.title}</h2>
@@ -339,9 +339,7 @@ export function TeachingCanvas({
           )}
         </svg>
       )}
-      <div className="canvas-note" aria-live="polite">
-        {canvas.note || "The picture will build one step at a time."}
-      </div>
+      {canvas.note && <div className="canvas-note" aria-live="polite">{canvas.note}</div>}
     </section>
   );
 }

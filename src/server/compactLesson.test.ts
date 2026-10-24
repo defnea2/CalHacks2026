@@ -32,6 +32,17 @@ describe("compact mathematical planning", () => {
     expect(command).toMatchObject({ type: "show_math", visual: { id: "math", kind: "geometry", width: 6, height: 4 } });
     expect(output.beats[0].narration).toContain(draft.check.prompt);
   });
+  it("repairs a competing narration question before presenting the single check", async () => {
+    const planner = new TeachingPlanner({ sessionId: "one-question", topic: "Rectangle area" });
+    const request = parseModelRequest(planner.request(emptyCanvas()));
+    const generate = vi.fn().mockResolvedValueOnce({ ...draft, narration: "What is the area?" }).mockResolvedValueOnce(draft);
+    const step = await generatePlan(request, generate, new AbortController().signal);
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[1][0]).toContain("single learner question only in check.prompt");
+    expect(step.beats[0].narration.match(/\?/g)).toHaveLength(1);
+    expect(step.beats[0].narration.endsWith(draft.check.prompt)).toBe(true);
+    expect(step.beats[0].cues[0].commands.at(-1)).toEqual({ type: "note", text: "" });
+  });
   it("retains learner changes when updating an existing representation", () => {
     const options = { title: "Groups", interactive: true, showEquation: true };
     const canvas = applyCanvasCommands(emptyCanvas(), compileMathCommand({ kind: "array", rows: 4, columns: 7 }, emptyCanvas(), options));
