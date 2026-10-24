@@ -65,7 +65,13 @@ export function planningPrompt(request: ModelRequest, repair?: { output: unknown
   ].join("\n\n");
 }
 export function validateModelStep(request: ModelRequest, output: unknown) {
-  const step = validateTeachingStep(output, {
+  // Assemble exact question wording in code instead of relying on the model to copy it twice.
+  // All fields are parsed first; the complete shared validator still runs after composition.
+  const draft = z.object(TeachingStepSchema.shape).strict().parse(output);
+  const finalBeat = draft.beats.at(-1)!;
+  if (draft.check && !finalBeat.narration.includes(draft.check.prompt))
+    finalBeat.narration += " " + draft.check.prompt;
+  const step = validateTeachingStep(draft, {
     config: request.context.session, step: request.context.currentStep,
     history: request.context.recentSteps, evidence: request.context.evidence as Evidence[],
   }, request.context.canvas as CanvasState, request.context.usedExampleProblems).step;
@@ -98,5 +104,5 @@ export async function generatePlan(request: ModelRequest, generate: GenerateCand
       repair = { output, error: message.slice(0, 2500) };
     }
   }
-  throw new Error("The model could not produce a valid visual lesson after one repair. Try a more focused question.");
+  throw new Error("The model could not produce a valid visual lesson after one repair. " + (repair?.error ?? "Try a more focused question."));
 }

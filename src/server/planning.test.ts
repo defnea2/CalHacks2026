@@ -82,3 +82,12 @@ it("rejects a generated shape that extends outside the canvas", async () => {
   await expect(generatePlan(parseModelRequest(input), generate, new AbortController().signal)).rejects.toThrow("one repair");
   expect(generate.mock.calls[1][0]).toContain("extends outside the drawing");
 });
+it("composes the exact learner question into the final narration before shared validation", async () => {
+  const input = request();
+  const candidate = await demoPlanningModel(input);
+  candidate.beats[0].narration = "Look at the two equal groups.";
+  const generate = vi.fn().mockResolvedValue(candidate);
+  const step = await generatePlan(parseModelRequest(input), generate, new AbortController().signal);
+  expect(step.beats.at(-1)?.narration).toBe("Look at the two equal groups. " + step.check?.prompt);
+  expect(generate).toHaveBeenCalledTimes(1);
+});

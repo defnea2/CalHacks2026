@@ -21,7 +21,10 @@ try {
   const response = first.check?.kind === "choice"
     ? { kind: "choice", optionId: first.check.options.find(o => o.id !== first.check.correctOptionId).id }
     : { kind: "help", request: "simpler" };
-  if (!await session.respond(response)) throw new Error(session.getSnapshot().error);
+  if (!await session.respond(response)) {
+    if (process.env.TUTOR_SMOKE_OUTPUT) await writeFile(process.env.TUTOR_SMOKE_OUTPUT, JSON.stringify({ topic, steps: session.planner.getSnapshot().history, canvas: session.director.getSnapshot().canvas, evidence: session.planner.getSnapshot().evidence, error: session.getSnapshot().error }, null, 2));
+    throw new Error(session.getSnapshot().error);
+  }
   while (session.planner.getSnapshot().status === "presenting") {
     if (!session.presentNext()) throw new Error(session.getSnapshot().error);
   }
