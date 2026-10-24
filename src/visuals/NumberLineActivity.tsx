@@ -148,7 +148,9 @@ export function NumberLineActivity(props: Props) {
       <div className="lab-instruction">
         <span className="instruction-number">1</span>
         <span>
-          Slide along the line. Notice the distance between each number.
+          {isEnabled(props.scene, "move_marker")
+            ? "Slide along the line. Notice the distance between each number."
+            : "The markers show numbers on equal scales. Notice their positions."}
         </span>
       </div>
       <div className="lab-lines">

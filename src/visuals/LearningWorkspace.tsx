@@ -17,6 +17,7 @@ import "./visuals.css";
 export interface LearningWorkspaceProps {
   scene: SceneState;
   embedded?: boolean;
+  showComparisonControl?: boolean;
   onAction(action: LearnerAction): void;
 }
 const typeLabels = {
@@ -31,6 +32,7 @@ function ValidWorkspace({
   scene,
   onAction,
   embedded = false,
+  showComparisonControl = true,
 }: LearningWorkspaceProps) {
   const activity = scene.activity;
   const reduce = useReducedMotion();
@@ -80,6 +82,7 @@ function ValidWorkspace({
           {activity.kind === "bars_number_line" &&
             (activity.mode === "bars" ? (
               <BarsActivity
+                showComparisonControl={showComparisonControl}
                 scene={scene}
                 emit={emit}
                 announce={setNotice}

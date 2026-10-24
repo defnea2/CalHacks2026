@@ -119,7 +119,10 @@ export function MathWorkspace({
     });
   const activity = mathActivity(scene, enabled);
   return (
-    <div className="math-workspace" data-visual-id={visual.id}>
+    <div
+      className={`math-workspace ${canChange ? "" : "math-observe"}`}
+      data-visual-id={visual.id}
+    >
       {visual.kind === "array" ? (
         <>
           <ArrayPicture visual={visual} />

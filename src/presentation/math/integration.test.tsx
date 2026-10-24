@@ -74,6 +74,19 @@ describe("unified teaching surface", () => {
     expect(container.querySelector('[data-cell="0-0"]')).toBe(firstCell);
     expect(container.querySelectorAll("[data-cell]")).toHaveLength(56);
   });
+  it("keeps learner controls locked while narration is speaking", () => {
+    const d = new VisualDirector();
+    const token = d.prepare(beat);
+    d.narrationStarted(token);
+    render(<Host director={d} />);
+    expect(
+      screen.getByRole("slider", { name: "Number of groups" }),
+    ).toBeDisabled();
+    act(() => d.narrationEnded(token));
+    expect(
+      screen.getByRole("slider", { name: "Number of groups" }),
+    ).toBeEnabled();
+  });
   it("embeds bars and number lines, returning their actions to the director", () => {
     const d = new VisualDirector();
     finish(d, {

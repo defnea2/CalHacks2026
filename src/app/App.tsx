@@ -1,6 +1,10 @@
 import { lazy, Suspense, useState } from "react";
 import { MathWorkbench } from "../presentation/math/MathWorkbench";
-import { GuidedWorkbench } from "../presentation/GuidedWorkbench";
+const GuidedWorkbench = lazy(() =>
+  import("../presentation/GuidedWorkbench").then((module) => ({
+    default: module.GuidedWorkbench,
+  })),
+);
 const VisualSandbox = lazy(() =>
   import("../visuals/VisualSandbox").then((module) => ({
     default: module.VisualSandbox,

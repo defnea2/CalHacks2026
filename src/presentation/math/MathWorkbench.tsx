@@ -79,7 +79,7 @@ export function MathWorkbench() {
             <option value="number_line">Decimals on number lines</option>
             <option value="bars">Equivalent amounts with bars</option>
             {fixtureKeys
-              .filter((key) => !["bars", "numberLine"].includes(key))
+              .filter((key) => !["bars", "line"].includes(key))
               .map((key) => (
                 <option key={key} value={`activity:${key}`}>
                   Activity · {key}

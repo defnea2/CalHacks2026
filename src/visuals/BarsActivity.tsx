@@ -7,7 +7,8 @@ export function BarsActivity({
   activity,
   scene,
   emit,
-}: ActivityProps<"bars_number_line">) {
+  showComparisonControl = true,
+}: ActivityProps<"bars_number_line"> & { showComparisonControl?: boolean }) {
   const [compare, setCompare] = useState(false);
   const reduce = useReducedMotion();
   const first = activity.bars[0],
@@ -21,8 +22,9 @@ export function BarsActivity({
       <div className="lab-instruction">
         <span className="instruction-number">1</span>
         <span>
-          All bars are the same whole. Tap a part to colour that much, then
-          compare.
+          {isEnabled(scene, "set_shaded")
+            ? "All bars are the same whole. Tap a part to colour that much, then compare."
+            : "All bars are the same whole. Follow the coloured amounts."}
         </span>
       </div>
       <div className="lab-bars">
@@ -115,14 +117,16 @@ export function BarsActivity({
           </section>
         ))}
       </div>
-      <button
-        className="lab-action"
-        onClick={() => setCompare((value) => !value)}
-      >
-        {compare ? "Hide comparison" : "Compare coloured amounts"}{" "}
-        <span aria-hidden="true">↗</span>
-      </button>
-      {compare && (
+      {showComparisonControl && (
+        <button
+          className="lab-action"
+          onClick={() => setCompare((value) => !value)}
+        >
+          {compare ? "Hide comparison" : "Compare coloured amounts"}{" "}
+          <span aria-hidden="true">↗</span>
+        </button>
+      )}
+      {showComparisonControl && compare && (
         <section className="lab-comparison" aria-label="Equal-scale comparison">
           <span className="lab-section-label">Line them up</span>
           {activity.bars.map((bar, index) => (

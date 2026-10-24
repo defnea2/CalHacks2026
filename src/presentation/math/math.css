@@ -91,3 +91,7 @@
     transition: none !important;
   }
 }
+.math-observe .lab-bar-settings,
+.math-observe .lab-line-controls {
+  display: none;
+}
