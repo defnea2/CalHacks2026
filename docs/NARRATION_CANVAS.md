@@ -2,7 +2,7 @@
 
 The product interaction is: **the tutor explains an idea while building its visual representation**. Child interaction is an invitation within that explanation, not a prerequisite for every visual change.
 
-`src/presentation` is the module for this interaction. `src/visuals` retains the richer hands-on activity components. Neither module needs the other teammates' backend or app architecture.
+`src/presentation` is the module for this interaction. The teaching canvas also hosts mathematical models and the hands-on components from `src/visuals`. See [MATH_CANVAS.md](MATH_CANVAS.md) for the unified commands and [LIVEKIT_CARTESIA.md](LIVEKIT_CARTESIA.md) for the transport handoff. Neither module needs the other teammates' backend or app architecture.
 
 ## Try the experience now
 
@@ -66,7 +66,7 @@ director.narrationEnded(token); // playback finished
 director.interrupt(token);
 ```
 
-`NarrationAudio.tsx` is a working reference adapter for HTML audio. It uses `playing`, `timeupdate`, `pause`, and `ended`, not an independent wall clock. For streaming speech, the teammate can use the equivalent callbacks from their player.
+`NarrationAudio.tsx` is a working reference adapter for HTML audio. It uses `playing`, `timeupdate`, `pause`, and `ended`, not an independent wall clock. For LiveKit streaming speech, a dedicated adapter must correlate speech operations and synchronized playout with tokens; the continuous WebRTC audio track is not a per-beat HTML audio clock. See the LiveKit/Cartesia handoff above.
 
 Prefer short semantic beats with a cue at `atMs: 0` until audio alignment is available. For changes inside a sentence, supply cue times aligned to the generated audio. Do not guess alignment from text token arrival. If narration ends before a later cue, the director applies remaining cues at the end so the scene reaches its intended final state.
 
@@ -95,16 +95,18 @@ The renderer makes objects interactive only when invited. Responses are accepted
 
 The canvas uses a 1000 × 600 coordinate space, scaled to the display. Positions refer to object centres. Commands are structured data, not generated code.
 
-| Command     | Meaning                                                        |
-| ----------- | -------------------------------------------------------------- |
-| `clear`     | Start a new scene and title                                    |
-| `add`       | Reveal labelled icons, text, circles, rectangles, or triangles |
-| `update`    | Animate position, size, rotation, tone, or change a label      |
-| `remove`    | Remove objects and their dangling connections/focus            |
-| `connect`   | Draw a labelled arrow between existing objects                 |
-| `highlight` | Emphasise a set of objects                                     |
-| `point`     | Attach an attention label to an object                         |
-| `note`      | Set the short explanation below the drawing                    |
+| Command                              | Meaning                                                        |
+| ------------------------------------ | -------------------------------------------------------------- |
+| `show_math` / `update_math`          | Create or modify a parameterized mathematical representation   |
+| `show_activity` / `activity_command` | Host and direct an existing interactive activity               |
+| `clear`                              | Start a new scene and title                                    |
+| `add`                                | Reveal labelled icons, text, circles, rectangles, or triangles |
+| `update`                             | Animate position, size, rotation, tone, or change a label      |
+| `remove`                             | Remove objects and their dangling connections/focus            |
+| `connect`                            | Draw a labelled arrow between existing objects                 |
+| `highlight`                          | Emphasise a set of objects                                     |
+| `point`                              | Attach an attention label to an object                         |
+| `note`                               | Set the short explanation below the drawing                    |
 
 Each cue is applied atomically. The engine bounds scene sizes, validates IDs and references, and respects reduced-motion settings. It supports the listed primitives; arbitrary scientific simulations, generated illustrations, and free-form code are not included.
 

@@ -1,6 +1,6 @@
 # Interactive visual engine
 
-A narration-driven visual engine for a general tutor for ages 7–9. The tutor builds and changes the picture as it explains, then invites the child to explore or respond. This branch contains the visual modules, tests, and development rehearsals.
+A narration-driven visual engine, with a unified math canvas for the team’s current ages 8–12 tutoring brief. The tutor builds and changes the picture as it explains, then invites the child to explore or respond. This branch contains the visual modules, tests, and development rehearsals.
 
 ## Run
 
@@ -13,13 +13,17 @@ npm run dev
 
 Open http://127.0.0.1:5173. No API keys or backend are required.
 
-## Start with the guided explanation
+## Start with the live math canvas
 
-The default preview now follows the tutor through an explanation. Press **Start explanation** to hear a scripted recording while the canvas reveals objects, animates changes, draws connections, and directs attention. It pauses for a child response, then continues with a hint or feedback.
+The default **Live math canvas** preview is voice-free. Press **Build the first visual**, then **Next teaching step** to build an array, split it, highlight a part, reveal the derived equation, and add a group. The final step invites learner manipulation. The same cells animate and the equation updates from the model. **Try your own numbers** changes the example without changing lesson code.
 
-Two examples—water’s journey and equal groups—use the same engine. Pause, interrupt, replay, or inspect the cues without connecting a live agent. The recorded audio is a development fixture; the visuals are rendered live from commands.
+Choose bars or decimal number lines for other mathematical representations, or a grouping/diagram/shape/sorting activity on the same teaching surface. **Send a visual step as JSON** lets you test plans, cue timing, pause, interruption, and replay. **Inspect scene and learner events** shows the state the agent can receive.
 
-[Voice integration and narration-canvas API](docs/NARRATION_CANVAS.md) explains how a teammate can replace the recordings with real playback events and generated visual beats. The public entry point is `src/presentation/index.ts`.
+- [Unified canvas and mathematical commands](docs/MATH_CANVAS.md)
+- [LiveKit + Cartesia teammate handoff](docs/LIVEKIT_CARTESIA.md)
+- [Narration director and free-form drawing API](docs/NARRATION_CANVAS.md)
+
+The public integration entry point is `src/presentation/index.ts`. LiveKit/Cartesia transport and live AI generation are not connected yet. The **Guided explanation** tab retains the recorded water/equal-groups rehearsals for audio synchronization testing. **Interactive building blocks** retains the standalone activity editor.
 
 ## Interactive building blocks
 
@@ -105,7 +109,7 @@ npm run test:visuals # Canvas, narration, components, pointer interactions and g
 npm run test:state   # Schemas and scene transitions
 ```
 
-Automated coverage includes narration timing, stale playback callbacks, interruptions, replay, child-response gates, demo recordings, invalid configurations, revision safety, preservation of learner work, cancelled gestures, and component interactions. Manual browser checks cover guided audio playback, progressive diagrams, question/hint transitions, interruption and replay, plus object/marker/shape dragging, diagram connections, and equal-scale comparisons. Touch hardware has not been tested.
+Automated coverage includes transactional mathematical updates, derived quantities, unified activity rendering, custom-number rehearsals, learner event lifecycle, narration timing, stale playback callbacks, interruptions, replay, child-response gates, demo recordings, invalid configurations, revision safety, preservation of learner work, cancelled gestures, and component interactions. Manual browser checks cover guided audio playback, progressive diagrams, question/hint transitions, interruption and replay, plus object/marker/shape dragging, diagram connections, and equal-scale comparisons. Touch hardware has not been tested.
 
 ## Scope and GitHub traceability
 
