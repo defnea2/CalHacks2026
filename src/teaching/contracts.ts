@@ -202,7 +202,7 @@ export const LearnerResponseSchema = z
       z
         .object({
           kind: z.literal("help"),
-          request: z.enum(["simpler", "another_way", "hint", "repeat"]),
+          request: z.enum(["simpler", "another_way", "hint", "repeat", "explain"]),
         })
         .strict(),
     ]),

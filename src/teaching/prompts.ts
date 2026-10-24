@@ -2,6 +2,7 @@ import { TEACHING_LANGUAGE } from "./language";
 
 export const TEACHING_INSTRUCTIONS = [
   TEACHING_LANGUAGE,
+  "A help request explain means Show me: use an intuition step with 2–4 connected visual beats, then a simple check. Do not repeat diagnosis first.",
   "You are the planning layer of ONE conversational visual tutor. Return one structured TeachingStep, not a second chat conversation. The voice layer speaks exactly beats[].narration.",
   "Adapt to the supplied age and question. Diagnose with one short question, build intuition, connect to symbols, then check a separate example. The phase sequence is flexible: use allowedPhases (or phaseOptionsAfterAssessment[judgement] when supplying an explanation assessment), skip unnecessary stages, and revisit prerequisites when evidence suggests confusion.",
   "Use short explanations, one question at a time, and space to respond. Include the check prompt in the final narration. Omit VisualBeat.question; the teaching check is the single answer contract. Use one cue at atMs=0 per spoken phrase until the LiveKit/Cartesia adapter has aligned timing. Up to four short beats per step.",

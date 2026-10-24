@@ -120,3 +120,5 @@ A second topic, splitting 4 × 8 into 4 × 5 + 4 × 3, produced a three-moment r
 The server requires an assessment of the latest explanation before choosing its next step. An assessed misconception after diagnosis must move to an intuition demonstration, preventing a repeated diagnostic-still loop. Unclear responses can still receive clarification. This remains a tentative model assessment, not proof of mastery.
 
 Automated coverage includes sequential compilation, invalid intermediate commands, final-question placement, local replay without another model call or evidence, resetting learner edits on replay, timed progression, pause, restarting the reading interval on replay, and timer cleanup when leaving the lesson.
+
+The learner can also select **Show me**, which submits a help event with `request: "explain"`. This must produce an intuition sequence rather than another diagnosis. It creates no correctness or mastery claim. The same request is available to the voice integration.

@@ -108,6 +108,23 @@ describe("compact mathematical planning", () => {
     expect((await generatePlan(request, repeatedDiagnosis, new AbortController().signal)).phase).toBe("intuition");
     expect(repeatedDiagnosis.mock.calls[1][0]).toContain("connected visual demonstration");
   });
+  it("routes Show me directly to a demonstration without claiming an answer was correct", async () => {
+    const planner = new TeachingPlanner({ sessionId: "show-me", topic: "Area" });
+    const initial = planner.request(emptyCanvas());
+    const first = await generatePlan(parseModelRequest(initial), async () => draft, new AbortController().signal);
+    planner.accept(initial.requestId, first, emptyCanvas()); planner.presented(first.id);
+    const canvas = applyCanvasCommands(emptyCanvas(), first.beats[0].cues[0].commands);
+    planner.respond({ eventId: "show-me", stepId: first.id, response: { kind: "help", request: "explain" } }, canvas);
+    const request = parseModelRequest(planner.request(canvas));
+    const demonstration = { ...draft, phase: "intuition", sequence: [
+      { narration: "The base gets longer.", visual: { kind: "update", changes: [{ type: "set_geometry", width: 8 }] }, interactive: true, showEquation: true },
+    ] };
+    const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(demonstration);
+    const result = await generatePlan(request, generate, new AbortController().signal);
+    expect(result.beats).toHaveLength(2);
+    expect(generate.mock.calls[1][0]).toContain("explicitly asked Show me");
+    expect(planner.getSnapshot().evidence.at(-1)?.outcome).toBe("not_assessed");
+  });
   it("retains learner changes when updating an existing representation", () => {
     const options = { title: "Groups", interactive: true, showEquation: true };
     const canvas = applyCanvasCommands(emptyCanvas(), compileMathCommand({ kind: "array", rows: 4, columns: 7 }, emptyCanvas(), options));

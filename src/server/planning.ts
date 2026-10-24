@@ -75,6 +75,9 @@ export function validateModelStep(request: ModelRequest, output: unknown) {
     throw new Error("Assess the latest unassessed explanation using its evidenceId before choosing the next step. Use unclear for genuinely ambiguous reasoning; do not leave the response unassessed.");
   if (request.context.currentStep?.phase === "diagnose" && draft.assessment?.judgement === "misconception" && draft.phase === "diagnose")
     throw new Error("A clear misconception now needs an intuition step with a connected visual demonstration, not another diagnostic still.");
+  const latest = request.context.evidence.filter(e => e.stepId === request.context.currentStep?.id).at(-1);
+  if (latest?.response.kind === "help" && latest.response.request === "explain" && draft.phase !== "intuition")
+    throw new Error("The learner explicitly asked Show me. Return an intuition step with a connected visual sequence, not another diagnostic question.");
   const finalBeat = draft.beats.at(-1)!;
   if (draft.check && !finalBeat.narration.includes(draft.check.prompt))
     finalBeat.narration += " " + draft.check.prompt;
