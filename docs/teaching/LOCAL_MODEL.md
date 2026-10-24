@@ -7,11 +7,11 @@ The development server now implements `POST /api/teaching/plan` using the machin
 1. Install the official Codex CLI if it is not already available.
 2. Run `codex login` and sign in with ChatGPT. Check with `codex login status`.
 3. In this repository, run `npm ci`, then `npm run dev`.
-4. Open `http://127.0.0.1:5173/`, enter a question, and choose **Explore my question**.
+4. Open `http://127.0.0.1:5173/`, enter a question, and choose **Start**.
 
 No API key or `.env` file is required. The app uses your Codex allowance. Questions, recent lesson context and diagrams are sent to the model; this is not offline/local-weight inference. The three sample buttons explicitly use scripted offline lessons instead.
 
-The CLI executable defaults to `codex` on PATH. If needed, set `TUTOR_CODEX_BIN` to its executable path before starting the server. `TUTOR_CODEX_MODEL` optionally selects a model available to your account; otherwise the CLI's own default is used. The bridge ignores user configuration while retaining normal CLI authentication, so a model override in your global Codex config is not automatically applied here. Environment overrides are server-owned, not accepted from browser requests.
+The CLI executable defaults to `codex` on PATH. If needed, set `TUTOR_CODEX_BIN` to its executable path before starting the server. `TUTOR_CODEX_MODEL` optionally selects a model available to your account; **GPT-6 Luna (`gpt-6-luna`) with low reasoning effort is the default**. The bridge passes the model explicitly, so CLI default changes do not change the tutor. Fast service tier is not enabled. The bridge ignores user configuration while retaining normal CLI authentication, so a model override in your global Codex config is not automatically applied here. Environment overrides are server-owned, not accepted from browser requests.
 
 The status label confirms the local bridge is reachable. It does not prove that authentication, model access or account allowance will succeed; those are checked by an actual generation request.
 

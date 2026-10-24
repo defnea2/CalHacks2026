@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { z } from "zod";
-import { createCodexGenerator, type CodexOptions } from "./codexModel";
+import { createCodexGenerator, DEFAULT_TUTOR_MODEL, type CodexOptions } from "./codexModel";
 import { generatePlan, parseModelRequest, type GenerateCandidate } from "./planning";
 
 function reply(res: ServerResponse, status: number, body: unknown) {
@@ -41,7 +41,7 @@ export function teachingPlugin(options: CodexOptions = {}, generate: GenerateCan
         const port = address && typeof address !== "string" ? address.port : server.config.server.port;
         if (!port || !trustedRequest(req, port)) return reply(res, 403, { error: "This model bridge accepts requests only from its local app." });
         if (req.url === "/api/teaching/status" && req.method === "GET")
-          return reply(res, 200, { provider: "codex", mode: "chatgpt-login", model: options.model ?? "CLI default", busy: active, configured: true });
+          return reply(res, 200, { provider: "codex", mode: "chatgpt-login", model: options.model ?? DEFAULT_TUTOR_MODEL, busy: active, configured: true });
         if (req.method !== "POST") return reply(res, 405, { error: "Use POST for lesson planning." });
         if (!req.headers["content-type"]?.startsWith("application/json")) return reply(res, 415, { error: "Send application/json." });
         if (active) return reply(res, 429, { error: "Another lesson is being planned. Wait for it to finish, then retry." });

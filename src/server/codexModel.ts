@@ -7,8 +7,9 @@ const outputSchema = {
   type: "object", properties: { step_json: { type: "string" } },
   required: ["step_json"], additionalProperties: false,
 };
+export const DEFAULT_TUTOR_MODEL = "gpt-6-luna";
 export interface CodexOptions { binary?: string; model?: string }
-export function codexArgs(dir: string, model?: string) {
+export function codexArgs(dir: string, model = DEFAULT_TUTOR_MODEL) {
   return [
     "exec", "--ignore-user-config", "--ephemeral", "--skip-git-repo-check",
     "--sandbox", "read-only", "--cd", dir, "--color", "never",
@@ -17,7 +18,7 @@ export function codexArgs(dir: string, model?: string) {
     "-c", 'approval_policy="never"', "-c", 'forced_login_method="chatgpt"', "-c", 'web_search="disabled"',
     "-c", "project_doc_max_bytes=0", "-c", 'model_reasoning_effort="low"',
     ...["shell_tool", "apps", "plugins", "remote_plugin", "multi_agent", "computer_use", "browser_use", "in_app_browser", "image_generation", "code_mode_host", "hooks", "goals", "skill_search"].flatMap(feature => ["--disable", feature]),
-    ...(model ? ["--model", model] : []), "-",
+    "--model", model, "-",
   ];
 }
 function childEnvironment() {
