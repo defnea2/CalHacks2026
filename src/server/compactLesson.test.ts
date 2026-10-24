@@ -43,6 +43,47 @@ describe("compact mathematical planning", () => {
     expect(step.beats[0].narration.endsWith(draft.check.prompt)).toBe(true);
     expect(step.beats[0].cues[0].commands.at(-1)).toEqual({ type: "note", text: "" });
   });
+  it("compiles a generated sequence against each preceding canvas and asks only at the end", async () => {
+    const request = new TeachingPlanner({ sessionId: "sequence", topic: "Area" }).request(emptyCanvas());
+    const candidate = { ...draft, sequence: [
+      { narration: "The base is longer now.", visual: { kind: "update", changes: [{ type: "set_geometry", width: 9 }] }, interactive: false, showEquation: false },
+      { narration: "Change a length to test your idea.", visual: { kind: "keep" }, interactive: true, showEquation: false },
+    ] };
+    const generate = vi.fn().mockResolvedValue(candidate);
+    const step = await generatePlan(parseModelRequest(request), generate, new AbortController().signal);
+    expect(step.beats).toHaveLength(3);
+    expect(generate).toHaveBeenCalledTimes(1);
+    let canvas = emptyCanvas();
+    for (const [i, beat] of step.beats.entries()) {
+      canvas = applyCanvasCommands(canvas, beat.cues[0].commands);
+      expect(canvas.math?.visual.interactive).toBe(i === 2);
+      expect(beat.narration.includes(draft.check.prompt)).toBe(i === 2);
+    }
+    expect(canvas.math?.visual).toMatchObject({ width: 9, height: 4 });
+    candidate.sequence[0].visual = { kind: "update", changes: [{ type: "set_geometry", width: 20 }] };
+    expect(() => expandCompactLesson(candidate, emptyCanvas(), "bad")).toThrow();
+  });
+  it("replays all moments locally, resets learner edits, and does not create extra evidence", async () => {
+    const model = vi.fn(async request => generatePlan(parseModelRequest(request), async () => ({ ...draft, sequence: [
+      { narration: "The base now has nine units.", visual: { kind: "update", changes: [{ type: "set_geometry", width: 9 }] }, interactive: true, showEquation: false },
+    ] }), new AbortController().signal));
+    const session = new TeachingSession({ sessionId: "replay", topic: "Area" }, model);
+    await session.plan();
+    expect(session.canInteract()).toBe(false);
+    expect(session.director.getSnapshot().canvas.math?.visual).toMatchObject({ width: 6 });
+    session.presentNext();
+    expect(session.canInteract()).toBe(true);
+    const scene = session.director.getSnapshot().canvas.math!;
+    session.interactMath({ eventId: "edit", visualId: scene.visual.id, revision: scene.revision, change: { type: "set_geometry", width: 10 } });
+    expect(session.replay()).toBe(true);
+    expect(session.director.getSnapshot().canvas.math?.visual).toMatchObject({ width: 6 });
+    expect(session.canInteract()).toBe(false);
+    session.presentNext();
+    expect(session.director.getSnapshot().canvas.math?.visual).toMatchObject({ width: 9 });
+    expect(session.planner.getSnapshot().evidence).toHaveLength(0);
+    expect(model).toHaveBeenCalledTimes(1);
+    session.cancel();
+  });
   it("retains learner changes when updating an existing representation", () => {
     const options = { title: "Groups", interactive: true, showEquation: true };
     const canvas = applyCanvasCommands(emptyCanvas(), compileMathCommand({ kind: "array", rows: 4, columns: 7 }, emptyCanvas(), options));

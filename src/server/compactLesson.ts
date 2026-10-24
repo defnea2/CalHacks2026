@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TEACHING_LANGUAGE } from "../teaching/language";
 import { CompactMathCommandSchema, compileMathCommand } from "../presentation/math/compact";
+import { applyCanvasCommands } from "../presentation/canvasState";
 import type { CanvasState } from "../presentation/contracts";
 import { CheckSchema, TeachingStepSchema } from "../teaching/contracts";
 
@@ -14,26 +15,43 @@ export const CompactLessonSchema = z.object({
   visual: CompactMathCommandSchema,
   interactive: z.boolean(),
   showEquation: z.boolean(),
+  sequence: z.array(z.object({
+    narration: z.string().min(1).max(400),
+    visual: CompactMathCommandSchema,
+    showEquation: z.boolean(),
+    interactive: z.boolean(),
+  }).strict()).max(3).default([]),
   check: z.discriminatedUnion("kind", [CheckSchema.options[0], CheckSchema.options[1], CheckSchema.options[2], CheckSchema.options[3]]).nullable(),
   exampleProblem: z.string().min(1).max(600).optional(),
   assessment: TeachingStepSchema.shape.assessment,
 }).strict();
 export function expandCompactLesson(input: unknown, canvas: CanvasState, requestId: string) {
   const draft = CompactLessonSchema.parse(input);
-  if (draft.check && /[?？]/u.test(draft.narration))
-    throw new Error("Put the single learner question only in check.prompt. Narration must contain declarative explanation, without a repeated or additional question.");
-  const commands = compileMathCommand(draft.visual, canvas, draft);
-  // The question already supplies the task. Clear old notes without adding a competing instruction.
-  commands.push({ type: "note", text: "" });
+  const moments = [draft, ...draft.sequence];
+  let planned = structuredClone(canvas);
+  const beats = moments.map((moment, index) => {
+    if (draft.check && /[?？]/u.test(moment.narration))
+      throw new Error("Put the single learner question only in check.prompt. Narration must contain declarative explanation, without a repeated or additional question.");
+    if (["diagnose", "solo", "transfer"].includes(draft.phase) && moment.showEquation)
+      throw new Error("Hide equations throughout a prediction or independent check.");
+    const commands = compileMathCommand(moment.visual, planned, {
+      title: draft.title, showEquation: moment.showEquation,
+      interactive: index === moments.length - 1 && moment.interactive,
+    });
+    commands.push({ type: "note", text: "" });
+    planned = applyCanvasCommands(planned, commands);
+    return { id: `math-beat-${index}`, narration: moment.narration, cues: [{ id: `math-cue-${index}`, atMs: 0, commands }] };
+  });
   return {
     id: `step-${requestId.slice(0, 64)}`, phase: draft.phase, learningGoal: draft.goal,
     approach: draft.approach, rationale: draft.reason, exampleProblem: draft.exampleProblem,
-    beats: [{ id: "math-beat", narration: draft.narration, cues: [{ id: "math-cue", atMs: 0, commands }] }],
+    beats,
     check: draft.check, assessment: draft.assessment,
     evidenceToObserve: [draft.check?.prompt ?? draft.goal],
   };
 }
 export const COMPACT_INSTRUCTIONS = `You plan one short step for a math tutor. Do not use any tools, read files, write code, or browse.
+For intuition, formalize and worked_example, compose a visual explanation in 2–4 connected moments: start with the current or a simple picture, change one meaningful quantity or grouping, then connect the result to symbols or let the learner try. The initial narration/visual is moment one; sequence contains the subsequent moments, each with its own short narration, visual command, showEquation and interactive flags. Prefer update to visibly transform the SAME scene rather than replacing it. Never fill sequence with keep-only restatements. For diagnose, solo and transfer, use a brief setup and stop at a single prediction or task; do not animate its answer before the learner responds. Use the actual current picture and response to choose the transformation, not a fixed script. Finish supported explanations with interactive=true when useful. The final check refers to the final picture; do not ask a question midway through the sequence.
 Return the requested compact lesson JSON serialized in step_json. No canvas coordinates, raw SVG, JavaScript, HTML or LaTeX. Code owns layout, geometry and equations.
 Use the allowedPhases, or phaseOptionsAfterAssessment[judgement] with an assessment of the latest unassessed explanation. Diagnose first, build intuition, connect symbols, use a worked example and check independent understanding. Adapt to the supplied age. Put only the short explanation in narration; put the question exclusively in check.prompt. Code appends that exact question once. Do not invent evidence.
 visual is a compact command: array for equal groups/distributivity; bars for parts and comparisons of equal wholes; number_line for order, distance and decimals; geometry for rectangles or right triangles (dimensions 1..12 in half-unit steps). These are reusable representations, not fixed lessons. Pick the closest truthful model. Explain limitations rather than invent capabilities. Use update with small changes to preserve a familiar picture, or keep when it need not change. New visuals have ID math; existing visuals keep their canvas ID. Bar/marker IDs must be unique. Geometry focus is always null. Verify every numerical and spatial claim against the resulting visual. Distinguish squares per row from squares in the whole rectangle: increasing width by d adds d times height squares, not merely d squares. For equal fractions, the wholes must be the same size. Describe only changes actually applied; label imagined changes as predictions.

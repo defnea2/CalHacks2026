@@ -293,9 +293,10 @@ export class VisualDirector {
     this.publish({ status: "completed" });
     return response;
   }
-  reset() {
+  /** Restore a previously validated local checkpoint; invalidate all old playback tokens. */
+  reset(canvas: CanvasState = emptyCanvas()) {
     this.publish({
-      canvas: emptyCanvas(),
+      canvas: structuredClone(canvas),
       token: null,
       beat: null,
       status: "idle",

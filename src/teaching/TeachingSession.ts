@@ -1,3 +1,4 @@
+import type { CanvasState } from "../presentation/contracts";
 import { VisualDirector } from "../presentation/VisualDirector";
 import type { MathAction } from "../presentation/math/models";
 import type { LearnerAction } from "../shared";
@@ -19,6 +20,7 @@ export class TeachingSession {
   private listeners = new Set<() => void>();
   private abort: AbortController | null = null;
   private epoch = 0;
+  private presentationStart: CanvasState | null = null;
   private presentationVersion: number | null = null;
 
   constructor(config: unknown, private model: PlanningModel) {
@@ -64,6 +66,7 @@ export class TeachingSession {
       if (context.contextVersion !== this.director.getSnapshot().contextVersion)
         throw new Error("The picture changed while planning. Try again from the current picture.");
       this.planner.accept(request.requestId, output, this.director.getSnapshot().canvas);
+      this.presentationStart = structuredClone(context.canvas);
       this.presentationVersion = context.contextVersion;
       this.publish({ beatIndex: -1, changes: 0 });
       return this.presentNext();
@@ -100,6 +103,17 @@ export class TeachingSession {
       this.fail(error);
       return false;
     }
+  };
+  /** Replays already validated commands locally; never re-queries the model or adds evidence. */
+  replay = () => {
+    if (this.state.busy || !this.presentationStart) return false;
+    const status = this.planner.getSnapshot().status;
+    if (!["presenting", "awaiting_response"].includes(status)) return false;
+    this.planner.replayPresentation();
+    this.director.reset(this.presentationStart);
+    this.presentationVersion = this.director.getSnapshot().contextVersion;
+    this.publish({ beatIndex: -1, changes: 0, error: null });
+    return this.presentNext();
   };
   respond = async (response: LearnerResponse["response"]) => {
     if (this.state.busy) return false;

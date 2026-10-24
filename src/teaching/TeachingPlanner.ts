@@ -174,6 +174,11 @@ export class TeachingPlanner {
             : "needs_plan",
     });
   }
+  replayPresentation() {
+    if (!this.state.step || !["presenting", "awaiting_response"].includes(this.state.status))
+      throw new Error("Only the active unanswered explanation can be replayed.");
+    this.publish({ status: "presenting" });
+  }
   interrupt(stepId: string) {
     if (this.state.step?.id !== stepId || this.state.status !== "presenting") return;
     this.publish({ status: "needs_plan" });
