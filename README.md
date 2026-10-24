@@ -13,9 +13,15 @@ npm run dev
 
 Open http://127.0.0.1:5173. No API keys or backend are required.
 
+## Implemented features
+
+[Full feature inventory and current limits](docs/FEATURES.md) covers every implemented representation, real-time command, interaction, playback feature, and integration boundary.
+
 ## Start with the live math canvas
 
 The default **Live math canvas** preview is voice-free. Press **Build the first visual**, then **Next teaching step** to build an array, split it, highlight a part, reveal the derived equation, and add a group. The final step invites learner manipulation. The same cells animate and the equation updates from the model. **Try your own numbers** changes the example without changing lesson code.
+
+After building a model, **Change this example** edits its quantities, focus, scale, equation visibility, and learner permissions live. **Different numbers** and **Simpler example** generate a local variant from the latest learner-edited state. Async agents can read a versioned planning context and reject stale responses.
 
 Choose bars or decimal number lines for other mathematical representations, or a grouping/diagram/shape/sorting activity on the same teaching surface. **Send a visual step as JSON** lets you test plans, cue timing, pause, interruption, and replay. **Inspect scene and learner events** shows the state the agent can receive.
 

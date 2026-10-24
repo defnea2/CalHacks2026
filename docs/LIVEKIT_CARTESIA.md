@@ -17,7 +17,7 @@ Generate narration and visual commands as one teaching step. Avoid an unrelated 
 Use short `VisualBeat` objects with a single cue at `atMs: 0`. This avoids guessing how long Cartesia will take to say a phrase.
 
 1. Agent sends the beat to the linked frontend participant.
-2. Frontend calls `director.prepare(beat)`, then acknowledges the returned `{runId, beatId}`. Invalid input returns a validation error; retain the existing explanation and ask the agent to repair its plan.
+2. Frontend calls `director.prepare(beat, {expectedContextVersion})`, then acknowledges the returned `{runId, beatId}`. Invalid input returns a validation error; retain the existing explanation and ask the agent to repair its plan.
 3. Associate the acknowledgement token with the specific LiveKit speech operation/turn and its transcription segment(s).
 4. Speak **exactly that beat's narration**. When synchronized playout begins, call `director.narrationStarted(token)`.
 5. On actual normal playout completion call `director.narrationEnded(token)`. Do not treat “LLM finished,” “TTS synthesized,” or “final transcript received” as the end of audible speech.
@@ -37,6 +37,7 @@ Request:
 {
   "version": 1,
   "requestId": "request-unique-within-session",
+  "expectedContextVersion": 12,
   "beat": {
     "id": "split-array",
     "narration": "Let us split each group into ten and four.",
@@ -59,6 +60,8 @@ Request:
 
 Success: `{version: 1, requestId, ok: true, token: {runId, beatId}}`.
 Failure: `{version: 1, requestId, ok: false, error: "invalid_plan", message}`.
+
+The example assumes a previous `show_math` created `array` and the agent read context version 12; use the actual version returned by `getPlanningContext()`, never a hard-coded constant. The adapter must require `expectedContextVersion` and return a stale-context error if the current version differs. Re-read state and regenerate the plan rather than retrying the old plan with a new version.
 
 The example assumes a previous `show_math` created `array`. The first step must create its representation. `VisualBeatSchema.parse`/`director.prepare` are the validation source of truth.
 
@@ -85,11 +88,11 @@ On success acknowledge the request with the token and current director status. I
 
 ### `visual.get_state` — agent → frontend
 
-Return the current snapshot needed to plan: `token`, `status`, `canvas`, and `appliedCueIds`. Read this after a rejected stale operation. Do not blindly resend a plan based on obsolete learner work. Serialize only the relevant representation for model context; internal event-ID histories are not teaching content.
+Return `director.getPlanningContext()`: a detached `{contextVersion, token, status, canvas}` snapshot. Include `appliedCueIds` separately if useful. Read this after a rejected stale operation. Do not blindly resend a plan based on obsolete learner work. Serialize only the relevant representation for model context; internal event-ID histories are not teaching content.
 
 ### `visual.learner` — frontend → agent
 
-Send the accepted return value of `interactMath` or `interactActivity`, or the existing `respond` result for object choices. Add the transport version/session correlation in the adapter. The agent should deduplicate by session + runId + eventId (for choices, runId + nodeId). Use a structured custom data handler/RPC on the agent; a change event should not be indiscriminately inserted as user chat text and interrupt current speech.
+Send the accepted return value of `interactMath` or `interactActivity` (including its resulting `contextVersion`), or the existing `respond` result for object choices. Add the transport version/session correlation in the adapter. The agent should deduplicate by session + runId + eventId (for choices, runId + nodeId). Use a structured custom data handler/RPC on the agent; a change event should not be indiscriminately inserted as user chat text and interrupt current speech.
 
 For sliders, the browser applies each accepted change immediately. Coalesce outbound changes by visual/object during a gesture, retaining the latest state, or wait for gesture completion in the adapter. The current component emits individual accepted changes; network coalescing is not implemented here.
 

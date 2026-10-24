@@ -134,3 +134,24 @@ The existing `question.nodeIds` option is for choosing free-form objects. Math e
 This is a deterministic renderer and interaction runtime, not an LLM or curriculum. The rehearsal scripts demonstrate the commands; they do not generate responses to arbitrary speech. The canvas hosts one main representation at a time. A simultaneous multi-panel scene, symbolic algebra, arbitrary simulations, and arbitrary generated UI are not implemented. Equation text is derived plain text, not a TeX typesetter. Array motion animates stable SVG cells; number-line movement is animated; bar shading/partition changes update the reused components.
 
 The next integration is described in [LIVEKIT_CARTESIA.md](LIVEKIT_CARTESIA.md). Real LiveKit audio and Cartesia timing have not been tested in this branch.
+
+## Live configuration and asynchronous planning
+
+The **Change this example** inspector appears after a model is built. It sends the same `show_math`/`update_math` commands as the agent will. It can modify quantities, scale, focus, equations, and permissions directly. Controls are locked during simulated playback. The remaining fixed rehearsal is disabled after a custom edit, and the note is replaced to avoid narrating the old quantities. Restart the example to return to its script.
+
+**Different numbers** and **Simpler example** call the exported `createMathExample(currentVisual, intent)` helper using the _latest_ model, including learner edits. This is a deterministic integration fixture, not an AI teaching policy or proof that an example is pedagogically appropriate. Creating a variant starts a new visual scene with revision zero; the director's monotonic context version and fresh playback token distinguish it from earlier scenes even when the visual ID is retained.
+
+For an asynchronous model call:
+
+```ts
+const context = director.getPlanningContext();
+const beat = await planExplanation(context); // Your agent/model implementation.
+const token = director.prepare(beat, {
+  expectedContextVersion: context.contextVersion,
+});
+// Bind this token to the corresponding real speech operation before playback.
+```
+
+`getPlanningContext()` returns a detached copy of `{contextVersion, token, status, canvas}`. `contextVersion` advances when the canvas, playback token, or lifecycle status changes, including replay/reset. Audio clock ticks with no scene change do not advance it. A stale guarded prepare throws without replacing the active scene. Re-read context and replan; do not simply change the expected version on an old plan.
+
+`prepare` keeps the guard optional for compatibility with existing local rehearsals. The LiveKit adapter should require `expectedContextVersion` for asynchronously generated plans. Accepted math/activity events include the resulting `contextVersion` alongside the scene. The version guard prevents stale results from being applied; request cancellation, retry/coalescing, and network delivery remain adapter responsibilities.
