@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:visuals": "vitest run src/visuals src/visual-math src/interactions",
+    "test:visuals": "vitest run src/presentation src/visuals src/visual-math src/interactions",
     "test:state": "vitest run src/shared src/session",
     "check": "npm run typecheck && npm test && npm run build"
   },

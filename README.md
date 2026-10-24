@@ -1,6 +1,6 @@
 # Interactive visual engine
 
-A reusable visual module for a general tutor for ages 7–9. This branch contains the engine, local scene types and state helper, tests, and a development workbench.
+A narration-driven visual engine for a general tutor for ages 7–9. The tutor builds and changes the picture as it explains, then invites the child to explore or respond. This branch contains the visual modules, tests, and development rehearsals.
 
 ## Run
 
@@ -13,7 +13,15 @@ npm run dev
 
 Open http://127.0.0.1:5173. No API keys or backend are required.
 
-## Working features
+## Start with the guided explanation
+
+The default preview now follows the tutor through an explanation. Press **Start explanation** to hear a scripted recording while the canvas reveals objects, animates changes, draws connections, and directs attention. It pauses for a child response, then continues with a hint or feedback.
+
+Two examples—water’s journey and equal groups—use the same engine. Pause, interrupt, replay, or inspect the cues without connecting a live agent. The recorded audio is a development fixture; the visuals are rendered live from commands.
+
+[Voice integration and narration-canvas API](docs/NARRATION_CANVAS.md) explains how a teammate can replace the recordings with real playback events and generated visual beats. The public entry point is `src/presentation/index.ts`.
+
+## Interactive building blocks
 
 | Visual                 | Interactions                                                                         |
 | ---------------------- | ------------------------------------------------------------------------------------ |
@@ -93,11 +101,11 @@ Commands also support the learner actions, `update_activity`, `replace_activity`
 
 ```sh
 npm run check        # TypeScript, all tests, production build
-npm run test:visuals # Components, pointer interactions and geometry
+npm run test:visuals # Canvas, narration, components, pointer interactions and geometry
 npm run test:state   # Schemas and scene transitions
 ```
 
-Automated coverage includes invalid configurations, revision safety, replay, preservation of learner work, cancelled gestures, and the main component interactions. Manual browser checks cover actual object/marker/shape dragging, diagram connections, and equal-scale comparisons. Touch hardware has not been tested.
+Automated coverage includes narration timing, stale playback callbacks, interruptions, replay, child-response gates, demo recordings, invalid configurations, revision safety, preservation of learner work, cancelled gestures, and component interactions. Manual browser checks cover guided audio playback, progressive diagrams, question/hint transitions, interruption and replay, plus object/marker/shape dragging, diagram connections, and equal-scale comparisons. Touch hardware has not been tested.
 
 ## Scope and GitHub traceability
 
