@@ -28,3 +28,4 @@ export type {
   MathScene,
   MathAction,
 } from "./math/models";
+export { createMathExample } from "./math/examples";

@@ -26,6 +26,7 @@ export type DirectorStatus =
   | "interrupted"
   | "error";
 export interface DirectorSnapshot {
+  contextVersion: number;
   canvas: CanvasState;
   token: PlaybackToken | null;
   beat: VisualBeat | null;
@@ -38,6 +39,7 @@ export interface DirectorSnapshot {
 /** Owns presentation only. The voice/teaching host owns narration, planning, and assessment. */
 export class VisualDirector {
   private snapshot: DirectorSnapshot = {
+    contextVersion: 0,
     canvas: emptyCanvas(),
     token: null,
     beat: null,
@@ -49,6 +51,14 @@ export class VisualDirector {
   private listeners = new Set<() => void>();
   private beatStartCanvas: CanvasState = emptyCanvas();
   getSnapshot = () => this.snapshot;
+  /** A detached planning snapshot: safe to serialize or retain during an async model call. */
+  getPlanningContext = () =>
+    structuredClone({
+      contextVersion: this.snapshot.contextVersion,
+      token: this.snapshot.token,
+      status: this.snapshot.status,
+      canvas: this.snapshot.canvas,
+    });
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -56,7 +66,15 @@ export class VisualDirector {
     };
   };
   private publish(patch: Partial<DirectorSnapshot>) {
-    this.snapshot = { ...this.snapshot, ...patch };
+    const changed =
+      (patch.canvas !== undefined && patch.canvas !== this.snapshot.canvas) ||
+      (patch.token !== undefined && patch.token !== this.snapshot.token) ||
+      (patch.status !== undefined && patch.status !== this.snapshot.status);
+    this.snapshot = {
+      ...this.snapshot,
+      ...patch,
+      contextVersion: this.snapshot.contextVersion + (changed ? 1 : 0),
+    };
     this.listeners.forEach((listener) => listener());
   }
   private matches(token: PlaybackToken) {
@@ -73,6 +91,7 @@ export class VisualDirector {
     input: unknown,
   ): {
     type: "math_changed";
+    contextVersion: number;
     token: PlaybackToken;
     action: MathAction;
     scene: MathScene;
@@ -105,7 +124,13 @@ export class VisualDirector {
         ),
       };
       this.publish({ canvas: { ...this.snapshot.canvas, math: next } });
-      return { type: "math_changed", token, action, scene: next };
+      return {
+        type: "math_changed",
+        contextVersion: this.snapshot.contextVersion,
+        token,
+        action,
+        scene: next,
+      };
     } catch {
       return null;
     }
@@ -115,6 +140,7 @@ export class VisualDirector {
     input: unknown,
   ): {
     type: "activity_changed";
+    contextVersion: number;
     token: PlaybackToken;
     action: LearnerAction;
     scene: NonNullable<CanvasState["activity"]>;
@@ -135,12 +161,23 @@ export class VisualDirector {
     });
     return {
       type: "activity_changed",
+      contextVersion: this.snapshot.contextVersion,
       token,
       action: parsed.data,
       scene: result.scene,
     };
   }
-  prepare(input: unknown): PlaybackToken {
+  prepare(
+    input: unknown,
+    options: { expectedContextVersion?: number } = {},
+  ): PlaybackToken {
+    if (
+      options.expectedContextVersion !== undefined &&
+      options.expectedContextVersion !== this.snapshot.contextVersion
+    )
+      throw new Error(
+        "Stale teaching plan: the learner or explanation changed. Read the current context and replan.",
+      );
     const beat = VisualBeatSchema.parse(input);
     // Preflight every cue against a clone before making any new narration active.
     let planned = this.snapshot.canvas;
