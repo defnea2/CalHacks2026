@@ -15,5 +15,16 @@ export type {
   PlaybackToken,
   CanvasResponse,
 } from "./contracts";
-export { MathVisualSchema, MathChangeSchema, MathActionSchema, mathSummary } from "./math/models";
-export type { MathVisual, MathVisualInput, MathChange, MathScene, MathAction } from "./math/models";
+export {
+  MathVisualSchema,
+  MathChangeSchema,
+  MathActionSchema,
+  mathSummary,
+} from "./math/models";
+export type {
+  MathVisual,
+  MathVisualInput,
+  MathChange,
+  MathScene,
+  MathAction,
+} from "./math/models";

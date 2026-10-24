@@ -1,6 +1,15 @@
 import { z } from "zod";
-import { IdSchema, ActivitySpecSchema, SceneCommandSchema, type SceneState } from "../shared";
-import { MathVisualSchema, MathChangeSchema, type MathScene } from "./math/models";
+import {
+  IdSchema,
+  ActivitySpecSchema,
+  SceneCommandSchema,
+  type SceneState,
+} from "../shared";
+import {
+  MathVisualSchema,
+  MathChangeSchema,
+  type MathScene,
+} from "./math/models";
 
 export const ToneSchema = z.enum([
   "sky",
@@ -50,9 +59,26 @@ const PatchSchema = CanvasNodeSchema.omit({ id: true, kind: true })
   .partial();
 export const CanvasCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("show_math"), visual: MathVisualSchema }).strict(),
-  z.object({ type: z.literal("update_math"), id: IdSchema, change: MathChangeSchema }).strict(),
-  z.object({ type: z.literal("show_activity"), sceneId: IdSchema, activity: ActivitySpecSchema }).strict(),
-  z.object({ type: z.literal("activity_command"), command: SceneCommandSchema }).strict(),
+  z
+    .object({
+      type: z.literal("update_math"),
+      id: IdSchema,
+      change: MathChangeSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("show_activity"),
+      sceneId: IdSchema,
+      activity: ActivitySpecSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("activity_command"),
+      command: SceneCommandSchema,
+    })
+    .strict(),
   z
     .object({ type: z.literal("clear"), title: z.string().min(1).max(120) })
     .strict(),

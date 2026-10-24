@@ -19,19 +19,35 @@ export function applyCanvasCommands(
     const requireNode = (id: string) => {
       if (!known(id)) throw new Error(`Unknown canvas object: ${id}`);
     };
-    if ((next.math || next.activity) && ["add", "update", "remove", "connect", "highlight", "point"].includes(command.type))
-      throw new Error("Use clear before switching from a workspace to free-form objects.");
+    if (
+      (next.math || next.activity) &&
+      ["add", "update", "remove", "connect", "highlight", "point"].includes(
+        command.type,
+      )
+    )
+      throw new Error(
+        "Use clear before switching from a workspace to free-form objects.",
+      );
     switch (command.type) {
       case "show_math":
-        next = { ...emptyCanvas(), title: command.visual.title, math: { visual: command.visual, revision: 0, appliedEventIds: [] } };
+        next = {
+          ...emptyCanvas(),
+          title: command.visual.title,
+          math: { visual: command.visual, revision: 0, appliedEventIds: [] },
+        };
         break;
       case "update_math":
-        if (!next.math || next.math.visual.id !== command.id) throw new Error("Unknown math visual.");
+        if (!next.math || next.math.visual.id !== command.id)
+          throw new Error("Unknown math visual.");
         next.math.visual = updateMathVisual(next.math.visual, command.change);
         next.math.revision += 1;
         break;
       case "show_activity":
-        next = { ...emptyCanvas(), title: command.activity.title, activity: createScene(command.activity, command.sceneId) };
+        next = {
+          ...emptyCanvas(),
+          title: command.activity.title,
+          activity: createScene(command.activity, command.sceneId),
+        };
         break;
       case "activity_command": {
         if (!next.activity) throw new Error("No activity is active.");

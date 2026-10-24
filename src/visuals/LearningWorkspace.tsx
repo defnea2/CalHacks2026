@@ -27,7 +27,11 @@ const typeLabels = {
   sorting_board: "Sort & discover",
 };
 
-function ValidWorkspace({ scene, onAction, embedded = false }: LearningWorkspaceProps) {
+function ValidWorkspace({
+  scene,
+  onAction,
+  embedded = false,
+}: LearningWorkspaceProps) {
   const activity = scene.activity;
   const reduce = useReducedMotion();
   const [notice, setNotice] = useState("");
@@ -40,18 +44,23 @@ function ValidWorkspace({ scene, onAction, embedded = false }: LearningWorkspace
   const emit: EmitAction = (payload, source = "pointer") =>
     onAction(createAction(scene, payload, source));
   return (
-    <section className={`learning-workspace ${embedded ? "lab-embedded" : ""}`} aria-label="Learning workspace">
-      {!embedded && <>
-      <div className="lab-workspace-head">
-        <span className="lab-kicker">
-          <i />
-          {typeLabels[activity.kind]}
-        </span>
-        <span className="lab-live-label">Your space to explore</span>
-      </div>
-      <h2>{activity.title}</h2>
-      <p className="lab-question">{activity.prompt}</p>
-      </>}
+    <section
+      className={`learning-workspace ${embedded ? "lab-embedded" : ""}`}
+      aria-label="Learning workspace"
+    >
+      {!embedded && (
+        <>
+          <div className="lab-workspace-head">
+            <span className="lab-kicker">
+              <i />
+              {typeLabels[activity.kind]}
+            </span>
+            <span className="lab-live-label">Your space to explore</span>
+          </div>
+          <h2>{activity.title}</h2>
+          <p className="lab-question">{activity.prompt}</p>
+        </>
+      )}
       <MotionConfig reducedMotion="user">
         <motion.div
           key={`${scene.sceneId}:${activity.id}`}

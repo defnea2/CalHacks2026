@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { MathWorkbench } from "../presentation/math/MathWorkbench";
 import { GuidedWorkbench } from "../presentation/GuidedWorkbench";
 const VisualSandbox = lazy(() =>
   import("../visuals/VisualSandbox").then((module) => ({
@@ -6,7 +7,7 @@ const VisualSandbox = lazy(() =>
   })),
 );
 export default function App() {
-  const [mode, setMode] = useState<"guided" | "components">("guided");
+  const [mode, setMode] = useState<"math" | "guided" | "components">("math");
   return (
     <main>
       <header className="engine-intro">
@@ -23,6 +24,9 @@ export default function App() {
         </p>
       </header>
       <nav className="workbench-mode" aria-label="Workbench mode">
+        <button aria-pressed={mode === "math"} onClick={() => setMode("math")}>
+          Live math canvas
+        </button>
         <button
           aria-pressed={mode === "guided"}
           onClick={() => setMode("guided")}
@@ -37,7 +41,13 @@ export default function App() {
         </button>
       </nav>
       <Suspense fallback={<p role="status">Opening the building blocks…</p>}>
-        {mode === "guided" ? <GuidedWorkbench /> : <VisualSandbox />}
+        {mode === "math" ? (
+          <MathWorkbench />
+        ) : mode === "guided" ? (
+          <GuidedWorkbench />
+        ) : (
+          <VisualSandbox />
+        )}
       </Suspense>
       <footer>Visual engine development preview</footer>
     </main>
