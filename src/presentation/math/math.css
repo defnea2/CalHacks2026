@@ -3,6 +3,7 @@
   padding-top: 12px;
 }
 .math-array {
+  height: clamp(220px, 42vh, 340px);
   display: block;
   width: 100%;
 }
@@ -103,4 +104,10 @@
 }
 .math-part-second {
   fill: #ad591b;
+}
+
+@media (max-width: 700px) {
+  .math-array {
+    height: auto;
+  }
 }

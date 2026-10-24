@@ -132,7 +132,9 @@ export function TeachingCanvas({
   return (
     <section className="teaching-canvas" aria-label="Tutor's visual canvas">
       <div className="canvas-heading">
-        <span>Mathematical workspace</span>
+        <span>
+          {canvas.math ? "Mathematical workspace" : "Teaching canvas"}
+        </span>
         <span className="canvas-interaction-hint">
           {choiceIds.length ||
           (interactionEnabled &&
