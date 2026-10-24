@@ -2,7 +2,7 @@
 
 This module plans the next teaching turn, configures the existing visual engine, checks learner responses, and chooses the next teaching phase from recorded evidence. It supports general topics through an injected model. The offline harness has three explicitly scripted fixtures; those fixtures are test data, not a general AI tutor.
 
-Branch: `feature/teaching-planner`. Base: visual-engine commit `790505e`. Development checkout: `../CalHacks2026-teaching-planner`. Existing visual renderer, presentation director, shared contracts and app entry point are unchanged. This branch adds `src/teaching/`, a separate HTML/Vite entry point, scripts, and this guide. Merge the branch when ready; do not copy its older visual-engine files over newer work.
+The planner's original commits (`0b44818`, `c221316`, `12ca8aa`) have been integrated into `feature/visual-engine`, preserving the newer visual engine. The default app now uses a shared text-mode session coordinator and a subject-independent lesson UI. See [SESSION.md](SESSION.md) for the current integration and demo flow. The separate harness below remains an optional development tool.
 
 ## Run it independently
 
@@ -121,7 +121,7 @@ These are integration callbacks, not claims about a particular LiveKit SDK versi
 
 For each accepted `step`, present its beats **sequentially**:
 
-1. `token = director.prepare(beat)`.
+1. Capture `director.getPlanningContext()` before the asynchronous model request. Before accepting the result, reject it if `contextVersion` changed. Then call `token = director.prepare(beat, { expectedContextVersion })`. For later beats, use the version retained at the preceding beat completion; unexpected changes require replanning.
 2. Ask the voice host to speak exactly `beat.narration` through Cartesia/LiveKit, associating it with the step ID, beat ID and playback token.
 3. On actual playback start, call `director.narrationStarted(token)`.
 4. If reliable audio progress exists, call `director.narrationProgress(token, elapsedMs)`. Until alignment is wired, use short phrases and one visual cue at `atMs: 0`; don't estimate speech timing from token generation.
@@ -178,10 +178,11 @@ All visual commands are preflighted on a clone before acceptance. References mus
 ## Checkpoints for integration
 
 - [x] Validated teaching/assessment contracts and evidence-driven phase policy.
-- [x] Independent harness that renders through the existing visual engine.
+- [x] Independent harness and integrated lesson UI that render through the latest visual engine.
+- [x] Version-guarded text session, automatic replanning after answers, cancellation, and multi-beat gating.
 - [x] Correct, incorrect, ambiguous, help, stale-result and cancellation paths covered in tests.
 - [x] Model adapter boundary and voice/context handoff documented.
 - [ ] Connect the host LLM and run unseen topics through real structured output.
 - [ ] Connect Cartesia/LiveKit playback and finalized learner responses; test barge-in.
 - [ ] Connect real worksheet/context input and retain evidence across reconnects.
-- [ ] Rehearse the complete diagnosis → alternate explanation → independent transfer → original-question demo.
+- [x] Rehearse the complete diagnosis → alternate explanation → independent transfer → original-question flow without voice.

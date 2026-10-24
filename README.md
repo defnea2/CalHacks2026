@@ -1,6 +1,6 @@
-# Interactive visual engine
+# Tutor: visual lessons and teaching engine
 
-A narration-driven visual engine, with a unified math canvas for the team’s current ages 8–12 tutoring brief. The tutor builds and changes the picture as it explains, then invites the child to explore or respond. This branch contains the visual modules, tests, and development rehearsals.
+A narration-driven visual engine, with a unified math canvas for the team’s current ages 8–12 tutoring brief. The tutor builds and changes the picture as it explains, then invites the child to explore or respond. This branch integrates the teaching planner with the latest visual engine and a text-first lesson experience.
 
 ## Run
 
@@ -17,9 +17,22 @@ Open http://127.0.0.1:5173. No API keys or backend are required.
 
 [Full feature inventory and current limits](docs/FEATURES.md) covers every implemented representation, real-time command, interaction, playback feature, and integration boundary.
 
-## Start with the live math canvas
+## Start with a lesson
 
-The default **Live math canvas** preview is voice-free. Press **Build the first visual**, then **Next teaching step** to build an array, split it, highlight a part, reveal the derived equation, and add a group. The final step invites learner manipulation. The same cells animate and the equation updates from the model. **Try your own numbers** changes the example without changing lesson code.
+The default app is a voice-free tutoring session. Choose **Equal groups**, **Small numbers, big ideas**, or **Where does a puddle go?** These are explicitly scripted offline lessons, not live AI generation.
+
+Answer a question to get the next explanation automatically. **Show another way** changes representation, **Smaller step** requests help, and **Continue** advances explanations without a question. Manipulate enabled visuals, then answer or submit the picture when invited. **Your lesson notes** keeps the sequence and recorded evidence; the original homework question stays unsolved for the learner. Refresh clears the session.
+
+For a quick demo: Equal groups → choose **2 + 3** → **Show another way** → move an object into a basket → answer **six** → continue through independent practice. The same layout supports decimals, scientific diagrams, and future topics supplied by a real planning model.
+
+**Use your team's model for another topic** accepts an arbitrary topic and a host-owned planning endpoint. No endpoint is implemented here. Errors are visible and never silently substitute a fixture.
+
+- [Integrated session API, demo checklist, and voice migration](docs/teaching/SESSION.md)
+- [Teaching planner and model contracts](docs/teaching/INTEGRATION.md)
+
+## Development tools
+
+Open **Development tools → Live math canvas** for the existing voice-free command preview. Returning to the lesson retains its state. Press **Build the first visual**, then **Next teaching step** to build an array, split it, highlight a part, reveal the derived equation, and add a group. The final step invites learner manipulation. The same cells animate and the equation updates from the model. **Try your own numbers** changes the example without changing lesson code.
 
 After building a model, **Change this example** edits its quantities, focus, scale, equation visibility, and learner permissions live. **Different numbers** and **Simpler example** generate a local variant from the latest learner-edited state. Async agents can read a versioned planning context and reject stale responses.
 
@@ -44,7 +57,7 @@ The public integration entry point is `src/presentation/index.ts`. LiveKit/Carte
 
 Every mode supports tutor highlights. Pointer interactions support mouse, pen, and touch; click/keyboard alternatives are included. Escape or a scene revision change cancels a drag. Reduced-motion preferences are respected.
 
-The examples span maths, materials, and a water cycle. They are configurations of reusable components; the engine does not hard-code a subject curriculum. It does not generate arbitrary simulations or evaluate a child's answer.
+The examples span maths, materials, and a water cycle. They are configurations of reusable components; the engine does not hard-code a subject curriculum. The renderer does not generate arbitrary simulations. The integrated teaching planner checks structured learner responses separately.
 
 ## Explore a new topic
 

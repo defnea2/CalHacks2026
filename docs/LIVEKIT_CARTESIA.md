@@ -4,6 +4,12 @@ The visual engine is ready for a transport adapter. This document specifies that
 
 Start with [MATH_CANVAS.md](MATH_CANVAS.md). Public exports are in `src/presentation/index.ts`. Cartesia/LiveKit secrets and room-token creation belong on the teammate's server.
 
+## Teaching planner is integrated
+
+The default app now runs `TeachingSession` in **text mode**: one validated beat is displayed immediately; later beats wait for Continue. This is not the LiveKit adapter and must not be used unchanged for speech. [SESSION.md](teaching/SESSION.md) describes the planner/director coordination, version checks, and the migration boundary. [INTEGRATION.md](teaching/INTEGRATION.md) defines teaching steps and learner responses.
+
+The voice host should speak the accepted planner beat's narration, then acknowledge `planner.presented(step.id)` only after the **last** beat actually finishes. Retain one authoritative planner and director; do not run the text coordinator alongside another independently advancing voice session.
+
 ## Ownership
 
 - Visual module: validates commands, maintains the canvas, derives mathematical quantities, renders/animates, gates learner edits, and returns accepted learner events.
