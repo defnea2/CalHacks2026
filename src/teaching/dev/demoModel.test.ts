@@ -78,10 +78,10 @@ describe("offline lesson fixtures", () => {
     );
     expect(p.getSnapshot().evidence.at(-1)?.outcome).toBe("not_assessed");
   });
-  it("returns from an incorrect solo answer through repair to a new solo example", async () => {
+  it.each(demoTopics)("repairs an incorrect $id solo answer with a fresh example", async (topic) => {
     const p = new TeachingPlanner({
       sessionId: "demo",
-      topic: demoTopics[0].label,
+      topic: topic.label,
     });
     const d = new VisualDirector();
     for (let i = 0; i < 8; i++) {
@@ -90,11 +90,14 @@ describe("offline lesson fixtures", () => {
       if (s.check) correct(p, d);
     }
     const old = p.getSnapshot().step!;
+    const check = old.check;
     p.respond(
       {
         eventId: "wrong",
         stepId: old.id,
-        response: { kind: "answer", text: "999" },
+        response: check?.kind === "choice"
+          ? { kind: "choice", optionId: check.options.find((o) => o.id !== check.correctOptionId)!.id }
+          : { kind: "answer", text: "999" },
       },
       d.getSnapshot().canvas,
     );

@@ -215,9 +215,13 @@ export class TeachingPlanner {
         throw new Error("Use a fresh independent problem.");
     }
     let planned = structuredClone(actualCanvas);
-    for (const beat of step.beats)
-      for (const cue of beat.cues)
+    for (const beat of step.beats) {
+      for (const cue of beat.cues) {
         planned = applyCanvasCommands(planned, cue.commands);
+        if (["solo", "transfer"].includes(step.phase) && planned.math?.visual.showEquation)
+          throw new Error("Hide the derived answer during independent checks.");
+      }
+    }
     validateCheck(step.check, planned);
     if (
       step.approach === "change_representation" &&
@@ -258,7 +262,7 @@ export class TeachingPlanner {
     });
   }
   interrupt(stepId: string) {
-    if (this.state.step?.id !== stepId) return;
+    if (this.state.step?.id !== stepId || this.state.status !== "presenting") return;
     this.publish({ status: "needs_plan" });
   }
   respond(input: unknown, canvas: CanvasState): Evidence {

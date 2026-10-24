@@ -396,17 +396,24 @@ export async function demoPlanningModel(
         );
         narration = "Let's repair one part of the explanation.";
         break;
-      case "solo":
-        exampleProblem =
-          "Water appears on the outside of a cold glass. Name the change.";
+      case "solo": {
+        const setting = ["a cold glass", "a cold window", "a chilled metal bottle"].find(
+          (s) => !request.context.usedExampleProblems.includes(
+            "Water appears on the outside of " + s + ". Name the change.",
+          ),
+        );
+        if (!setting) throw new Error("Local practice examples exhausted. Switch to a model for more.");
+        commands = [{ type: "clear", title: "Name the change" }];
+        exampleProblem = "Water appears on the outside of " + setting + ". Name the change.";
         check = choice(
-          "Water vapour becomes droplets outside a cold glass. Which change is this?",
+          "Water vapour becomes droplets outside " + setting + ". Which change is this?",
           "Condensation",
           "Evaporation",
         );
         narration =
-          "Try a new example. The glass is cooling water vapour in the nearby air.";
+          "Try a new example on your own.";
         break;
+      }
       case "transfer":
         commands = [{ type: "clear", title: "Try the idea somewhere new" }];
         exampleProblem =

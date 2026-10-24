@@ -241,6 +241,14 @@ describe("teaching planner", () => {
     expect(() => p.accept(r.requestId, next, emptyCanvas())).toThrow(
       "Hide the derived answer",
     );
+    next.beats[0].cues.push({
+      id: "hide-later",
+      atMs: 1000,
+      commands: [{ type: "clear", title: "Now answer" }],
+    });
+    expect(() => p.accept(r.requestId, next, emptyCanvas())).toThrow(
+      "Hide the derived answer",
+    );
   });
   it("rejects cancelled asynchronous results", async () => {
     const p = new TeachingPlanner(config);
