@@ -14,7 +14,7 @@ export function codexArgs(dir: string, model?: string) {
     "--sandbox", "read-only", "--cd", dir, "--color", "never",
     "--output-schema", join(dir, "response-schema.json"),
     "--output-last-message", join(dir, "response.json"),
-    "-c", 'approval_policy="never"', "-c", 'web_search="disabled"',
+    "-c", 'approval_policy="never"', "-c", 'forced_login_method="chatgpt"', "-c", 'web_search="disabled"',
     "-c", "project_doc_max_bytes=0", "-c", 'model_reasoning_effort="low"',
     ...["shell_tool", "apps", "plugins", "remote_plugin", "multi_agent", "computer_use", "browser_use", "in_app_browser", "image_generation", "code_mode_host", "hooks", "goals", "skill_search"].flatMap(feature => ["--disable", feature]),
     ...(model ? ["--model", model] : []), "-",

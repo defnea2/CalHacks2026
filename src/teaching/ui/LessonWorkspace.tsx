@@ -30,6 +30,15 @@ export function LessonWorkspace() {
   const [homework, setHomework] = useState("");
   const [endpoint, setEndpoint] = useState("/api/teaching/plan");
   const [setupError, setSetupError] = useState("");
+  const [bridge, setBridge] = useState("Checking local model bridge…");
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/teaching/status", { signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error(); return response.json(); })
+      .then(status => { if (!controller.signal.aborted) setBridge(status.provider === "codex" ? "Codex bridge ready · uses your ChatGPT sign-in" : "Use a connected planning endpoint"); })
+      .catch(() => { if (!controller.signal.aborted) setBridge("Start npm run dev to connect the local model bridge."); });
+    return () => controller.abort();
+  }, []);
   useEffect(() => () => session?.cancel(), [session]);
   function start(index?: number) {
     try {
@@ -48,7 +57,19 @@ export function LessonWorkspace() {
   return <section className="lesson-workspace" aria-label="Learning session">
     {session ? <Lesson key={session.planner.getSnapshot().config.sessionId} session={session} source={source} onExit={() => { session.cancel(); setSession(null); }} />
       : <div className="lesson-welcome">
-        <div className="lesson-intro"><span className="lesson-eyebrow">LOOK · TRY · UNDERSTAND</span><h1>What are you <br />wondering about?</h1><p>Build a picture. Try an idea. Find a way that clicks.</p></div>
+        <div className="lesson-intro"><span className="lesson-eyebrow">LOOK · TRY · UNDERSTAND</span><h1>What are you <br />wondering about?</h1><p>Ask your question. Build a picture. Work through it together.</p></div>
+        <form className="lesson-topic-entry" onSubmit={e => { e.preventDefault(); start(); }}>
+          <label htmlFor="topic-question">What would you like to understand?</label>
+          <div className="lesson-topic-row"><input id="topic-question" required maxLength={1200} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Why do shadows change during the day?" /><button className="lesson-primary" type="submit">Explore my question <span aria-hidden="true">→</span></button></div>
+          <p className="lesson-connection" role="status">{bridge}</p>
+          <small>No API key or microphone needed. Your question and lesson context are sent to the model through Codex.</small>
+          <details className="lesson-model-setup"><summary>Original question and connection settings</summary>
+            <label>Your original homework question (optional)<input maxLength={2000} value={homework} onChange={e => setHomework(e.target.value)} /></label>
+            <label>Planning endpoint<input required value={endpoint} onChange={e => setEndpoint(e.target.value)} /></label>
+          </details>
+          {setupError && <p role="alert">{setupError}</p>}
+        </form>
+        <div className="lesson-samples-heading"><h2>Or explore an offline sample</h2><span>Three scripted lessons · no model calls</span></div>
         <div className="lesson-catalog" aria-label="Sample lessons">
           {subjects.map((subject, i) => <button className="lesson-card" key={subject.kind} onClick={() => start(i)}>
             <span className="lesson-card-top"><span>{subject.area}</span><span>0{i + 1}</span></span>
@@ -56,16 +77,7 @@ export function LessonWorkspace() {
           </button>)}
         </div>
         <p className="lesson-sample-note">Three offline sample lessons. Read the tutor's words and respond at your own pace. Voice is not connected.</p>
-        <details className="lesson-model-setup"><summary>Use your team's model for another topic</summary>
-          <p>Any topic can use the same lesson workspace and supported visual tools. This requires a running planning endpoint; it does not fall back to a sample.</p>
-          <form onSubmit={e => { e.preventDefault(); start(); }}>
-            <label>What would you like to understand?<input required maxLength={1200} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Why do shadows change during the day?" /></label>
-            <label>Your original question (optional)<input maxLength={2000} value={homework} onChange={e => setHomework(e.target.value)} /></label>
-            <label>Planning endpoint<input required value={endpoint} onChange={e => setEndpoint(e.target.value)} /></label>
-            <button className="lesson-primary" type="submit">Start my topic <span aria-hidden="true">→</span></button>
-          </form>
-          {setupError && <p role="alert">{setupError}</p>}
-        </details>
+
       </div>}
   </section>;
 }
@@ -86,7 +98,7 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
   useEffect(() => { setAnswer(""); heading.current?.focus({ preventScroll: true }); }, [step?.id, state.beatIndex]);
   const respond = (response: LearnerResponse["response"]) => { void session.respond(response); };
   return <>
-    <div className="lesson-topline"><button className="lesson-back" onClick={onExit}>← All topics</button><span>{source === "sample" ? "Offline sample" : "Model endpoint"} · Text mode</span></div>
+    <div className="lesson-topline"><button className="lesson-back" onClick={onExit}>← All topics</button><span>{source === "sample" ? "Offline sample" : "Generated lesson"} · Text mode</span></div>
     <div className="lesson-title"><h1>{teaching.config.topic}</h1><p>One idea at a time. You set the pace.</p></div>
     <div className="lesson-stage">
       <div className="lesson-paper">

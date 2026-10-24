@@ -125,3 +125,24 @@
   .lesson-workspace .math-array { max-height: 250px; }
   .lesson-workspace .math-workspace { min-height: 180px; }
 }
+.lesson-topic-entry { margin: 0 0 36px; padding: 24px; background: #fffefa; border: 1px solid var(--lesson-rule); }
+.lesson-topic-entry > label { display: block; margin-bottom: 10px; font-size: 13px; font-weight: 600; }
+.lesson-topic-row { display: flex; gap: 10px; }
+.lesson-topic-row input { font-size: 16px; }
+.lesson-topic-row button { flex-shrink: 0; }
+.lesson-topic-entry .lesson-connection { font-size: 11px; margin: 14px 0 4px; color: var(--lesson-accent); }
+.lesson-topic-entry > small { font-size: 10px; color: var(--lesson-muted); display: block; }
+.lesson-topic-entry .lesson-model-setup { margin-top: 14px; font-size: 11px; }
+.lesson-topic-entry .lesson-model-setup label { display: grid; gap: 6px; margin: 12px 0; }
+.lesson-samples-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 15px; margin-bottom: 16px; }
+.lesson-samples-heading h2 { font-size: 14px; font-weight: 600; margin: 0; }
+.lesson-samples-heading span { font-size: 10px; color: var(--lesson-muted); }
+.lesson-intro { padding-top: 30px; padding-bottom: 12px; }
+.lesson-intro h1 { font-size: clamp(36px, 4vw, 52px); }
+.lesson-card .lesson-sketch { height: 90px; margin: 8px 0 12px; }
+@media (max-width: 700px) {
+  .lesson-topic-entry { padding: 18px; }
+  .lesson-topic-row { flex-direction: column; }
+  .lesson-topic-row button { align-self: flex-start; }
+  .lesson-samples-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+}

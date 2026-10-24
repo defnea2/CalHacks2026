@@ -34,9 +34,8 @@ describe("integrated lesson experience", () => {
   it("shows a model error without silently substituting a sample and lets the learner leave", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     render(<LessonWorkspace />);
-    fireEvent.click(screen.getByText("Use your team's model for another topic"));
     fireEvent.change(screen.getByLabelText("What would you like to understand?"), { target: { value: "How do shadows work?" } });
-    fireEvent.click(screen.getByRole("button", { name: /Start my topic/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Explore my question/ }));
     await screen.findByRole("alert");
     expect(screen.getByRole("button", { name: /Try again/ })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /rows of/ })).not.toBeInTheDocument();

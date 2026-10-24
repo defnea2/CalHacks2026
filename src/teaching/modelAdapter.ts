@@ -12,12 +12,17 @@ export function createHttpPlanningModel(
       body: JSON.stringify(request),
       signal,
     });
-    if (!response.ok)
-      throw new Error(
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const body: unknown = await response.json();
+        if (body && typeof body === "object" && "error" in body && typeof body.error === "string") detail = body.error.slice(0, 1200);
+      } catch { /* Proxies may return non-JSON errors. */ }
+      throw new Error(detail ||
         "Planning endpoint returned HTTP " +
           response.status +
-          ". Keep the current step and retry.",
-      );
+          ". Keep the current step and retry.");
+    }
     const result: unknown = await response.json();
     // Shape validation, mathematical preflight, and evidence policy happen in planner.accept.
     return result;
