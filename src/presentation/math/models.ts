@@ -13,6 +13,7 @@ const common = {
 const rows = z.number().int().min(1).max(12);
 const columns = z.number().int().min(1).max(20);
 const parts = z.number().int().min(1).max(12);
+const dimension = z.number().min(1).max(12).multipleOf(0.5);
 const bound = z.number().finite().min(-1000).max(1000);
 const bar = z
   .object({
@@ -41,6 +42,9 @@ export const MathVisualSchema = z
         bars: z.array(bar).min(1).max(4),
       })
       .strict(),
+    z.object({ ...common, kind: z.literal("geometry"),
+      shape: z.enum(["rectangle", "right_triangle"]), width: dimension, height: dimension,
+    }).strict(),
     z
       .object({
         ...common,
@@ -66,6 +70,8 @@ export const MathVisualSchema = z
         visual.splitAt === null
       )
         fail("Split the array before focusing a part.");
+    } else if (visual.kind === "geometry") {
+      if (visual.focus !== null) fail("Geometry focus must be null.");
     } else {
       const items = visual.kind === "bars" ? visual.bars : visual.markers;
       if (new Set(items.map((x) => x.id)).size !== items.length)
@@ -89,6 +95,7 @@ export const MathVisualSchema = z
 export type MathVisual = z.infer<typeof MathVisualSchema>;
 export type MathVisualInput = z.input<typeof MathVisualSchema>;
 export const MathChangeSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("set_geometry"), width: dimension.optional(), height: dimension.optional() }).strict(),
   z
     .object({
       type: z.literal("set_array"),
@@ -150,6 +157,12 @@ export function updateMathVisual(
     throw new Error(`Cannot ${change.type} on ${current.kind}.`);
   };
   switch (change.type) {
+    case "set_geometry": {
+      if (next.kind !== "geometry") return mismatch();
+      if (change.width !== undefined) next.width = change.width;
+      if (change.height !== undefined) next.height = change.height;
+      break;
+    }
     case "set_array": {
       if (next.kind !== "array") return mismatch();
       const { type: _type, ...patch } = change;
@@ -191,6 +204,7 @@ export function updateMathVisual(
 
 /** Values come from the model, never a second model-generated answer string. */
 export function mathSummary(visual: MathVisual): string {
+  if (visual.kind === "geometry") return `Area = ${visual.width} × ${visual.height}${visual.shape === "right_triangle" ? " ÷ 2" : ""} = ${geometryArea(visual)} square units`;
   if (visual.kind === "array") {
     const { rows: r, columns: c, splitAt: s } = visual;
     return s === null
@@ -211,7 +225,7 @@ export function mathActivity(
   enabled: boolean,
 ): SceneState | null {
   const v = scene.visual;
-  if (v.kind === "array") return null;
+  if (v.kind === "array" || v.kind === "geometry") return null;
   const result = createScene(
     {
       id: v.id,
@@ -236,4 +250,8 @@ export function mathActivity(
   result.revision = scene.revision;
   result.highlightedIds = v.focus ? [v.focus] : [];
   return result;
+}
+
+export function geometryArea(v: Extract<MathVisual, { kind: "geometry" }>) {
+  return v.width * v.height / (v.shape === "right_triangle" ? 2 : 1);
 }

@@ -23,6 +23,8 @@ export function createMathExample(
         ? { ...bar, parts: i % 2 === 0 ? 2 : 4, shaded: 1 }
         : { ...bar, shaded: (bar.shaded + 1) % (bar.parts + 1) },
     );
+  } else if (next.kind === "geometry") {
+    next.width = intent === "simpler" ? Math.max(1, Math.ceil(next.width / 2)) : next.width === 12 ? 2 : Math.min(12, next.width + 1);
   } else if (intent === "simpler") {
     const span = next.max - next.min;
     next.markers = next.markers.map((marker) => ({

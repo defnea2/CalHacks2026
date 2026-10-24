@@ -111,3 +111,13 @@
     height: auto;
   }
 }
+
+.math-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.math-equation { overflow-x: auto; font-weight: 400; color: #243e35; }
+.math-equation small { display: block; margin-top: 12px; font: 12px system-ui, sans-serif; color: #69736d; }
+.math-first, .math-part-first { color: #24594b; fill: #24594b; }
+.math-second, .math-part-second { color: #b8723f; fill: #b8723f; }
+.math-controls input { accent-color: #24594b; }
+.math-geometry .MafsView { --mafs-bg: transparent; --mafs-fg: #56665d; --mafs-line-color: #e4e8e2; --mafs-origin-color: #e4e8e2; --mafs-font-family: inherit; }
+.math-geometry-caption { text-align: center; font-size: 14px; color: #667167; margin: 0; }
+.math-workspace:not(.math-observe) .lab-line-marker, .math-workspace:not(.math-observe) .lab-line-progress { transition: none; }

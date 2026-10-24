@@ -113,7 +113,7 @@ export class VisualDirector {
     )
       return null;
     // Learners can manipulate quantities, but cannot grant themselves controls or reveal equations.
-    if (!["set_array", "set_bar", "move_marker"].includes(action.change.type))
+    if (!["set_array", "set_bar", "move_marker", "set_geometry"].includes(action.change.type))
       return null;
     try {
       const next = {

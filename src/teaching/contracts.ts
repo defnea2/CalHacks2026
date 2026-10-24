@@ -84,6 +84,9 @@ export const CheckSchema = z.discriminatedUnion("kind", [
       prompt: short,
       visualId: IdSchema,
       field: z.enum([
+        "geometry_area",
+        "geometry_width",
+        "geometry_height",
         "array_total",
         "array_rows",
         "array_columns",

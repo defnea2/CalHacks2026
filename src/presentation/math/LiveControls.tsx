@@ -247,7 +247,7 @@ export function LiveControls({
                     <option value="right">Second part</option>
                   </>
                 )
-              : (visual.kind === "bars" ? visual.bars : visual.markers).map(
+              : (visual.kind === "bars" ? visual.bars : visual.kind === "number_line" ? visual.markers : []).map(
                   (item) => (
                     <option key={item.id} value={item.id}>
                       {item.label}

@@ -1,8 +1,9 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { MathStatement } from "./MathStatement";
+import { GeometryPicture } from "./GeometryPicture";
 import { LearningWorkspace } from "../../visuals/LearningWorkspace";
 import {
   mathActivity,
-  mathSummary,
   type MathAction,
   type MathChange,
   type MathScene,
@@ -21,7 +22,7 @@ function ArrayPicture({
   const gap = splitAt === null ? 0 : 34;
   const left = (1000 - columns * step - gap) / 2;
   const top = (380 - rows * step) / 2 + 30;
-  const transition = { duration: reduced ? 0 : 0.5 };
+  const transition = { duration: reduced || visual.interactive ? 0 : 0.5 };
   return (
     <svg
       className="math-array"
@@ -55,12 +56,12 @@ function ArrayPicture({
                   y: top + r * step,
                   width: step - 5,
                   height: step - 5,
-                  fill: right ? "#ffe4c7" : "#dce7ff",
+                  fill: right ? "#efddcc" : "#d3e2d9",
                 }}
                 exit={{ opacity: 0 }}
                 transition={transition}
                 rx="1"
-                stroke={right ? "#ad591b" : "#2556ad"}
+                stroke={right ? "#b8723f" : "#24594b"}
                 strokeWidth="1.5"
               />
             );
@@ -123,7 +124,7 @@ export function MathWorkspace({
       className={`math-workspace ${canChange ? "" : "math-observe"}`}
       data-visual-id={visual.id}
     >
-      {visual.kind === "array" ? (
+      {visual.kind === "geometry" ? <GeometryPicture visual={visual} enabled={canChange} onChange={emit} /> : visual.kind === "array" ? (
         <>
           <ArrayPicture visual={visual} />
           {visual.interactive && (
@@ -201,15 +202,7 @@ export function MathWorkspace({
           />
         )
       )}
-      {visual.showEquation && (
-        <output
-          className="math-equation"
-          aria-label="Linked mathematical statement"
-          aria-live="polite"
-        >
-          {mathSummary(visual)}
-        </output>
-      )}
+      {visual.showEquation && <MathStatement visual={visual} />}
     </div>
   );
 }

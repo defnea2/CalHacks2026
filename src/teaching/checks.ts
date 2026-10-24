@@ -1,3 +1,4 @@
+import { geometryArea } from "../presentation/math/models";
 import type { CanvasState } from "../presentation/contracts";
 import { containerIds, objectIds } from "../shared/contracts";
 import type { Evidence, LearnerResponse, TeachingCheck } from "./contracts";
@@ -27,6 +28,15 @@ function modelValue(
   if (!visual || visual.id !== check.visualId)
     throw new Error("Check refers to a missing math visual.");
   switch (check.field) {
+    case "geometry_area":
+      if (visual.kind === "geometry") return geometryArea(visual);
+      break;
+    case "geometry_width":
+      if (visual.kind === "geometry") return visual.width;
+      break;
+    case "geometry_height":
+      if (visual.kind === "geometry") return visual.height;
+      break;
     case "array_total":
       if (visual.kind === "array") return visual.rows * visual.columns;
       break;
