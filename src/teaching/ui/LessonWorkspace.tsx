@@ -115,8 +115,9 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
     <div className="lesson-title"><h1>{teaching.config.topic}</h1></div>
     <div className="lesson-stage">
       <div className="lesson-paper">
+        {narration && <h2 ref={heading} tabIndex={-1} className="lesson-narration lesson-caption">{spoken || check?.prompt || narration}</h2>}
         {empty ? <section className="lesson-think" aria-label="Thinking space"><span className="lesson-eyebrow">{complete ? "YOUR QUESTION" : "PICTURE"}</span><h2>{complete ? teaching.config.originalQuestion || "Where could you use this idea?" : step ? visual.canvas.title : "Your picture will appear here"}</h2><div className="lesson-pencil-rule" /><p>{complete ? "Try it yourself. Use the ideas you explored here to explain your thinking." : ""}</p></section>
-          : <TeachingCanvas canvas={visual.canvas} interactionEnabled={session.canInteract()} onMathAction={session.interactMath} onActivityAction={session.interactActivity} />}
+          : <TeachingCanvas key={state.playbackRun} canvas={visual.canvas} interactionEnabled={session.canInteract()} onMathAction={session.interactMath} onActivityAction={session.interactActivity} />}
         {step && step.beats.length > 1 && <div className="lesson-playback" aria-label="Explanation playback">
           <div className="lesson-filmstrip" aria-label={`Part ${state.beatIndex + 1} of ${step.beats.length}`}>
             {step.beats.map((beat, index) => <span key={beat.id} className={index <= state.beatIndex ? "seen" : ""} aria-current={index === state.beatIndex ? "step" : undefined} />)}
@@ -126,13 +127,13 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
             <button type="button" onClick={() => setPaused(p => !p)}>{paused ? "Play" : "Pause"}</button>
             <button type="button" onClick={session.presentNext}>Next</button>
           </>}
-          <button type="button" disabled={state.busy || !["presenting", "awaiting_response"].includes(teaching.status)} onClick={() => { setPaused(Boolean(reducedMotion)); session.replay(); }}>Replay</button>
+          <button type="button" disabled={state.busy || !["presenting", "awaiting_response"].includes(teaching.status)} title="Replay from the beginning and reset changes to this picture" onClick={() => { setPaused(Boolean(reducedMotion)); session.replay(); }}>Replay</button>
         </div>}
         {!complete && teaching.config.originalQuestion && <div className="lesson-saved-question"><span>Saved for you</span><p>{teaching.config.originalQuestion}</p><small>We'll practice on other examples first.</small></div>}
       </div>
       <aside className="lesson-conversation" aria-label="Tutor conversation">
         <div className="lesson-turn-label"><span className="lesson-tutor-mark" aria-hidden="true">↗</span><span>{step ? phaseLabels[step.phase] : "Let's begin"}</span><span className="lesson-turn-number">{String(teaching.history.length || 1).padStart(2, "0")}</span></div>
-        {narration && <h2 ref={heading} tabIndex={-1} className="lesson-narration">{spoken || check?.prompt || narration}</h2>}
+
         {waiting && check && <form className="lesson-response" onSubmit={e => { e.preventDefault(); if (answer.trim()) respond({ kind: "answer", text: answer.trim() }); }}>
           {spoken && <p className="lesson-question">{check.prompt}</p>}
           {check.kind === "choice" ? <div className="lesson-choices">{check.options.map((option, i) => <button key={option.id} type="button" onClick={() => respond({ kind: "choice", optionId: option.id })}><span aria-hidden="true">{String.fromCharCode(65+i)}</span>{option.label}<span aria-hidden="true">↗</span></button>)}</div>

@@ -75,7 +75,9 @@ describe("compact mathematical planning", () => {
     expect(session.canInteract()).toBe(true);
     const scene = session.director.getSnapshot().canvas.math!;
     session.interactMath({ eventId: "edit", visualId: scene.visual.id, revision: scene.revision, change: { type: "set_geometry", width: 10 } });
+    const previousRun = session.getSnapshot().playbackRun;
     expect(session.replay()).toBe(true);
+    expect(session.getSnapshot().playbackRun).toBe(previousRun + 1);
     expect(session.director.getSnapshot().canvas.math?.visual).toMatchObject({ width: 6 });
     expect(session.canInteract()).toBe(false);
     session.presentNext();

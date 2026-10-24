@@ -168,3 +168,11 @@
 .lesson-filmstrip .seen { background: #24594b; }
 .lesson-playback button { color: var(--lesson-accent); background: transparent; border: 1px solid var(--lesson-rule); padding: 7px 10px; }
 .lesson-playback button:disabled { opacity: .4; }
+
+.lesson-caption { border-left: 2px solid var(--lesson-accent); padding: 4px 0 4px 16px; margin: 0 0 18px; min-height: 3.3em; }
+@media (max-width: 700px) {
+  .lesson-caption { font-size: 16px; line-height: 1.5; }
+  .lesson-stage { gap: 12px; }
+  .lesson-title h1 { font-size: 24px; }
+  .lesson-workspace .teaching-canvas { padding: 14px; }
+}

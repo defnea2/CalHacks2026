@@ -33,14 +33,14 @@ export function GeometryPicture({ visual: v, enabled, onChange, animateChanges =
   }, [v.width, v.height, animateChanges, reduced]);
   const triangle = v.shape === "right_triangle";
   // A fixed origin makes added rows/columns visible instead of stretching both edges.
-  const left = -6, bottom = -5;
+  const left = 0, bottom = 0;
   const x = left + drawn.width, y = bottom + drawn.height;
   const point: [number, number] = [x, y];
   const corners: [number, number][] = triangle ? [[left,bottom],[x,bottom],point] : [[left,bottom],[x,bottom],point,[left,y]];
   return <div className="math-geometry">
     <p className="math-geometry-caption">{triangle ? "A triangle inside its rectangle" : "Each grid square is one square unit."}</p>
     <div role="group" aria-label={`${triangle ? "Right triangle" : "Rectangle"}, base ${v.width}, height ${v.height}`}>
-      <Mafs height={300} pan={false} zoom={false} viewBox={{ x: [-8,8], y: [-7.5,7.5], padding: 0 }}>
+      <Mafs height={300} pan={false} zoom={false} viewBox={{ x: [-1,13], y: [-1,Math.max(5, v.height + 1)], padding: 0 }}>
         <Coordinates.Cartesian xAxis={{ labels: false, axis: false }} yAxis={{ labels: false, axis: false }} />
         {triangle && <Polygon points={[[left,bottom],[x,bottom],point,[left,y]]} color="#b8723f" fillOpacity={0.04} strokeStyle="dashed" strokeOpacity={0.45} />}
         {previous && !triangle && <Polygon points={[[left,bottom],[left+previous.width,bottom],[left+previous.width,bottom+previous.height],[left,bottom+previous.height]]} color="#b8723f" fillOpacity={0.04} strokeStyle="dashed" weight={2} />}

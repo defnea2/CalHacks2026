@@ -10,13 +10,14 @@ interface SessionState {
   error: string | null;
   beatIndex: number;
   changes: number;
+  playbackRun: number;
 }
 
 /** Coordinates a text rehearsal. No synthetic audio clock or second teaching model. */
 export class TeachingSession {
   readonly planner: TeachingPlanner;
   readonly director = new VisualDirector();
-  private state: SessionState = { busy: false, error: null, beatIndex: -1, changes: 0 };
+  private state: SessionState = { busy: false, error: null, beatIndex: -1, changes: 0, playbackRun: 0 };
   private listeners = new Set<() => void>();
   private abort: AbortController | null = null;
   private epoch = 0;
@@ -68,7 +69,7 @@ export class TeachingSession {
       this.planner.accept(request.requestId, output, this.director.getSnapshot().canvas);
       this.presentationStart = structuredClone(context.canvas);
       this.presentationVersion = context.contextVersion;
-      this.publish({ beatIndex: -1, changes: 0 });
+      this.publish({ beatIndex: -1, changes: 0, playbackRun: this.state.playbackRun + 1 });
       return this.presentNext();
     } catch (error) {
       if (epoch === this.epoch && !abort.signal.aborted) this.fail(error);
@@ -112,7 +113,7 @@ export class TeachingSession {
     this.planner.replayPresentation();
     this.director.reset(this.presentationStart);
     this.presentationVersion = this.director.getSnapshot().contextVersion;
-    this.publish({ beatIndex: -1, changes: 0, error: null });
+    this.publish({ beatIndex: -1, changes: 0, error: null, playbackRun: this.state.playbackRun + 1 });
     return this.presentNext();
   };
   respond = async (response: LearnerResponse["response"]) => {

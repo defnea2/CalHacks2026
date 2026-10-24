@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonWorkspace } from "./LessonWorkspace";
 import App from "../../app/App";
+import * as demos from "../dev/demoModel";
 
 beforeEach(() => vi.spyOn(window, "scrollTo").mockImplementation(() => {}));
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe("integrated lesson experience", () => {
   it("turns an answer into the next visual and changes representation without manual planning", async () => {
     render(<LessonWorkspace />);
@@ -42,4 +43,35 @@ describe("integrated lesson experience", () => {
     fireEvent.click(screen.getByRole("button", { name: "← All topics" }));
     await waitFor(() => expect(screen.getByRole("heading", { name: /What are you.*wondering about\?/ })).toBeInTheDocument());
   });
+});
+
+it("paces an explanation locally, pauses it, and reveals the question only at the end", async () => {
+  vi.useFakeTimers();
+  const original = demos.demoPlanningModel;
+  const model = vi.spyOn(demos, "demoPlanningModel").mockImplementation(async request => {
+    const step = await original(request);
+    return { ...step, beats: [
+      { id: "before", narration: "First look at the empty space.", cues: [{ id: "before", atMs: 0, commands: [{ type: "clear", title: "Before" }] }] },
+      { id: "middle", narration: "Now we can arrange the groups.", cues: [{ id: "middle", atMs: 0, commands: [{ type: "clear", title: "Arrange" }] }] },
+      ...step.beats,
+    ] };
+  });
+  render(<LessonWorkspace />);
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: /Equal groups/ })));
+  expect(screen.getByLabelText("Part 1 of 3")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /2 \+ 3/ })).not.toBeInTheDocument();
+  await act(async () => vi.advanceTimersByTime(3500));
+  expect(screen.getByLabelText("Part 2 of 3")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+  await act(async () => vi.advanceTimersByTime(20000));
+  expect(screen.getByLabelText("Part 2 of 3")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByRole("button", { name: /2 \+ 3/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Replay" }));
+  expect(screen.getByLabelText("Part 1 of 3")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /2 \+ 3/ })).not.toBeInTheDocument();
+  expect(model).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "← All topics" }));
+  await act(async () => vi.advanceTimersByTime(20000));
+  expect(screen.getByRole("button", { name: /Open math studio/ })).toBeInTheDocument();
 });
