@@ -17,7 +17,7 @@ function ArrayPicture({
 }) {
   const reduced = useReducedMotion();
   const { rows, columns, splitAt, focus } = visual;
-  const step = Math.min(48, 800 / columns, 290 / rows);
+  const step = Math.min(100, 800 / columns, 290 / rows);
   const gap = splitAt === null ? 0 : 34;
   const left = (1000 - columns * step - gap) / 2;
   const top = (380 - rows * step) / 2 + 30;

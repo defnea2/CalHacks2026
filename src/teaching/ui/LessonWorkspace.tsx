@@ -108,7 +108,7 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
           : teaching.status === "presenting" ? <button className="lesson-primary" onClick={session.presentNext}>Continue <span aria-hidden="true">→</span></button>
           : teaching.status === "needs_plan" && <button className="lesson-primary" onClick={() => void session.plan()}>{state.error ? "Try again" : "Continue"} <span aria-hidden="true">→</span></button>}
         {complete && <div className="lesson-finish"><p>You tried {session.planner.recap().independentChecksPassed.length} independent examples successfully. Your original question is ready for you.</p><button className="lesson-primary" onClick={onExit}>Explore another idea →</button></div>}
-        {state.error && <div className="lesson-error" role="alert"><strong>This step couldn't load.</strong><p>{state.error}</p></div>}
+        {state.error && <div className="lesson-error" role="alert"><strong>This step couldn't load.</strong><p>Your picture is still here. Try again, or choose another topic.</p><details><summary>Technical details</summary><p>{state.error}</p></details></div>}
         <p className="lesson-voice-note">Read, explore, respond. No microphone needed.</p>
       </aside>
     </div>

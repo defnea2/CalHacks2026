@@ -95,6 +95,7 @@ function phaseFor(request: PlanningRequest): TeachingPhase {
     .filter((e) => e.stepId === current?.id)
     .at(-1);
   if (!current) return "diagnose";
+  if (current.check && !last) return current.phase;
   if (last?.response.kind === "help") return "intuition";
   if (last?.outcome === "unclear") return current.phase;
   if (last?.outcome === "incorrect")

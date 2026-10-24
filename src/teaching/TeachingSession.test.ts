@@ -104,5 +104,7 @@ describe("planner and latest canvas integration", () => {
     expect(second.presentNext()).toBe(false);
     expect(second.planner.getSnapshot().status).toBe("needs_plan");
     expect(second.getSnapshot().error).toMatch(/Stale teaching plan/);
+    expect(await second.plan()).toBe(true);
+    expect(second.planner.getSnapshot().step?.phase).toBe("diagnose");
   });
 });
