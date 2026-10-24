@@ -86,6 +86,28 @@ describe("compact mathematical planning", () => {
     expect(model).toHaveBeenCalledTimes(1);
     session.cancel();
   });
+  it("requires explanation assessment and a demonstration after a diagnosed misconception", async () => {
+    const planner = new TeachingPlanner({ sessionId: "feedback", topic: "Area" });
+    const initial = planner.request(emptyCanvas());
+    const first = await generatePlan(parseModelRequest(initial), async () => draft, new AbortController().signal);
+    planner.accept(initial.requestId, first, emptyCanvas());
+    planner.presented(first.id);
+    const canvas = applyCanvasCommands(emptyCanvas(), first.beats[0].cues[0].commands);
+    planner.respond({ eventId: "misconception", stepId: first.id, response: { kind: "answer", text: "Area is just the width." } }, canvas);
+    const request = parseModelRequest(planner.request(canvas));
+    const assessment = { evidenceId: "misconception", judgement: "misconception", observation: "The learner counts only one dimension." };
+    const demonstrated = { ...draft, phase: "intuition", assessment, sequence: [
+      { narration: "Both rows gain squares.", visual: { kind: "update", changes: [{ type: "set_geometry", width: 8 }] }, interactive: true, showEquation: true },
+    ] };
+    const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(demonstrated);
+    const result = await generatePlan(request, generate, new AbortController().signal);
+    expect(result.phase).toBe("intuition");
+    expect(result.beats).toHaveLength(2);
+    expect(generate.mock.calls[1][0]).toContain("Assess the latest unassessed explanation");
+    const repeatedDiagnosis = vi.fn().mockResolvedValueOnce({ ...draft, assessment }).mockResolvedValueOnce(demonstrated);
+    expect((await generatePlan(request, repeatedDiagnosis, new AbortController().signal)).phase).toBe("intuition");
+    expect(repeatedDiagnosis.mock.calls[1][0]).toContain("connected visual demonstration");
+  });
   it("retains learner changes when updating an existing representation", () => {
     const options = { title: "Groups", interactive: true, showEquation: true };
     const canvas = applyCanvasCommands(emptyCanvas(), compileMathCommand({ kind: "array", rows: 4, columns: 7 }, emptyCanvas(), options));

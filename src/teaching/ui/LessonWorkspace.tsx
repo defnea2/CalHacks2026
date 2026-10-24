@@ -106,9 +106,14 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
   useEffect(() => { setPaused(Boolean(reducedMotion)); }, [step?.id, reducedMotion]);
   useEffect(() => {
     if (paused || state.busy || teaching.status !== "presenting") return;
-    const timer = setTimeout(() => session.presentNext(), duration);
+    const run = state.playbackRun, index = state.beatIndex, stepId = step?.id;
+    const timer = setTimeout(() => {
+      const current = session.getSnapshot();
+      if (current.playbackRun === run && current.beatIndex === index && session.planner.getSnapshot().step?.id === stepId)
+        session.presentNext();
+    }, duration);
     return () => clearTimeout(timer);
-  }, [session, step?.id, state.beatIndex, state.busy, teaching.status, paused, duration]);
+  }, [session, step?.id, state.beatIndex, state.playbackRun, state.busy, teaching.status, paused, duration]);
   const respond = (response: LearnerResponse["response"]) => { void session.respond(response); };
   return <>
     <div className="lesson-topline"><button className="lesson-back" onClick={onExit}>← All topics</button><span>{source === "sample" ? "Offline sample" : "Math lesson"}</span></div>

@@ -60,7 +60,11 @@ it("paces an explanation locally, pauses it, and reveals the question only at th
   await act(async () => fireEvent.click(screen.getByRole("button", { name: /Equal groups/ })));
   expect(screen.getByLabelText("Part 1 of 3")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /2 \+ 3/ })).not.toBeInTheDocument();
-  await act(async () => vi.advanceTimersByTime(3500));
+  await act(async () => vi.advanceTimersByTime(2000));
+  fireEvent.click(screen.getByRole("button", { name: "Replay" }));
+  await act(async () => vi.advanceTimersByTime(2000));
+  expect(screen.getByLabelText("Part 1 of 3")).toBeInTheDocument();
+  await act(async () => vi.advanceTimersByTime(1500));
   expect(screen.getByLabelText("Part 2 of 3")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Pause" }));
   await act(async () => vi.advanceTimersByTime(20000));
