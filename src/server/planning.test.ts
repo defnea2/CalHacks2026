@@ -70,3 +70,15 @@ describe("local no-key model bridge", () => {
     expect(args.at(-1)).toBe("-");
   });
 });
+
+it("rejects a generated shape that extends outside the canvas", async () => {
+  const input = request();
+  const valid = await demoPlanningModel(input);
+  valid.beats[0].cues = [{ id: "edge", atMs: 0, commands: [
+    { type: "clear", title: "Ground" },
+    { type: "add", nodes: [{ id: "ground", kind: "shape", x: 100, y: 500, width: 800, height: 30, label: "" }] },
+  ] }];
+  const generate = vi.fn().mockResolvedValue(valid);
+  await expect(generatePlan(parseModelRequest(input), generate, new AbortController().signal)).rejects.toThrow("one repair");
+  expect(generate.mock.calls[1][0]).toContain("extends outside the drawing");
+});

@@ -6,12 +6,25 @@ export function createHttpPlanningModel(
   fetcher: typeof fetch = fetch,
 ): PlanningModel {
   return async (request, signal) => {
-    const response = await fetcher(endpoint, {
+    let response: Response;
+    for (let attempt = 0; ; attempt++) {
+      signal?.throwIfAborted();
+      response = await fetcher(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
       signal,
-    });
+      });
+      if (response.status !== 429 || attempt >= 12) break;
+      // A busy local slot has not generated anything. Wait without duplicating model work.
+      await response.body?.cancel();
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => { clearTimeout(timer); reject(signal?.reason ?? new Error("Cancelled")); };
+        const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, 3000);
+        signal?.addEventListener("abort", abort, { once: true });
+        if (signal?.aborted) abort();
+      });
+    }
     if (!response.ok) {
       let detail = "";
       try {

@@ -36,3 +36,30 @@ it("reports endpoint failures without substituting a scripted lesson", async () 
     createHttpPlanningModel("/api/plan", fetcher)(request),
   ).rejects.toThrow("HTTP 503");
 });
+it("waits for a busy model slot and sends the same lesson context once available", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetcher = vi.fn().mockResolvedValueOnce({ ok: false, status: 429 })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: "generated" }) });
+    const request = new TeachingPlanner({ sessionId: "s", topic: "Shadows" }).request(emptyCanvas());
+    const result = createHttpPlanningModel("/api/plan", fetcher)(request);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(await result).toEqual({ id: "generated" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  } finally { vi.useRealTimers(); }
+});
+it("cancels while waiting for a model slot without another request", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetcher = vi.fn().mockResolvedValue({ ok: false, status: 429 });
+    const controller = new AbortController();
+    const request = new TeachingPlanner({ sessionId: "s", topic: "Shadows" }).request(emptyCanvas());
+    const result = createHttpPlanningModel("/api/plan", fetcher)(request, controller.signal);
+    const assertion = expect(result).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    await assertion;
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
+});
