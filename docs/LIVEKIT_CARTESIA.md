@@ -6,7 +6,7 @@ Start with [MATH_CANVAS.md](MATH_CANVAS.md). Public exports are in `src/presenta
 
 ## Teaching planner is integrated
 
-The default app now runs `TeachingSession` in **text mode**: one validated beat is displayed immediately; later beats wait for Continue. This is not the LiveKit adapter and must not be used unchanged for speech. [SESSION.md](teaching/SESSION.md) describes the planner/director coordination, version checks, and the migration boundary. [INTEGRATION.md](teaching/INTEGRATION.md) defines teaching steps and learner responses.
+The default app now generates real plans through the [local no-key Codex bridge](teaching/LOCAL_MODEL.md) and runs `TeachingSession` in **text mode**: one validated beat is displayed immediately; later beats wait for Continue. This is not the LiveKit adapter and must not be used unchanged for speech. [SESSION.md](teaching/SESSION.md) describes the planner/director coordination, version checks, and the migration boundary. [INTEGRATION.md](teaching/INTEGRATION.md) defines teaching steps and learner responses.
 
 The voice host should speak the accepted planner beat's narration, then acknowledge `planner.presented(step.id)` only after the **last** beat actually finishes. Retain one authoritative planner and director; do not run the text coordinator alongside another independently advancing voice session.
 

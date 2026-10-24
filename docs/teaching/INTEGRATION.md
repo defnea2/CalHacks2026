@@ -99,7 +99,7 @@ Use unique step and beat IDs, up to four beats, and one question at a time. The 
 
 ## Connect the existing model
 
-The host can inject its existing model directly, or implement `POST /api/teaching/plan` for `createHttpPlanningModel()`. The HTTP adapter sends the complete `PlanningRequest` and expects the raw `TeachingStep` JSON. **This branch does not implement that server endpoint or call a live LLM.** Selecting Model endpoint in the harness requires a running backend; failure remains visible and does not fall back to fixtures. A different-origin backend must configure its own CORS/authentication.
+The host can inject its existing model directly, or implement `POST /api/teaching/plan` for `createHttpPlanningModel()`. The HTTP adapter sends the complete `PlanningRequest` and expects the raw `TeachingStep` JSON. **The default development server now implements this endpoint through the no-key Codex bridge; see [LOCAL_MODEL.md](LOCAL_MODEL.md).** Selecting Model endpoint in the harness requires a running backend; failure remains visible and does not fall back to fixtures. A different-origin backend must configure its own CORS/authentication.
 
 On the server, use trusted copies of the teaching instructions/schema and validated session context; do not treat browser-provided system instructions as authority. Pass the response schema using your provider's structured-output facility where supported. Provider schema restrictions may require adapting the generated JSON Schema. Regardless of provider, the runtime acceptance check remains mandatory: JSON Schema alone does not enforce cross-field refinements, evidence policy or canvas references.
 
@@ -170,7 +170,7 @@ All visual commands are preflighted on a clone before acceptance. References mus
 ## Limits and remaining integration work
 
 - In-memory state only: 80 steps and 160 evidence events per session. Model requests include the last 8 steps and last 20 evidence items, plus all used example strings.
-- General planning depends on the host model endpoint; live model output quality and latency have not been evaluated in this branch.
+- General planning uses the included local Codex bridge or another compatible host endpoint. Broad model quality/latency evaluation remains pending.
 - Voice/context owners still need to connect finalized transcripts, audio lifecycle callbacks, context retrieval, persistence, and the model adapter.
 - The existing canvas determines the supported visual vocabulary. Arbitrary executable HTML/JS or generated simulations are outside this contract.
 - The phase sequence is a product design informed by the team's suggestion, not a measured claim of improved learning or recall.
@@ -182,7 +182,8 @@ All visual commands are preflighted on a clone before acceptance. References mus
 - [x] Version-guarded text session, automatic replanning after answers, cancellation, and multi-beat gating.
 - [x] Correct, incorrect, ambiguous, help, stale-result and cancellation paths covered in tests.
 - [x] Model adapter boundary and voice/context handoff documented.
-- [ ] Connect the host LLM and run unseen topics through real structured output.
+- [x] Connect the local Codex-backed LLM and verify an unseen topic plus an evidence-driven follow-up.
+- [ ] Evaluate teaching quality across a broader set of unseen topics.
 - [ ] Connect Cartesia/LiveKit playback and finalized learner responses; test barge-in.
 - [ ] Connect real worksheet/context input and retain evidence across reconnects.
 - [x] Rehearse the complete diagnosis → alternate explanation → independent transfer → original-question flow without voice.

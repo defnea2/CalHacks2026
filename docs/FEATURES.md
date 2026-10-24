@@ -1,6 +1,6 @@
 # Implemented visual-engine features
 
-This inventory describes the `feature/visual-engine` branch. The preview runs locally without a backend. The engine consumes structured configuration; it does not yet contain the live tutor/LLM or LiveKit transport.
+This inventory describes the `feature/visual-engine` branch. The preview runs locally without a backend. The engine consumes structured configuration; it includes a real-model local bridge using Codex ChatGPT sign-in; LiveKit transport remains unconnected.
 
 ## Integrated teaching experience
 
@@ -11,7 +11,7 @@ This inventory describes the `feature/visual-engine` branch. The preview runs lo
 - An asynchronous plan is checked against both planner revision and the director's monotonic context version, including resets to identical scene contents.
 - Cancellation ignores late results even when a model ignores AbortSignal. Errors preserve the current scene; retries use current context.
 - Lesson notes, original-question handoff, independent-example evidence, keyboard responses, and narrow-screen layout. No invented mastery score.
-- Topic-agnostic model endpoint entry; backend implementation and model quality evaluation remain outstanding.
+- Real topic-agnostic model endpoint via the local Codex CLI, with server-owned prompts/schemas, shared validation and one bounded repair. No API key; uses the local ChatGPT login. Broad model-quality evaluation remains outstanding.
 - Development tools remain available separately, retaining the active lesson.
 
 See [the session handoff](teaching/SESSION.md) for the integration API and demo.
@@ -92,15 +92,15 @@ A canvas hosts one main representation at a time: generic objects, a math model,
 - Custom starting quantities, live editing, and current-state example variants.
 - JSON plan editor with manual playback/cue controls, pause, interruption, and replay.
 - Inspectable canvas snapshot and accepted learner-event log; browser memory only.
-- TypeScript checks, production build, and 125 automated tests at this update. Browser checks cover live edits, state-based example generation, diagrams, equations, bar quantities, number-line keyboard controls, and invalid-plan handling.
+- TypeScript checks, production build, and 138 automated tests at this update. Browser checks cover live edits, state-based example generation, diagrams, equations, bar quantities, number-line keyboard controls, and invalid-plan handling.
 
 ## Not implemented yet
 
 | Capability                                 | Remaining work                                                                                                                                                      |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Live tutoring                              | Live LLM connection and evaluation, understanding arbitrary spoken requests, and reliable misconception diagnosis. Structured checks, evidence policies, and scripted response adaptation are implemented.                                              |
+| Live tutoring                              | Broad live-model evaluation, understanding arbitrary spoken requests, and reliable misconception diagnosis. The local Codex LLM connection is implemented. Structured checks, evidence policies, and scripted response adaptation are implemented.                                              |
 | Voice transport                            | LiveKit room integration, server tokens, Cartesia speech, RPC handlers, ordered lifecycle transport, and actual audio synchronization. The interface is documented. |
-| Autonomous adaptation                      | Selecting high-quality examples for unseen topics through the real model. Offline lessons already replan automatically after an answer/help request; those decisions are scripted.                    |
+| Autonomous adaptation                      | Evaluating whether generated examples reliably teach unseen topics. The real model can now choose the next example from learner context. Offline lessons already replan automatically after an answer/help request; those decisions are scripted.                    |
 | New mathematical families                  | Symbolic algebra, balance models, graphs/functions, freehand recognition, continuous simulations, and other custom representations.                                 |
 | Cross-representation reasoning             | General conversion between representations while preserving meaning. Scripted array-to-groups, decimal-line-to-bars, and diagram-to-free-form changes work now.                                                       |
 | Media/input and persistence                | Homework image ingestion, accounts, session storage, analytics, and saved learner progress.                                                                         |

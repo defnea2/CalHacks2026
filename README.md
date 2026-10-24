@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. No API keys or backend are required.
+Open http://127.0.0.1:5173. Real generated lessons use the included local server and your existing ChatGPT login through `codex login`. No API key is needed. Offline samples also work without a login. See [no-key model setup](docs/teaching/LOCAL_MODEL.md).
 
 ## Implemented features
 
@@ -19,13 +19,13 @@ Open http://127.0.0.1:5173. No API keys or backend are required.
 
 ## Start with a lesson
 
-The default app is a voice-free tutoring session. Choose **Equal groups**, **Small numbers, big ideas**, or **Where does a puddle go?** These are explicitly scripted offline lessons, not live AI generation.
+The default app is a voice-free tutoring session. Enter any conceptual question and select **Explore my question** to generate a new explanation and diagram with the real model. **Equal groups**, **Small numbers, big ideas**, and **Where does a puddle go?** remain explicitly scripted offline samples.
 
 Answer a question to get the next explanation automatically. **Show another way** changes representation, **Smaller step** requests help, and **Continue** advances explanations without a question. Manipulate enabled visuals, then answer or submit the picture when invited. **Your lesson notes** keeps the sequence and recorded evidence; the original homework question stays unsolved for the learner. Refresh clears the session.
 
 For a quick demo: Equal groups → choose **2 + 3** → **Show another way** → move an object into a basket → answer **six** → continue through independent practice. The same layout supports decimals, scientific diagrams, and future topics supplied by a real planning model.
 
-**Use your team's model for another topic** accepts an arbitrary topic and a host-owned planning endpoint. No endpoint is implemented here. Errors are visible and never silently substitute a fixture.
+**Original question and connection settings** lets you preserve a homework question or choose a different compatible planning endpoint. The included `/api/teaching/plan` is a local development bridge to the signed-in Codex CLI. Errors are visible and never silently substitute a fixture.
 
 - [Integrated session API, demo checklist, and voice migration](docs/teaching/SESSION.md)
 - [Teaching planner and model contracts](docs/teaching/INTEGRATION.md)
@@ -42,7 +42,7 @@ Choose bars or decimal number lines for other mathematical representations, or a
 - [LiveKit + Cartesia teammate handoff](docs/LIVEKIT_CARTESIA.md)
 - [Narration director and free-form drawing API](docs/NARRATION_CANVAS.md)
 
-The public integration entry point is `src/presentation/index.ts`. LiveKit/Cartesia transport and live AI generation are not connected yet. The **Guided explanation** tab retains the recorded water/equal-groups rehearsals for audio synchronization testing. **Interactive building blocks** retains the standalone activity editor.
+The public integration entry point is `src/presentation/index.ts`. Live model generation is connected through the local Codex bridge; LiveKit/Cartesia transport is not connected yet. The **Guided explanation** tab retains the recorded water/equal-groups rehearsals for audio synchronization testing. **Interactive building blocks** retains the standalone activity editor.
 
 ## Interactive building blocks
 

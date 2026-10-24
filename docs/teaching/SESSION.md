@@ -1,6 +1,6 @@
 # Integrated lesson session
 
-The main app at `http://127.0.0.1:5173/` integrates the teaching planner with the latest visual engine. `npm run dev` is sufficient for the three offline lessons. There is no microphone, speech service, model service, or secret required for those samples.
+The main app at `http://127.0.0.1:5173/` integrates the teaching planner with the latest visual engine. `npm run dev` is sufficient for the three offline lessons. There is no microphone, speech service, model service, or secret required for those samples. The default question input now uses the real Codex-backed model; see [LOCAL_MODEL.md](LOCAL_MODEL.md) for setup without an API key.
 
 ## What the product does now
 
@@ -50,7 +50,7 @@ Session memory clears on reload or choosing another topic. Browsing development 
 
 ## Model teammate
 
-Implement the host endpoint described in [INTEGRATION.md](INTEGRATION.md). The UI offers an arbitrary topic, optional original question, and endpoint address. The HTTP adapter sends a `PlanningRequest` and expects raw `TeachingStep` JSON. An endpoint failure is shown with retry and expandable technical details; it never falls back to sample content.
+The development server now implements the endpoint through Codex ChatGPT sign-in. Another host can implement the same contract described in [INTEGRATION.md](INTEGRATION.md). The UI offers an arbitrary topic, optional original question, and endpoint address. The HTTP adapter sends a `PlanningRequest` and expects raw `TeachingStep` JSON. An endpoint failure is shown with retry and expandable technical details; it never falls back to sample content.
 
 The three samples inject `demoPlanningModel` and follow scripted branches. They establish integration behavior, not evidence of model intelligence or learning efficacy. Arithmetic is computed; explanation judgments from a real model remain tentative. Use trusted server-side instructions and validation rather than trusting browser-supplied prompts.
 
@@ -78,7 +78,10 @@ One host owns this sequence. Do not attach a second planner or let both text mod
 - [x] Delayed result after identical-canvas reset is rejected; retry succeeds.
 - [x] Cancelled provider results cannot replace a newer lesson; multi-beat responses are gated.
 - [x] Endpoint failures remain visible without substituting scripted data.
-- [ ] Evaluate unseen topics using the team's real model.
+- [x] Exercise a real generated lesson and follow-up through the no-key Codex bridge.
+- [ ] Evaluate a broad set of unseen topics and model-generated checks.
 - [ ] Connect and test actual Cartesia/LiveKit playback, barge-in, and reconnects.
 
-Validation at this update: 125 automated tests, TypeScript, main production build, and standalone teaching build. The production build retains a >500 kB bundle advisory. Manual browser checks cover adaptation, selecting/placing objects, entering a numeric word answer, and representation changes. Automated tests cover the full three-topic completion flows. Touch hardware and real audio timing remain untested.
+Validation at the planner-integration checkpoint: 125 automated tests, TypeScript, main production build, and standalone teaching build. The production build retains a >500 kB bundle advisory. Manual browser checks cover adaptation, selecting/placing objects, entering a numeric word answer, and representation changes. Automated tests cover the full three-topic completion flows. Touch hardware and real audio timing remain untested.
+
+Current real-model setup, validation count and measured smoke-test behavior are recorded in [LOCAL_MODEL.md](LOCAL_MODEL.md).
