@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { applyCanvasCommands } from "../presentation/canvasState";
 import type { CanvasState } from "../presentation/contracts";
 import {
   SessionConfigSchema,
@@ -10,9 +9,10 @@ import {
   type Evidence,
   type TeachingPhase,
 } from "./contracts";
-import { assessResponse, validateCheck } from "./checks";
+import { assessResponse } from "./checks";
 import { allowedPhases } from "./policy";
 import { TEACHING_INSTRUCTIONS } from "./prompts";
+import { validateTeachingStep } from "./validateStep";
 
 export interface PlannerState {
   config: SessionConfig;
@@ -46,15 +46,6 @@ export type PlanningModel = (
   request: PlanningRequest,
   signal?: AbortSignal,
 ) => Promise<unknown>;
-function representation(canvas: CanvasState) {
-  return (
-    canvas.math?.visual.kind ?? canvas.activity?.activity.kind ?? "free_form"
-  );
-}
-function normalized(text: string) {
-  return text.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 /** Teaching state only. The host remains authoritative for visuals, audio and room context. */
 export class TeachingPlanner {
   private state: PlannerState;
@@ -160,85 +151,7 @@ export class TeachingPlanner {
       throw new Error(
         "Canvas changed during planning; obtain a fresh request.",
       );
-    const step = TeachingStepSchema.parse(input);
-    if (this.state.history.some((s) => s.id === step.id))
-      throw new Error("Teaching step IDs must be unique within a session.");
-    const evidence = structuredClone(this.state.evidence);
-    const latest = evidence
-      .filter((e) => e.stepId === this.state.step?.id)
-      .at(-1);
-    if (step.assessment) {
-      if (
-        !latest ||
-        latest.eventId !== step.assessment.evidenceId ||
-        latest.source !== "unassessed" ||
-        latest.response.kind !== "answer" ||
-        this.state.step?.check?.kind !== "explanation"
-      )
-        throw new Error(
-          "Assessment must cite the latest unassessed explanation, never fabricated or deterministic evidence.",
-        );
-      latest.source = "model_tentative";
-      latest.outcome =
-        step.assessment.judgement === "supported"
-          ? "correct"
-          : step.assessment.judgement === "misconception"
-            ? "incorrect"
-            : "unclear";
-      latest.observation = step.assessment.observation;
-    }
-    if (!allowedPhases(this.state.step, latest).includes(step.phase))
-      throw new Error(
-        "Phase is not supported by the current learner evidence: " + step.phase,
-      );
-    if (step.exampleProblem) {
-      const problem = normalized(step.exampleProblem);
-      if (
-        this.state.config.originalQuestion &&
-        problem === normalized(this.state.config.originalQuestion)
-      )
-        throw new Error(
-          "Use a separate example, leaving the original question for the learner.",
-        );
-      if (
-        ["solo", "transfer"].includes(step.phase) &&
-        !(
-          latest?.response.kind === "help" &&
-          step.phase === this.state.step?.phase &&
-          ["hint", "simplify"].includes(step.approach) &&
-          problem === normalized(this.state.step?.exampleProblem ?? "")
-        ) &&
-        this.state.history.some(
-          (s) => s.exampleProblem && normalized(s.exampleProblem) === problem,
-        )
-      )
-        throw new Error("Use a fresh independent problem.");
-    }
-    let planned = structuredClone(actualCanvas);
-    for (const beat of step.beats) {
-      for (const cue of beat.cues) {
-        planned = applyCanvasCommands(planned, cue.commands);
-        if (["solo", "transfer"].includes(step.phase) && planned.math?.visual.showEquation)
-          throw new Error("Hide the derived answer during independent checks.");
-      }
-    }
-    validateCheck(step.check, planned);
-    if (
-      step.approach === "change_representation" &&
-      representation(planned) === representation(actualCanvas)
-    )
-      throw new Error(
-        "A representation change must change the rendered representation family.",
-      );
-    if (
-      ["solo", "transfer"].includes(step.phase) &&
-      planned.math?.visual.showEquation
-    )
-      throw new Error("Hide the derived answer during independent checks.");
-    if (step.check?.kind === "math_value" && !planned.math?.visual.interactive)
-      throw new Error("An interaction check must enable learner controls.");
-    if (this.state.history.length >= 80)
-      throw new Error("Session step limit reached; start a new session.");
+    const { step, evidence } = validateTeachingStep(input, this.state, actualCanvas);
     this.publish({
       step,
       evidence,
