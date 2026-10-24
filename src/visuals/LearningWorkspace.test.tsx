@@ -71,3 +71,20 @@ it('reorders stages and creates and removes a visible connection', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Remove connection from Water in the sea to Water evaporates' }));
   expect(within(screen.getByRole('list', { name: 'Connections' })).queryByRole('listitem')).not.toBeInTheDocument();
 });
+
+it('supports number-line keyboard movement and clamps at endpoints', () => {
+  function Harness() {
+    const [scene, setScene] = useState(() => createScene(getFixture('line')));
+    return <LearningWorkspace scene={scene} onAction={action => setScene(current => applySceneCommand(current, commandFromAction(action)).scene)}/>;
+  }
+  render(<Harness/>);
+  const slider = screen.getByRole('slider', { name: 'Move Explorer' });
+  fireEvent.keyDown(slider, { key: 'ArrowRight' });
+  expect(slider).toHaveAttribute('aria-valuenow', '3');
+  fireEvent.keyDown(slider, { key: 'End' });
+  fireEvent.keyDown(slider, { key: 'ArrowRight' });
+  expect(slider).toHaveAttribute('aria-valuenow', '10');
+  expect(screen.getByRole('button', { name: 'Move Explorer right' })).toBeDisabled();
+  fireEvent.keyDown(slider, { key: 'Home' });
+  expect(slider).toHaveAttribute('aria-valuenow', '0');
+});
