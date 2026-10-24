@@ -4,6 +4,10 @@ The visual engine is ready for a transport adapter. This document specifies that
 
 Start with [MATH_CANVAS.md](MATH_CANVAS.md). Public exports are in `src/presentation/index.ts`. Cartesia/LiveKit secrets and room-token creation belong on the teammate's server.
 
+## Compact math commands
+
+[COMPACT_MATH.md](COMPACT_MATH.md) documents the new model-facing quantity commands and `compileMathCommand`. Compile against the current canvas, then prepare the resulting commands with its context version. These commands use the same VisualBeat and playback lifecycle below; they do not introduce another transport. New geometry events use `set_geometry`, and interaction checks can read `geometry_area`, `geometry_width` or `geometry_height`.
+
 ## Teaching planner is integrated
 
 The default app now generates real plans through the [local no-key Codex bridge](teaching/LOCAL_MODEL.md) and runs `TeachingSession` in **text mode**: one validated beat is displayed immediately; later beats wait for Continue. This is not the LiveKit adapter and must not be used unchanged for speech. [SESSION.md](teaching/SESSION.md) describes the planner/director coordination, version checks, and the migration boundary. [INTEGRATION.md](teaching/INTEGRATION.md) defines teaching steps and learner responses.

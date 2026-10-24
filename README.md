@@ -13,13 +13,17 @@ npm run dev
 
 Open http://127.0.0.1:5173. Real generated lessons use the included local server and your existing ChatGPT login through `codex login`. No API key is needed. Offline samples also work without a login. See [no-key model setup](docs/teaching/LOCAL_MODEL.md).
 
+## Compact math and instant exploration
+
+Choose **Open math studio** for local area, triangle, group, fraction and number-line explorations. KaTeX typesets linked equations; Mafs handles interactive geometry. The model now emits compact quantities and actions instead of pixel layouts. [Commands, architecture, verified behavior and limits](docs/COMPACT_MATH.md).
+
 ## Implemented features
 
 [Full feature inventory and current limits](docs/FEATURES.md) covers every implemented representation, real-time command, interaction, playback feature, and integration boundary.
 
 ## Start with a lesson
 
-The default app is a voice-free tutoring session. Enter any conceptual question and select **Explore my question** to generate a new explanation and diagram with the real model. **Equal groups**, **Small numbers, big ideas**, and **Where does a puddle go?** remain explicitly scripted offline samples.
+The default app is a voice-free tutoring session. Enter a conceptual math question and select **Explore my question** to generate a new explanation and diagram with the real model. **Equal groups**, **Small numbers, big ideas**, and **Where does a puddle go?** remain explicitly scripted offline samples.
 
 Answer a question to get the next explanation automatically. **Show another way** changes representation, **Smaller step** requests help, and **Continue** advances explanations without a question. Manipulate enabled visuals, then answer or submit the picture when invited. **Your lesson notes** keeps the sequence and recorded evidence; the original homework question stays unsolved for the learner. Refresh clears the session.
 

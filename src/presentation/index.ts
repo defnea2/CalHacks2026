@@ -29,3 +29,6 @@ export type {
   MathAction,
 } from "./math/models";
 export { createMathExample } from "./math/examples";
+
+export { CompactMathCommandSchema, compileMathCommand } from "./math/compact";
+export type { CompactMathCommand } from "./math/compact";

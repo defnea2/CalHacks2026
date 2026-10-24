@@ -1,6 +1,6 @@
 # Implemented visual-engine features
 
-This inventory describes the `feature/visual-engine` branch. The preview runs locally without a backend. The engine consumes structured configuration; it includes a real-model local bridge using Codex ChatGPT sign-in; LiveKit transport remains unconnected.
+This inventory describes the `feature/visual-engine` branch. Offline previews run without model access; generated lessons use the local development endpoint. The engine consumes structured configuration; it includes a real-model local bridge using Codex ChatGPT sign-in; LiveKit transport remains unconnected.
 
 ## Integrated teaching experience
 
@@ -11,7 +11,7 @@ This inventory describes the `feature/visual-engine` branch. The preview runs lo
 - An asynchronous plan is checked against both planner revision and the director's monotonic context version, including resets to identical scene contents.
 - Cancellation ignores late results even when a model ignores AbortSignal. Errors preserve the current scene; retries use current context.
 - Lesson notes, original-question handoff, independent-example evidence, keyboard responses, and narrow-screen layout. No invented mastery score.
-- Real topic-agnostic model endpoint via the local Codex CLI, with server-owned prompts/schemas, shared validation and one bounded repair. No API key; uses the local ChatGPT login. Broad model-quality evaluation remains outstanding.
+- Real compact-math model endpoint via the local Codex CLI, with server-owned prompts/schemas, shared validation and one bounded repair. No API key; uses the local ChatGPT login. Broad model-quality evaluation remains outstanding.
 - Development tools remain available separately, retaining the active lesson.
 
 See [the session handoff](teaching/SESSION.md) for the integration API and demo.
@@ -30,6 +30,10 @@ See [the session handoff](teaching/SESSION.md) for the integration API and demo.
 | Accepted learner context        | Math/activity change events include the resulting scene and `contextVersion`, so the agent can react to actual learner work.                                                                                                                                            |
 | Configuration beyond controls   | JSON plans can supply new titles, labels, objects, representations, and narration. Unknown fields or unsupported configurations fail validation.                                                                                                                        |
 | Script/manual separation        | Live edits move the preview into custom configuration. The remaining fixed rehearsal script is stopped so it cannot narrate obsolete quantities. Notes update with live edits.                                                                                          |
+
+## Compact math update
+
+The local model now produces compact math plans, compiled into the existing validated TeachingStep format. KaTeX renders derived equations; Mafs renders rectangles and right triangles (dimensions 1–12, half-unit steps) with local sliders and corner dragging. The offline Math studio exposes five instant explorations. See [COMPACT_MATH.md](COMPACT_MATH.md) for command examples, measured results and limitations.
 
 ## Mathematical representations
 
@@ -92,7 +96,7 @@ A canvas hosts one main representation at a time: generic objects, a math model,
 - Custom starting quantities, live editing, and current-state example variants.
 - JSON plan editor with manual playback/cue controls, pause, interruption, and replay.
 - Inspectable canvas snapshot and accepted learner-event log; browser memory only.
-- TypeScript checks, production build, and 138 automated tests at this update. Browser checks cover live edits, state-based example generation, diagrams, equations, bar quantities, number-line keyboard controls, and invalid-plan handling.
+- TypeScript checks, production build, and 144 automated tests at this update. Browser checks cover live edits, state-based example generation, diagrams, equations, bar quantities, number-line keyboard controls, and invalid-plan handling.
 
 ## Not implemented yet
 
