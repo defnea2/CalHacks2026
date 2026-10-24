@@ -24,7 +24,7 @@ function NodeContent({node}:{node:CanvasNode}){
   </>;
   return <>
     <rect className="canvas-object-paper" x={-w/2} y={-h/2} width={w} height={h} rx="28"/>
-    <svg x={-w/2+22} y={-h/2+18} width={w-44} height={Math.max(20,h-72)} viewBox="0 0 48 48"><Icon name={node.icon} className="canvas-icon"/></svg>
+    <svg x={-w/2+22} y={-h/2+18} width={w-44} height={Math.max(20,h-(node.label?72:30))} viewBox="0 0 48 48"><Icon name={node.icon} className="canvas-icon"/></svg>
     <text className="canvas-object-label" textAnchor="middle" y={h/2-30}>{lines(node.label,w-20,23).map((line,index)=><tspan key={index} x="0" dy={index===0?0:25}>{line}</tspan>)}</text>
   </>;
 }

@@ -11,6 +11,7 @@ export interface DirectorSnapshot {
 export class VisualDirector {
   private snapshot:DirectorSnapshot={canvas:emptyCanvas(),token:null,beat:null,status:'idle',elapsedMs:0,appliedCueIds:[],error:null};
   private listeners=new Set<()=>void>();
+  private beatStartCanvas:CanvasState=emptyCanvas();
   getSnapshot=()=>this.snapshot;
   subscribe=(listener:()=>void)=>{this.listeners.add(listener);return()=>{this.listeners.delete(listener);};};
   private publish(patch:Partial<DirectorSnapshot>){this.snapshot={...this.snapshot,...patch};this.listeners.forEach(listener=>listener());}
@@ -21,8 +22,15 @@ export class VisualDirector {
     let planned=this.snapshot.canvas;
     for(const cue of beat.cues)planned=applyCanvasCommands(planned,cue.commands);
     if(beat.question?.nodeIds.some(id=>!planned.nodes.some(node=>node.id===id)))throw new Error('Question refers to an object absent from the completed scene.');
+    this.beatStartCanvas=structuredClone(this.snapshot.canvas);
     const token={runId:crypto.randomUUID(),beatId:beat.id};
     this.publish({token,beat,status:'ready',elapsedMs:0,appliedCueIds:[],error:null});
+    return token;
+  }
+  replay():PlaybackToken|null {
+    if(!this.snapshot.beat)return null;
+    const token={runId:crypto.randomUUID(),beatId:this.snapshot.beat.id};
+    this.publish({token,canvas:structuredClone(this.beatStartCanvas),status:'ready',elapsedMs:0,appliedCueIds:[],error:null});
     return token;
   }
   private advance(elapsedMs:number,finish=false){

@@ -60,3 +60,9 @@ it('applies cue batches atomically and removes dangling arrows and focus',()=>{
   const removed=applyCanvasCommands(connected,[{type:'remove',ids:['sun']}]);
   expect(removed.edges).toEqual([]);expect(removed.pointer).toBeNull();expect(removed.highlightedIds).toEqual([]);
 });
+
+it('replays the current beat from its starting canvas with a fresh playback token',()=>{
+  const d=new VisualDirector();const old=d.prepare(beat);d.narrationStarted(old);d.narrationProgress(old,2500);d.interrupt(old);
+  const replay=d.replay()!;expect(replay.runId).not.toBe(old.runId);expect(d.getSnapshot().canvas.nodes).toHaveLength(0);
+  d.narrationStarted(replay);expect(d.getSnapshot().canvas.nodes[0].x).toBe(200);d.narrationEnded(old);expect(d.getSnapshot().status).toBe('speaking');
+});
