@@ -88,3 +88,20 @@ it('supports number-line keyboard movement and clamps at endpoints', () => {
   fireEvent.keyDown(slider, { key: 'Home' });
   expect(slider).toHaveAttribute('aria-valuenow', '0');
 });
+
+it('moves, rotates and reflects shapes while retaining their position', () => {
+  function Harness() {
+    const [scene, setScene] = useState(() => createScene(getFixture('shapes')));
+    return <LearningWorkspace scene={scene} onAction={action => setScene(current => applySceneCommand(current, commandFromAction(action)).scene)}/>;
+  }
+  render(<Harness/>);
+  const triangle = screen.getByRole('button', { name: 'Move or select Triangle' });
+  fireEvent.keyDown(triangle, { key: 'ArrowRight' });
+  expect(triangle).toHaveAttribute('transform', 'translate(27 50)');
+  fireEvent.click(screen.getByRole('button', { name: 'Rotate Triangle 90 degrees' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Flip Triangle' }));
+  expect(triangle.querySelector('.lab-shape-geometry')).toHaveAttribute('transform', 'rotate(90) scale(-1 1)');
+  expect(triangle).toHaveAttribute('transform', 'translate(27 50)');
+  fireEvent.click(screen.getByRole('button', { name: 'Show mirror' }));
+  expect(screen.getByText('The dashed shape shows the reflection across the mirror line.')).toBeInTheDocument();
+});
