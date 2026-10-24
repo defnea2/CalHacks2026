@@ -19,14 +19,14 @@ export const ToneSchema = z.enum([
   "coral",
   "ink",
 ]);
-export const CanvasNodeSchema = z
+const CanvasNodeBaseSchema = z
   .object({
     id: IdSchema,
     kind: z.enum(["object", "label", "shape"]),
     x: z.number().min(0).max(1000),
     y: z.number().min(0).max(600),
-    width: z.number().min(20).max(1000),
-    height: z.number().min(20).max(600),
+    width: z.number().min(2).max(1000),
+    height: z.number().min(2).max(600),
     label: z.string().max(120),
     icon: z
       .enum(["dot", "leaf", "sun", "cloud", "drop", "animal", "book"])
@@ -36,6 +36,10 @@ export const CanvasNodeSchema = z
     rotation: z.number().min(-360).max(360).default(0),
   })
   .strict();
+export const CanvasNodeSchema = CanvasNodeBaseSchema.superRefine((node, ctx) => {
+  if (node.kind !== "shape" && (node.width < 20 || node.height < 20))
+    ctx.addIssue({ code: "custom", message: "Objects and labels must be at least 20 by 20; only shapes may be thin." });
+});
 export type CanvasNode = z.infer<typeof CanvasNodeSchema>;
 export type NodeInput = z.input<typeof CanvasNodeSchema>;
 export const CanvasEdgeSchema = z
@@ -49,7 +53,7 @@ export const CanvasEdgeSchema = z
   .strict();
 export type CanvasEdge = z.infer<typeof CanvasEdgeSchema>;
 // A patch must not reapply creation defaults to properties it did not mention.
-const PatchSchema = CanvasNodeSchema.omit({ id: true, kind: true })
+const PatchSchema = CanvasNodeBaseSchema.omit({ id: true, kind: true })
   .extend({
     icon: CanvasNodeSchema.shape.icon.removeDefault(),
     shape: CanvasNodeSchema.shape.shape.removeDefault(),

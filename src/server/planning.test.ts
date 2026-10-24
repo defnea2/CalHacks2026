@@ -91,3 +91,14 @@ it("composes the exact learner question into the final narration before shared v
   expect(step.beats.at(-1)?.narration).toBe("Look at the two equal groups. " + step.check?.prompt);
   expect(generate).toHaveBeenCalledTimes(1);
 });
+it("supports thin generated shapes while rejecting unusably small text objects", async () => {
+  const input = request();
+  const valid = await demoPlanningModel(input);
+  valid.beats[0].cues = [{ id: "ground", atMs: 0, commands: [
+    { type: "clear", title: "Ground" },
+    { type: "add", nodes: [{ id: "ground", kind: "shape", x: 500, y: 500, width: 800, height: 4, label: "" }] },
+  ] }];
+  expect(await generatePlan(parseModelRequest(input), vi.fn().mockResolvedValue(valid), new AbortController().signal)).toBeTruthy();
+  valid.beats[0].cues[0].commands[1] = { type: "add", nodes: [{ id: "label", kind: "label", x: 500, y: 500, width: 800, height: 4, label: "Ground" }] };
+  await expect(generatePlan(parseModelRequest(input), vi.fn().mockResolvedValue(valid), new AbortController().signal)).rejects.toThrow("20 by 20");
+});

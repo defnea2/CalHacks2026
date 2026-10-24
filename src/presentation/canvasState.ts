@@ -3,6 +3,7 @@ import { applySceneCommand } from "../session/sceneReducer";
 import { updateMathVisual } from "./math/models";
 import {
   CanvasCommandSchema,
+  CanvasNodeSchema,
   emptyCanvas,
   type CanvasState,
 } from "./contracts";
@@ -114,6 +115,7 @@ export function applyCanvasCommands(
         next.note = command.text;
         break;
     }
+    next.nodes = next.nodes.map(node => CanvasNodeSchema.parse(node));
     if (next.nodes.length > 40 || next.edges.length > 24)
       throw new Error(
         "This canvas is full; start a new scene or remove objects.",

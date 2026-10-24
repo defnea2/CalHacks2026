@@ -50,12 +50,12 @@ export function parseModelRequest(input: unknown) {
     ) : null,
   } };
 }
-const schema = z.toJSONSchema(TeachingStepSchema);
+const schema = z.toJSONSchema(TeachingStepSchema, { reused: "ref", io: "input" });
 export function planningPrompt(request: ModelRequest, repair?: { output: unknown; error: string }) {
   return [
     TEACHING_INSTRUCTIONS,
     "You are serving a text-only visual tutor, not doing a coding task. Do not use any tools, read files, write code, or browse. Return only the requested structured result.",
-    "Create ONE concise next teaching step, usually one beat. Draw a meaningful picture for this topic using the supported commands. For the first diagnostic step, give a neutral visual situation without disclosing the answer. Generic SVG shapes, labels, arrows and highlights support science and everyday concepts; do not force every topic into arithmetic.",
+    "Create ONE concise next teaching step with ONE beat and ONE cue at atMs=0. Keep that beat under 600 narration characters. Do not emit timing-only, wait, pause, say or explain commands; narration belongs only in beat.narration. If the drawing need not change, use note or highlight. For a replacement free-form scene, start with clear before adding objects. Shape width/height may be as small as 2 for rays or ground lines; objects and labels must be at least 20 by 20. Draw a meaningful picture for this topic using the supported commands. For the first diagnostic step, give a neutral visual situation without disclosing the answer. Generic SVG shapes, labels, arrows and highlights support science and everyday concepts; do not force every topic into arithmetic.",
     "Use clear spatial layout: 1000 by 600 drawing space, generous separation, short labels, no overlaps. Node x/y are CENTER coordinates. Every node, including rotated shapes, must fit entirely within x=0..1000 and y=0..600; leave at least 20 units of margin. For example, a width-800 ground bar must have center x=500, not x=100. Align connected physical objects (a pole base and the ground, for example) at the same height. Use unique stable IDs. Prefer a few large objects to many small labels. Keep learner-facing language short and concrete, appropriate for the supplied age. For each group of commands include a short note describing what to notice.",
     "Put the complete TeachingStep JSON object serialized as a string in the step_json output field. Exact schema for that object:",
     JSON.stringify(schema),
