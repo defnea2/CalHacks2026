@@ -9,3 +9,5 @@ coverage/
 .vite/
 test-results/
 playwright-report/
+
+dist-teaching/

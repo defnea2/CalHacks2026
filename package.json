@@ -15,7 +15,10 @@
     "test:watch": "vitest",
     "test:visuals": "vitest run src/presentation src/visuals src/visual-math src/interactions",
     "test:state": "vitest run src/shared src/session",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run build",
+    "dev:teaching": "vite --config vite.teaching.config.ts",
+    "build:teaching": "tsc --noEmit && vite build --config vite.teaching.config.ts",
+    "test:teaching": "vitest run src/teaching"
   },
   "dependencies": {
     "motion": "14.6.0",
