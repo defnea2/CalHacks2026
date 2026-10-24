@@ -55,12 +55,12 @@ function ArrayPicture({
                   y: top + r * step,
                   width: step - 5,
                   height: step - 5,
-                  fill: right ? "#d9c7ec" : "#acd5ce",
+                  fill: right ? "#ffe4c7" : "#dce7ff",
                 }}
                 exit={{ opacity: 0 }}
                 transition={transition}
-                rx="5"
-                stroke={right ? "#9781b4" : "#659d93"}
+                rx="1"
+                stroke={right ? "#ad591b" : "#2556ad"}
                 strokeWidth="1.5"
               />
             );
@@ -77,7 +77,7 @@ function ArrayPicture({
             }}
             transition={transition}
             textAnchor="middle"
-            className="math-part-label"
+            className="math-part-label math-part-first"
           >
             {rows} × {splitAt}
           </motion.text>
@@ -89,7 +89,7 @@ function ArrayPicture({
             }}
             transition={transition}
             textAnchor="middle"
-            className="math-part-label"
+            className="math-part-label math-part-second"
           >
             {rows} × {columns - splitAt}
           </motion.text>
@@ -182,6 +182,7 @@ export function MathWorkspace({
       ) : (
         activity && (
           <LearningWorkspace
+            showComparisonControl={false}
             embedded
             scene={activity}
             onAction={(action) => {

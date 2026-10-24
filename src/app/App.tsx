@@ -14,18 +14,14 @@ export default function App() {
   const [mode, setMode] = useState<"math" | "guided" | "components">("math");
   return (
     <main>
-      <header className="engine-intro">
-        <span className="eyebrow">An idea, brought to life</span>
-        <h1>
-          See it unfold.
-          <br />
-          <em>Understand it together.</em>
-        </h1>
-        <p>
-          A tutor that builds the picture as it explains.
-          <br />
-          Follow along, then try a little discovery of your own.
-        </p>
+      <header className="workspace-header">
+        <div>
+          <span className="workspace-mark" aria-hidden="true">
+            ∑
+          </span>
+          <h1>Tutor workspace</h1>
+        </div>
+        <p>Explain with a picture.</p>
       </header>
       <nav className="workbench-mode" aria-label="Workbench mode">
         <button aria-pressed={mode === "math"} onClick={() => setMode("math")}>
@@ -53,7 +49,7 @@ export default function App() {
           <VisualSandbox />
         )}
       </Suspense>
-      <footer>Visual engine development preview</footer>
+      <footer>Canvas tools · Local development workspace</footer>
     </main>
   );
 }

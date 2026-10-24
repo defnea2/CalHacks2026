@@ -1,0 +1,163 @@
+:root {
+  color: #20262e;
+  background: #f6f6f3;
+}
+main {
+  max-width: 1440px;
+  padding: 0 28px;
+}
+.workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 0 18px;
+}
+.workspace-header > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.workspace-header h1 {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.35px;
+  margin: 0;
+}
+.workspace-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #20262e;
+  font-family: Georgia, serif;
+  font-size: 20px;
+}
+.workspace-header p {
+  margin: 0;
+  font-size: 12px;
+  color: #626871;
+}
+.workbench-mode {
+  gap: 24px;
+  padding: 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #d9dce0;
+}
+.workbench-mode button {
+  padding: 10px 0 12px;
+  border-radius: 0;
+  color: #666d76;
+  border-bottom: 2px solid transparent;
+  font-size: 12px;
+}
+.workbench-mode button[aria-pressed="true"] {
+  color: #20262e;
+  background: transparent;
+  border-bottom-color: #20262e;
+}
+.workbench-mode button:hover:not(:disabled) {
+  background: transparent;
+  color: #1c50b0;
+}
+button,
+select,
+textarea {
+  border-radius: 4px;
+}
+button {
+  color: #303c4e;
+}
+p {
+  color: #626871;
+}
+.eyebrow {
+  color: #626871;
+  font-size: 10px;
+  letter-spacing: 1.2px;
+}
+.preview-panel {
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: none;
+  padding: 16px 20px;
+}
+.teaching-canvas {
+  border-radius: 4px;
+  background: #fff;
+  border: 1px solid #d9dce0;
+  padding: 24px;
+}
+.teaching-canvas h2 {
+  color: #20262e;
+  font-size: 22px;
+  line-height: 1.3;
+  letter-spacing: -0.45px;
+  margin: 16px 0 4px;
+}
+.canvas-heading {
+  color: #68717d;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.canvas-note {
+  border-top: 1px solid #e3e5e8;
+  color: #535e6c;
+  text-align: left;
+  padding: 14px 0 0;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.guided-toolbar label {
+  color: #525c69;
+  font-size: 12px;
+}
+.guided-demo-badge {
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  color: #737a84;
+}
+.teaching-canvas .lab-bar-card,
+.teaching-canvas .lab-line-card {
+  border-radius: 4px;
+}
+.teaching-canvas .palette-0 {
+  --tone: #2556ad;
+  --wash: #edf2fc;
+}
+.teaching-canvas .palette-1 {
+  --tone: #ad591b;
+  --wash: #fff2e5;
+}
+.teaching-canvas .lab-line-marker {
+  box-shadow: none;
+}
+footer {
+  color: #787e85;
+  padding: 16px 0 24px;
+}
+@media (max-width: 700px) {
+  main {
+    padding: 0 14px;
+  }
+  .workspace-header {
+    padding: 16px 0;
+  }
+  .workspace-header p {
+    display: none;
+  }
+  .workbench-mode {
+    gap: 18px;
+  }
+  .workbench-mode button {
+    flex: none;
+    font-size: 11px;
+  }
+  .teaching-canvas {
+    padding: 16px 12px;
+  }
+  .teaching-canvas h2 {
+    font-size: 20px;
+  }
+}

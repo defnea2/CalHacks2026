@@ -104,3 +104,104 @@ describe("voice-free rehearsal", () => {
     ).toBeInTheDocument();
   });
 });
+
+it("applies live tutor commands and generates the next example from learner edits", () => {
+  render(<MathWorkbench />);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Build the first visual" }),
+  );
+  fireEvent.change(screen.getByLabelText("Live groups"), {
+    target: { value: "5" },
+  });
+  expect(
+    screen.getByRole("img", { name: "5 rows of 14, 70 cells" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Next teaching step" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(
+      "Here are 3 groups of 14. We can make this easier to count.",
+    ),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Show mathematical statement"));
+  fireEvent.click(screen.getByLabelText("Let the learner manipulate"));
+  fireEvent.change(screen.getByRole("slider", { name: "Number of groups" }), {
+    target: { value: "7" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Different numbers" }));
+  expect(
+    screen.getByLabelText("Linked mathematical statement"),
+  ).toHaveTextContent("7 × 15 = 105");
+  fireEvent.click(screen.getByRole("button", { name: "Simpler example" }));
+  expect(
+    screen.getByLabelText("Linked mathematical statement"),
+  ).toHaveTextContent("4 × 8 = 32");
+});
+
+it("clears incompatible focus when shrinking a split array and preserves the scene on invalid input", () => {
+  render(<MathWorkbench />);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Build the first visual" }),
+  );
+  fireEvent.click(screen.getByLabelText("Split into parts"));
+  fireEvent.change(screen.getByLabelText("Visual focus"), {
+    target: { value: "left" },
+  });
+  fireEvent.change(screen.getByLabelText("Live objects per group"), {
+    target: { value: "1" },
+  });
+  expect(
+    screen.getByRole("img", { name: "3 rows of 1, 3 cells" }),
+  ).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Live groups"), {
+    target: { value: "13" },
+  });
+  expect(screen.getByRole("alert")).toBeInTheDocument();
+  expect(
+    screen.getByRole("img", { name: "3 rows of 1, 3 cells" }),
+  ).toBeInTheDocument();
+});
+
+it("configures bar quantities and changes a number-line scale atomically", () => {
+  render(<MathWorkbench />);
+  fireEvent.change(screen.getByLabelText("Math rehearsal"), {
+    target: { value: "bars" },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Build the first visual" }),
+  );
+  fireEvent.change(screen.getByLabelText("Second whole live shaded"), {
+    target: { value: "2" },
+  });
+  fireEvent.click(screen.getByLabelText("Show mathematical statement"));
+  expect(
+    screen.getByLabelText("Linked mathematical statement"),
+  ).toHaveTextContent("1/2 = 2/4");
+  expect(
+    screen.queryByRole("button", { name: /Compare coloured/ }),
+  ).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Math rehearsal"), {
+    target: { value: "number_line" },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Build the first visual" }),
+  );
+  fireEvent.change(screen.getByLabelText("Scale maximum"), {
+    target: { value: "0.2" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Apply scale" }));
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Marker outside number line range",
+  );
+  expect(
+    screen.getByRole("slider", { name: "Move First number" }),
+  ).toHaveAttribute("aria-valuemax", "1");
+  fireEvent.change(screen.getByLabelText("Scale maximum"), {
+    target: { value: "2" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Apply scale" }));
+  expect(
+    screen.getByRole("slider", { name: "Move First number" }),
+  ).toHaveAttribute("aria-valuemax", "2");
+});

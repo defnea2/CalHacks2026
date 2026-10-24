@@ -132,15 +132,14 @@ export function TeachingCanvas({
   return (
     <section className="teaching-canvas" aria-label="Tutor's visual canvas">
       <div className="canvas-heading">
-        <span className="canvas-live-dot" />
-        <span>Let’s see it together</span>
+        <span>Mathematical workspace</span>
         <span className="canvas-interaction-hint">
           {choiceIds.length ||
           (interactionEnabled &&
             (canvas.math?.visual.interactive ||
               canvas.activity?.activity.allowedInteractions.length))
-            ? "Your turn · explore on the canvas"
-            : "Follow the explanation"}
+            ? "Explore the diagram"
+            : "Observe"}
         </span>
       </div>
       <h2>{canvas.title}</h2>
@@ -321,17 +320,17 @@ export function TeachingCanvas({
           {!canvas.nodes.length && (
             <g className="canvas-empty">
               <text x="500" y="270" textAnchor="middle">
-                An idea is about to take shape.
+                Choose an example to begin.
               </text>
               <text x="500" y="310" textAnchor="middle">
-                Press play to follow along.
+                Start the explanation to build its diagram.
               </text>
             </g>
           )}
         </svg>
       )}
       <div className="canvas-note" aria-live="polite">
-        {canvas.note || "Watch how each new piece connects to the last."}
+        {canvas.note || "The picture will build one step at a time."}
       </div>
     </section>
   );

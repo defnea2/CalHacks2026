@@ -43,7 +43,7 @@ export function arrayRehearsal(
           visual: {
             id: "array",
             kind: "array",
-            title: "A big multiplication, in smaller pieces",
+            title: "Multiplication: parts and whole",
             rows,
             columns,
           },
@@ -147,7 +147,7 @@ export function barRehearsal(): RehearsalStep[] {
           visual: {
             id: "bars",
             kind: "bars",
-            title: "Different pieces, the same amount?",
+            title: "Fractions: equal wholes",
             bars: [
               { id: "a", label: "First whole", parts: 2, shaded: 1 },
               { id: "b", label: "Second whole", parts: 4, shaded: 1 },
