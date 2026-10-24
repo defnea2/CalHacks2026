@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { MathStudio } from "../../presentation/math/MathStudio";
 import { TeachingCanvas } from "../../presentation/TeachingCanvas";
 import { TeachingSession } from "../TeachingSession";
 import type { TeachingPhase, LearnerResponse } from "../contracts";
@@ -24,6 +25,7 @@ function Sketch({ kind }: { kind: string }) {
 }
 
 export function LessonWorkspace() {
+  const [studio, setStudio] = useState(false);
   const [session, setSession] = useState<TeachingSession | null>(null);
   const [source, setSource] = useState<"sample" | "model">("sample");
   const [topic, setTopic] = useState("");
@@ -55,12 +57,12 @@ export function LessonWorkspace() {
     } catch { setSetupError("Add a topic or question before starting."); }
   }
   return <section className="lesson-workspace" aria-label="Learning session">
-    {session ? <Lesson key={session.planner.getSnapshot().config.sessionId} session={session} source={source} onExit={() => { session.cancel(); setSession(null); }} />
+    {studio ? <MathStudio onExit={() => setStudio(false)} /> : session ? <Lesson key={session.planner.getSnapshot().config.sessionId} session={session} source={source} onExit={() => { session.cancel(); setSession(null); }} />
       : <div className="lesson-welcome">
         <div className="lesson-intro"><span className="lesson-eyebrow">LOOK · TRY · UNDERSTAND</span><h1>What are you <br />wondering about?</h1><p>Ask your question. Build a picture. Work through it together.</p></div>
         <form className="lesson-topic-entry" onSubmit={e => { e.preventDefault(); start(); }}>
           <label htmlFor="topic-question">What would you like to understand?</label>
-          <div className="lesson-topic-row"><input id="topic-question" required maxLength={1200} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Why do shadows change during the day?" /><button className="lesson-primary" type="submit">Explore my question <span aria-hidden="true">→</span></button></div>
+          <div className="lesson-topic-row"><input id="topic-question" required maxLength={1200} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Why does a bigger rectangle have more area?" /><button className="lesson-primary" type="submit">Explore my question <span aria-hidden="true">→</span></button></div>
           <p className="lesson-connection" role="status">{bridge}</p>
           <small>No API key or microphone needed. Your question and lesson context are sent to the model through Codex.</small>
           <details className="lesson-model-setup"><summary>Original question and connection settings</summary>
@@ -69,6 +71,7 @@ export function LessonWorkspace() {
           </details>
           {setupError && <p role="alert">{setupError}</p>}
         </form>
+        <div className="studio-invitation"><div><span className="lesson-eyebrow">START WITH YOUR HANDS</span><h2>Stretch a shape. Split a group. Find a pattern.</h2><p>Five interactive math explorations, ready immediately.</p></div><button type="button" className="lesson-primary" onClick={() => setStudio(true)}>Open math studio →</button></div>
         <div className="lesson-samples-heading"><h2>Or explore an offline sample</h2><span>Three scripted lessons · no model calls</span></div>
         <div className="lesson-catalog" aria-label="Sample lessons">
           {subjects.map((subject, i) => <button className="lesson-card" key={subject.kind} onClick={() => start(i)}>

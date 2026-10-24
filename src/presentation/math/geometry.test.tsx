@@ -33,9 +33,10 @@ describe("local mathematical geometry", () => {
     expect(() => updateMathVisual(v, { type: "set_geometry", height: 2.3 })).toThrow();
     expect(() => MathVisualSchema.parse({ ...v, focus: "missing" })).toThrow();
   });
-  it("changes the displayed geometry locally, assesses actual area and rejects stale edits", () => {
+  it("changes the displayed geometry locally, assesses actual area and rejects stale edits", async () => {
     const { d, token } = setup();
     render(<Host d={d} />);
+    await screen.findByRole("slider", { name: "Geometry width" });
     expect(screen.getByLabelText("Linked mathematical statement")).toHaveTextContent("12 square units");
     fireEvent.change(screen.getByRole("slider", { name: "Geometry width" }), { target: { value: "8" } });
     expect(screen.getByLabelText("Linked mathematical statement")).toHaveTextContent("16 square units");

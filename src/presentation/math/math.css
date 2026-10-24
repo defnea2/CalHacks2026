@@ -121,3 +121,9 @@
 .math-geometry .MafsView { --mafs-bg: transparent; --mafs-fg: #56665d; --mafs-line-color: #e4e8e2; --mafs-origin-color: #e4e8e2; --mafs-font-family: inherit; }
 .math-geometry-caption { text-align: center; font-size: 14px; color: #667167; margin: 0; }
 .math-workspace:not(.math-observe) .lab-line-marker, .math-workspace:not(.math-observe) .lab-line-progress { transition: none; }
+.math-workspace .lab-bar-card, .math-workspace .lab-line-card { border-radius: 3px; border-color: #d9ded6; background: transparent; }
+.math-workspace .lab-fraction-bar { border-radius: 2px; gap: 2px; padding: 2px; }
+.math-workspace .lab-fraction-bar button { border-radius: 0; }
+.math-workspace .lab-bar-card:nth-child(odd), .math-workspace .lab-line-card:nth-child(odd) { --tone: #24594b !important; --wash: #e4eee7 !important; }
+.math-workspace .lab-bar-card:nth-child(even), .math-workspace .lab-line-card:nth-child(even) { --tone: #b8723f !important; --wash: #f1e5d9 !important; }
+.math-geometry-loading { display: grid; place-content: center; min-height: 390px; color: #667167; font-size: 13px; }

@@ -1,9 +1,11 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { MathStatement } from "./MathStatement";
-import { GeometryPicture } from "./GeometryPicture";
+import { lazy, Suspense } from "react";
+const MathStatement = lazy(() => import("./MathStatement").then(m => ({ default: m.MathStatement })));
+const GeometryPicture = lazy(() => import("./GeometryPicture").then(m => ({ default: m.GeometryPicture })));
 import { LearningWorkspace } from "../../visuals/LearningWorkspace";
 import {
   mathActivity,
+  mathSummary,
   type MathAction,
   type MathChange,
   type MathScene,
@@ -124,7 +126,7 @@ export function MathWorkspace({
       className={`math-workspace ${canChange ? "" : "math-observe"}`}
       data-visual-id={visual.id}
     >
-      {visual.kind === "geometry" ? <GeometryPicture visual={visual} enabled={canChange} onChange={emit} /> : visual.kind === "array" ? (
+      {visual.kind === "geometry" ? <Suspense fallback={<div className="math-geometry-loading" role="status">Opening the geometry tools…</div>}><GeometryPicture visual={visual} enabled={canChange} onChange={emit} /></Suspense> : visual.kind === "array" ? (
         <>
           <ArrayPicture visual={visual} />
           {visual.interactive && (
@@ -202,7 +204,7 @@ export function MathWorkspace({
           />
         )
       )}
-      {visual.showEquation && <MathStatement visual={visual} />}
+      {visual.showEquation && <Suspense fallback={<output className="math-equation" aria-label="Linked mathematical statement">{mathSummary(visual)}</output>}><MathStatement visual={visual} /></Suspense>}
     </div>
   );
 }
