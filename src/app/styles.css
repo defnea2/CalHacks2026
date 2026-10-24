@@ -1,1 +1,245 @@
-:root{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#283349;background:#f4f5f3;font-synthesis:none;line-height:1.55;font-weight:400}*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px solid #dfe4ec;background:#fff;color:#546382;border-radius:10px;padding:10px 15px;font-weight:600}button:hover:not(:disabled){background:#edf0f7;border-color:#a8b3c9}button:disabled{opacity:.48;cursor:not-allowed}button:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #cb9b47;outline-offset:3px}h1,h2,h3,p{margin-top:0}p{color:#758194}select,textarea{border:1px solid #dfe4ec;border-radius:10px;padding:11px 12px;background:#fff;color:#3b4961;min-width:0}main{max-width:1180px;padding:0 32px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:1.8px;font-size:10px;font-weight:750;color:#7b89a2}footer{padding:20px 0 35px;font-size:11px;color:#8a94a2;text-align:center}.preview-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;font-size:12px}.preview-toolbar label{display:flex;align-items:center;gap:12px;color:#6f7d91}.preview-toolbar select{font-size:12px;font-weight:600;min-height:44px}.preview-toolbar button{font-size:11px;min-height:44px}.preview-status{margin-left:auto;font-size:10px;color:#809181;display:flex;align-items:center;gap:7px}.preview-status i{height:6px;width:6px;border-radius:50%;background:#8ba68f}.preview-panel{border:1px solid #e0e4eb;background:#fffefa;border-radius:16px;padding:19px 22px;margin-bottom:14px;min-width:0}.preview-panel summary{font-size:12px;font-weight:650;cursor:pointer}.preview-panel summary span{float:right;font-size:10px;color:#919bac;font-weight:400}.preview-panel p{font-size:12px;margin:16px 0}.preview-panel label,.preview-panel h3{display:block;font-size:11px;font-weight:650;margin:16px 0 8px;color:#6b7890}.preview-panel pre{overflow:auto;max-height:320px;padding:16px;border-radius:10px;background:#f2f4f8;color:#627189;font-size:11px;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}.preview-json{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.6;width:100%;min-height:300px;resize:vertical}.preview-editor-actions,.preview-command-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.preview-editor-actions{margin-top:12px}.preview-editor-actions button,.preview-command-bar button{font-size:11px;padding:9px 12px}.preview-primary{background:#6978ac;color:white;border-color:#6978ac}.preview-command-bar{margin:-4px 0 26px;font-size:11px;color:#8190a4}.preview-command-bar>span{margin-right:6px}.preview-command-bar small{margin-left:auto;font-size:10px}.preview-error{border:1px solid #e3bcad;color:#945a47!important;background:#fff3ed;padding:12px;border-radius:10px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:200px;overflow:auto}.preview-success{color:#5b846d!important;font-size:12px}@media(max-width:700px){main{padding:0 18px}.preview-status{margin-left:0}.preview-toolbar label{flex-direction:column;align-items:flex-start}.preview-toolbar{align-items:flex-end}.preview-panel{padding:16px}.preview-panel summary span{float:none;display:block;margin:4px 0 0 14px}}
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: #283349;
+  background: #f4f5f3;
+  font-synthesis: none;
+  line-height: 1.55;
+  font-weight: 400;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  border: 1px solid #dfe4ec;
+  background: #fff;
+  color: #546382;
+  border-radius: 10px;
+  padding: 10px 15px;
+  font-weight: 600;
+}
+button:hover:not(:disabled) {
+  background: #edf0f7;
+  border-color: #a8b3c9;
+}
+button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #cb9b47;
+  outline-offset: 3px;
+}
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+p {
+  color: #758194;
+}
+select,
+textarea {
+  border: 1px solid #dfe4ec;
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: #fff;
+  color: #3b4961;
+  min-width: 0;
+}
+main {
+  max-width: 1180px;
+  padding: 0 32px;
+  margin: auto;
+}
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+  font-size: 10px;
+  font-weight: 750;
+  color: #7b89a2;
+}
+footer {
+  padding: 20px 0 35px;
+  font-size: 11px;
+  color: #8a94a2;
+  text-align: center;
+}
+.preview-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+.preview-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #6f7d91;
+}
+.preview-toolbar select {
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 44px;
+}
+.preview-toolbar button {
+  font-size: 11px;
+  min-height: 44px;
+}
+.preview-status {
+  margin-left: auto;
+  font-size: 10px;
+  color: #809181;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.preview-status i {
+  height: 6px;
+  width: 6px;
+  border-radius: 50%;
+  background: #8ba68f;
+}
+.preview-panel {
+  border: 1px solid #e0e4eb;
+  background: #fffefa;
+  border-radius: 16px;
+  padding: 19px 22px;
+  margin-bottom: 14px;
+  min-width: 0;
+}
+.preview-panel summary {
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.preview-panel summary span {
+  float: right;
+  font-size: 10px;
+  color: #919bac;
+  font-weight: 400;
+}
+.preview-panel p {
+  font-size: 12px;
+  margin: 16px 0;
+}
+.preview-panel label,
+.preview-panel h3 {
+  display: block;
+  font-size: 11px;
+  font-weight: 650;
+  margin: 16px 0 8px;
+  color: #6b7890;
+}
+.preview-panel pre {
+  overflow: auto;
+  max-height: 320px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #f2f4f8;
+  color: #627189;
+  font-size: 11px;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.preview-json {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  width: 100%;
+  min-height: 300px;
+  resize: vertical;
+}
+.preview-editor-actions,
+.preview-command-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.preview-editor-actions {
+  margin-top: 12px;
+}
+.preview-editor-actions button,
+.preview-command-bar button {
+  font-size: 11px;
+  padding: 9px 12px;
+}
+.preview-primary {
+  background: #6978ac;
+  color: white;
+  border-color: #6978ac;
+}
+.preview-command-bar {
+  margin: -4px 0 26px;
+  font-size: 11px;
+  color: #8190a4;
+}
+.preview-command-bar > span {
+  margin-right: 6px;
+}
+.preview-command-bar small {
+  margin-left: auto;
+  font-size: 10px;
+}
+.preview-error {
+  border: 1px solid #e3bcad;
+  color: #945a47 !important;
+  background: #fff3ed;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 200px;
+  overflow: auto;
+}
+.preview-success {
+  color: #5b846d !important;
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  main {
+    padding: 0 18px;
+  }
+  .preview-status {
+    margin-left: 0;
+  }
+  .preview-toolbar label {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .preview-toolbar {
+    align-items: flex-end;
+  }
+  .preview-panel {
+    padding: 16px;
+  }
+  .preview-panel summary span {
+    float: none;
+    display: block;
+    margin: 4px 0 0 14px;
+  }
+}
