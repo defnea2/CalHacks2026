@@ -1,3 +1,6 @@
+import { LearnerActionSchema, type LearnerAction } from "../shared";
+import { applySceneCommand, commandFromAction } from "../session/sceneReducer";
+import { MathActionSchema, updateMathVisual, type MathAction, type MathScene } from "./math/models";
 import { applyCanvasCommands } from "./canvasState";
 import {
   emptyCanvas,
@@ -56,6 +59,31 @@ export class VisualDirector {
       token.runId === this.snapshot.token?.runId &&
       token.beatId === this.snapshot.token?.beatId
     );
+  }
+  /** Interaction is accepted only after the current spoken step has finished. */
+  canInteract = () => ["completed", "awaiting_answer"].includes(this.snapshot.status);
+  interactMath(token: PlaybackToken, input: unknown): { type: "math_changed"; token: PlaybackToken; action: MathAction; scene: MathScene } | null {
+    const parsed = MathActionSchema.safeParse(input);
+    const scene = this.snapshot.canvas.math;
+    if (!this.matches(token) || !this.canInteract() || !parsed.success || !scene?.visual.interactive) return null;
+    const action = parsed.data;
+    if (action.visualId !== scene.visual.id || action.revision !== scene.revision || scene.appliedEventIds.includes(action.eventId)) return null;
+    // Learners can manipulate quantities, but cannot grant themselves controls or reveal equations.
+    if (!["set_array", "set_bar", "move_marker"].includes(action.change.type)) return null;
+    try {
+      const next = { visual: updateMathVisual(scene.visual, action.change), revision: scene.revision + 1, appliedEventIds: [...scene.appliedEventIds, action.eventId].slice(-1000) };
+      this.publish({ canvas: { ...this.snapshot.canvas, math: next } });
+      return { type: "math_changed", token, action, scene: next };
+    } catch { return null; }
+  }
+  interactActivity(token: PlaybackToken, input: unknown): { type: "activity_changed"; token: PlaybackToken; action: LearnerAction; scene: NonNullable<CanvasState["activity"]> } | null {
+    const parsed = LearnerActionSchema.safeParse(input);
+    const scene = this.snapshot.canvas.activity;
+    if (!this.matches(token) || !this.canInteract() || !parsed.success || !scene) return null;
+    const result = applySceneCommand(scene, commandFromAction(parsed.data));
+    if (!result.ok || result.status === "already_applied") return null;
+    this.publish({ canvas: { ...this.snapshot.canvas, activity: result.scene } });
+    return { type: "activity_changed", token, action: parsed.data, scene: result.scene };
   }
   prepare(input: unknown): PlaybackToken {
     const beat = VisualBeatSchema.parse(input);

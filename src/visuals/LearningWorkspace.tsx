@@ -16,6 +16,7 @@ import "./visuals.css";
 
 export interface LearningWorkspaceProps {
   scene: SceneState;
+  embedded?: boolean;
   onAction(action: LearnerAction): void;
 }
 const typeLabels = {
@@ -26,7 +27,7 @@ const typeLabels = {
   sorting_board: "Sort & discover",
 };
 
-function ValidWorkspace({ scene, onAction }: LearningWorkspaceProps) {
+function ValidWorkspace({ scene, onAction, embedded = false }: LearningWorkspaceProps) {
   const activity = scene.activity;
   const reduce = useReducedMotion();
   const [notice, setNotice] = useState("");
@@ -39,7 +40,8 @@ function ValidWorkspace({ scene, onAction }: LearningWorkspaceProps) {
   const emit: EmitAction = (payload, source = "pointer") =>
     onAction(createAction(scene, payload, source));
   return (
-    <section className="learning-workspace" aria-label="Learning workspace">
+    <section className={`learning-workspace ${embedded ? "lab-embedded" : ""}`} aria-label="Learning workspace">
+      {!embedded && <>
       <div className="lab-workspace-head">
         <span className="lab-kicker">
           <i />
@@ -49,6 +51,7 @@ function ValidWorkspace({ scene, onAction }: LearningWorkspaceProps) {
       </div>
       <h2>{activity.title}</h2>
       <p className="lab-question">{activity.prompt}</p>
+      </>}
       <MotionConfig reducedMotion="user">
         <motion.div
           key={`${scene.sceneId}:${activity.id}`}

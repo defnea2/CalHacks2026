@@ -1,4 +1,8 @@
 import { useId } from "react";
+import { LearningWorkspace } from "../visuals/LearningWorkspace";
+import type { LearnerAction } from "../shared";
+import { MathWorkspace } from "./math/MathWorkspace";
+import type { MathAction } from "./math/models";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Icon } from "../visuals/Icon";
 import type { CanvasNode, CanvasState } from "./contracts";
@@ -107,11 +111,17 @@ export interface TeachingCanvasProps {
   canvas: CanvasState;
   choiceIds?: string[];
   onChoose?(id: string): void;
+  interactionEnabled?: boolean;
+  onMathAction?(action: MathAction): void;
+  onActivityAction?(action: LearnerAction): void;
 }
 export function TeachingCanvas({
   canvas,
   choiceIds = [],
   onChoose,
+  interactionEnabled = false,
+  onMathAction,
+  onActivityAction,
 }: TeachingCanvasProps) {
   const reduced = useReducedMotion();
   const markerId = `canvas-arrow-${useId().replace(/:/g, "")}`;
@@ -125,13 +135,21 @@ export function TeachingCanvas({
         <span className="canvas-live-dot" />
         <span>Let’s see it together</span>
         <span className="canvas-interaction-hint">
-          {choiceIds.length
-            ? "Your turn · choose on the canvas"
+          {choiceIds.length || (interactionEnabled && (canvas.math?.visual.interactive || canvas.activity?.activity.allowedInteractions.length))
+            ? "Your turn · explore on the canvas"
             : "Follow the explanation"}
         </span>
       </div>
       <h2>{canvas.title}</h2>
-      <svg
+      {canvas.math ? (
+        <MathWorkspace scene={canvas.math} enabled={interactionEnabled} onAction={onMathAction} />
+      ) : canvas.activity ? (
+        <LearningWorkspace
+          embedded
+          scene={interactionEnabled ? canvas.activity : { ...canvas.activity, activity: { ...canvas.activity.activity, allowedInteractions: [] } }}
+          onAction={action => onActivityAction?.(action)}
+        />
+      ) : <svg
         className="canvas-surface"
         viewBox="0 0 1000 600"
         aria-label={canvas.title}
@@ -290,7 +308,7 @@ export function TeachingCanvas({
             </text>
           </g>
         )}
-      </svg>
+      </svg>}
       <div className="canvas-note" aria-live="polite">
         {canvas.note || "Watch how each new piece connects to the last."}
       </div>
