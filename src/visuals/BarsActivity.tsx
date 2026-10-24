@@ -57,7 +57,9 @@ export function BarsActivity({
               aria-label={`${bar.label} equal parts`}
             >
               {Array.from({ length: bar.parts }, (_, part) => (
-                <button
+                <motion.button
+                  layout
+                  transition={{ duration: reduce || isEnabled(scene, "set_shaded") ? 0 : 0.7 }}
                   key={part}
                   className={part < bar.shaded ? "shaded" : ""}
                   style={{ flex: 1 }}
@@ -76,7 +78,7 @@ export function BarsActivity({
                   }
                 >
                   <span aria-hidden="true">{part + 1}</span>
-                </button>
+                </motion.button>
               ))}
             </div>
             <div className="lab-bar-settings">

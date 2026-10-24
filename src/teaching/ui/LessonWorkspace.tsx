@@ -1,3 +1,4 @@
+import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MathStudio } from "../../presentation/math/MathStudio";
 import { TeachingCanvas } from "../../presentation/TeachingCanvas";
@@ -90,6 +91,8 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
   const teaching = useSyncExternalStore(session.planner.subscribe, session.planner.getSnapshot);
   const visual = useSyncExternalStore(session.director.subscribe, session.director.getSnapshot);
   const [answer, setAnswer] = useState("");
+  const [paused, setPaused] = useState(false);
+  const reducedMotion = useReducedMotion();
   const heading = useRef<HTMLHeadingElement>(null);
   const step = teaching.step;
   const waiting = teaching.status === "awaiting_response" && !state.busy;
@@ -99,6 +102,13 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
   const spoken = check && narration.endsWith(check.prompt) ? narration.slice(0, -check.prompt.length).trim() : narration;
   const empty = !visual.canvas.math && !visual.canvas.activity && !visual.canvas.nodes.length;
   useEffect(() => { setAnswer(""); heading.current?.focus({ preventScroll: true }); }, [step?.id, state.beatIndex]);
+  const duration = Math.max(3500, Math.min(12000, narration.split(/\s+/).length * 270));
+  useEffect(() => { setPaused(Boolean(reducedMotion)); }, [step?.id, reducedMotion]);
+  useEffect(() => {
+    if (paused || state.busy || teaching.status !== "presenting") return;
+    const timer = setTimeout(() => session.presentNext(), duration);
+    return () => clearTimeout(timer);
+  }, [session, step?.id, state.beatIndex, state.busy, teaching.status, paused, duration]);
   const respond = (response: LearnerResponse["response"]) => { void session.respond(response); };
   return <>
     <div className="lesson-topline"><button className="lesson-back" onClick={onExit}>← All topics</button><span>{source === "sample" ? "Offline sample" : "Math lesson"}</span></div>
@@ -107,6 +117,17 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
       <div className="lesson-paper">
         {empty ? <section className="lesson-think" aria-label="Thinking space"><span className="lesson-eyebrow">{complete ? "YOUR QUESTION" : "PICTURE"}</span><h2>{complete ? teaching.config.originalQuestion || "Where could you use this idea?" : step ? visual.canvas.title : "Your picture will appear here"}</h2><div className="lesson-pencil-rule" /><p>{complete ? "Try it yourself. Use the ideas you explored here to explain your thinking." : ""}</p></section>
           : <TeachingCanvas canvas={visual.canvas} interactionEnabled={session.canInteract()} onMathAction={session.interactMath} onActivityAction={session.interactActivity} />}
+        {step && step.beats.length > 1 && <div className="lesson-playback" aria-label="Explanation playback">
+          <div className="lesson-filmstrip" aria-label={`Part ${state.beatIndex + 1} of ${step.beats.length}`}>
+            {step.beats.map((beat, index) => <span key={beat.id} className={index <= state.beatIndex ? "seen" : ""} aria-current={index === state.beatIndex ? "step" : undefined} />)}
+          </div>
+          <span>{state.beatIndex + 1} / {step.beats.length}</span>
+          {teaching.status === "presenting" && <>
+            <button type="button" onClick={() => setPaused(p => !p)}>{paused ? "Play" : "Pause"}</button>
+            <button type="button" onClick={session.presentNext}>Next</button>
+          </>}
+          <button type="button" disabled={state.busy || !["presenting", "awaiting_response"].includes(teaching.status)} onClick={() => { setPaused(Boolean(reducedMotion)); session.replay(); }}>Replay</button>
+        </div>}
         {!complete && teaching.config.originalQuestion && <div className="lesson-saved-question"><span>Saved for you</span><p>{teaching.config.originalQuestion}</p><small>We'll practice on other examples first.</small></div>}
       </div>
       <aside className="lesson-conversation" aria-label="Tutor conversation">
@@ -120,7 +141,6 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
           <div className="lesson-help"><span>Need a different approach?</span><div><button type="button" onClick={() => respond({ kind: "help", request: "another_way" })}>Show another way</button><button type="button" onClick={() => respond({ kind: "help", request: "simpler" })}>Smaller step</button><button type="button" onClick={() => respond({ kind: "help", request: "repeat" })}>Repeat</button></div></div>
         </form>}
         {state.busy ? <div className="lesson-planning" role="status"><span>{step ? "Loading the next step…" : "Loading…"}</span><button onClick={session.cancel}>Cancel</button></div>
-          : teaching.status === "presenting" ? <button className="lesson-primary" onClick={session.presentNext}>Continue <span aria-hidden="true">→</span></button>
           : teaching.status === "needs_plan" && <button className="lesson-primary" onClick={() => void session.plan()}>{state.error ? "Try again" : "Continue"} <span aria-hidden="true">→</span></button>}
         {complete && <div className="lesson-finish"><p>{teaching.config.originalQuestion ? "Now try your original question without help." : "Try explaining how you would solve another example."}</p><button className="lesson-primary" onClick={onExit}>Another question →</button></div>}
         {state.error && <div className="lesson-error" role="alert"><strong>This step couldn't load.</strong><p>Your picture is still here. Try again, or choose another topic.</p><details><summary>Technical details</summary><p>{state.error}</p></details></div>}

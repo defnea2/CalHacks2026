@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 const MathStatement = lazy(() => import("./MathStatement").then(m => ({ default: m.MathStatement })));
 const GeometryPicture = lazy(() => import("./GeometryPicture").then(m => ({ default: m.GeometryPicture })));
 import { LearningWorkspace } from "../../visuals/LearningWorkspace";
@@ -14,8 +14,9 @@ import {
 import "./math.css";
 
 function ArrayPicture({
-  visual,
+  visual, animateChanges,
 }: {
+  animateChanges: boolean;
   visual: Extract<MathVisual, { kind: "array" }>;
 }) {
   const reduced = useReducedMotion();
@@ -24,7 +25,7 @@ function ArrayPicture({
   const gap = splitAt === null ? 0 : 34;
   const left = (1000 - columns * step - gap) / 2;
   const top = (380 - rows * step) / 2 + 30;
-  const transition = { duration: reduced || visual.interactive ? 0 : 0.5 };
+  const transition = { duration: reduced || !animateChanges ? 0 : 0.8 };
   return (
     <svg
       className="math-array"
@@ -113,6 +114,10 @@ export function MathWorkspace({
 }) {
   const visual = scene.visual;
   const canChange = enabled && visual.interactive;
+  const lastEvent = scene.appliedEventIds.at(-1);
+  const previousEvent = useRef(lastEvent);
+  const animateChanges = !lastEvent || lastEvent === previousEvent.current;
+  useEffect(() => { previousEvent.current = lastEvent; }, [lastEvent]);
   const emit = (change: MathChange) =>
     onAction?.({
       eventId: crypto.randomUUID(),
@@ -126,9 +131,9 @@ export function MathWorkspace({
       className={`math-workspace ${canChange ? "" : "math-observe"}`}
       data-visual-id={visual.id}
     >
-      {visual.kind === "geometry" ? <Suspense fallback={<div className="math-geometry-loading" role="status">Opening the geometry tools…</div>}><GeometryPicture visual={visual} enabled={canChange} onChange={emit} /></Suspense> : visual.kind === "array" ? (
+      {visual.kind === "geometry" ? <Suspense fallback={<div className="math-geometry-loading" role="status">Opening the geometry tools…</div>}><GeometryPicture visual={visual} enabled={canChange} onChange={emit} animateChanges={animateChanges} /></Suspense> : visual.kind === "array" ? (
         <>
-          <ArrayPicture visual={visual} />
+          <ArrayPicture visual={visual} animateChanges={animateChanges} />
           {visual.interactive && (
             <fieldset className="math-controls" disabled={!canChange}>
               <legend>Change the picture</legend>

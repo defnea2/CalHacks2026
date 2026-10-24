@@ -161,3 +161,10 @@
 .studio-local > span { font-size: 24px; color: #24594b; }
 .studio-local p { line-height: 1.6; }
 @media (max-width: 700px) { .studio-invitation { flex-direction: column; align-items: flex-start; } .studio-prompt { padding-top: 0; } }
+
+.lesson-playback { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--lesson-rule); padding: 14px 0; color: var(--lesson-muted); font-size: 12px; }
+.lesson-filmstrip { display: flex; gap: 5px; flex: 1; }
+.lesson-filmstrip span { height: 3px; background: #dce2d9; flex: 1; }
+.lesson-filmstrip .seen { background: #24594b; }
+.lesson-playback button { color: var(--lesson-accent); background: transparent; border: 1px solid var(--lesson-rule); padding: 7px 10px; }
+.lesson-playback button:disabled { opacity: .4; }
