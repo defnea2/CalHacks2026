@@ -18,7 +18,9 @@ try {
   }
   const first = structuredClone(session.planner.getSnapshot().step);
   console.log(JSON.stringify({ phase: first.phase, beats: first.beats.length, title: session.director.getSnapshot().canvas.title, check: first.check?.kind, elapsedSeconds: Math.round((Date.now()-started)/1000) }));
-  const response = first.check?.kind === "choice"
+  const response = first.check?.kind === "explanation" && process.env.TUTOR_SMOKE_REPLY
+    ? { kind: "answer", text: process.env.TUTOR_SMOKE_REPLY }
+    : first.check?.kind === "choice"
     ? { kind: "choice", optionId: first.check.options.find(o => o.id !== first.check.correctOptionId).id }
     : { kind: "help", request: "simpler" };
   if (!await session.respond(response)) {
@@ -28,7 +30,7 @@ try {
   while (session.planner.getSnapshot().status === "presenting") {
     if (!session.presentNext()) throw new Error(session.getSnapshot().error);
   }
-  console.log(JSON.stringify({ phase: session.planner.getSnapshot().step.phase, title: session.director.getSnapshot().canvas.title, evidence: session.planner.getSnapshot().evidence.at(-1)?.outcome, elapsedSeconds: Math.round((Date.now()-started)/1000) }));
+  console.log(JSON.stringify({ phase: session.planner.getSnapshot().step.phase, beats: session.planner.getSnapshot().step.beats.length, title: session.director.getSnapshot().canvas.title, evidence: session.planner.getSnapshot().evidence.at(-1)?.outcome, elapsedSeconds: Math.round((Date.now()-started)/1000) }));
   if (process.env.TUTOR_SMOKE_OUTPUT) await writeFile(process.env.TUTOR_SMOKE_OUTPUT, JSON.stringify({ topic, steps: session.planner.getSnapshot().history, canvas: session.director.getSnapshot().canvas, evidence: session.planner.getSnapshot().evidence }, null, 2));
   session.cancel();
 } finally { await loader.close(); }

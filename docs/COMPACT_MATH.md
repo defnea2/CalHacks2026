@@ -75,3 +75,48 @@ The model prompt includes this smaller schema and summarized prior steps instead
 - A real two-turn test asked why doubling a rectangle's width doubles area: first diagnosis ~8 seconds, then a request for simpler explanation completed at ~16 seconds total. The earlier free-form test was ~22 seconds initially and ~54 seconds total on a different topic. These are individual observations, not a controlled benchmark or latency guarantee.
 - New model reasoning still takes time. This change does not implement persistent model sessions, incremental model streaming, speculative lesson branches, LiveKit transport or Cartesia playback.
 - Geometry currently covers rectangles and right triangles, not arbitrary constructions or function plots. Other math concepts must fit supported representations or use a verbal explanation.
+
+
+## Generated visual sequences
+
+A compact lesson now has an optional `sequence` of up to three additional moments. The initial `narration`, `visual`, `showEquation` and `interactive` describe the first moment; each sequence entry supplies those four fields for the next one. The compiler applies each command to the preceding canvas, preserving object IDs and changes. Intuition and worked examples require at least two moments. A diagnostic prediction or independent task stops before showing its answer.
+
+Example continuation after a rectangle has been shown:
+
+```json
+"sequence": [
+  {
+    "narration": "The width grows from 3 to 6. Both rows gain three squares.",
+    "visual": {"kind":"update","changes":[{"type":"set_geometry","width":6}]},
+    "showEquation": false,
+    "interactive": false
+  },
+  {
+    "narration": "The height stays at 2, so doubling the width doubles the number of squares.",
+    "visual": {"kind":"keep"},
+    "showEquation": true,
+    "interactive": true
+  }
+]
+```
+
+The model chooses the quantities, explanation, transformations, and final check using the learner's question, current canvas, and evidence. This is still a bounded mathematical command language, not arbitrary generated code or a general-purpose video engine. A new explanation needs inference; progressing through its moments, replaying it, and manipulating the resulting picture do not.
+
+### Text playback
+
+The browser plays the already-validated beats in order, allowing roughly 270 ms per word with a 3.5–12 second reading window per beat. Pause holds the current moment, Next advances immediately, and Replay restores the initial canvas and repeats the commands without a model call. Replay resets edits to that picture. The final question and learner controls appear only after every moment has been presented. Reduced-motion preference disables visual interpolation and starts playback paused for manual advancement. Leaving a lesson clears playback timers.
+
+Geometry interpolates its dimensions from a fixed corner over one second, leaving the previous rectangle as a dotted reference during that run. Replay starts a new renderer run so that an old result cannot remain as a ghost outline in the starting picture. Arrays animate their cells and split; bars animate repartitioning; number-line positions interpolate while observing. Direct learner manipulations remain local.
+
+The text timer is a reading aid, not audio synchronization. The LiveKit host must use actual narration start/end events to advance beats. Do not run text autoplay alongside voice playback.
+
+
+### Verification of generated flow
+
+On 2026-10-24, the real Luna bridge generated an area prediction followed by a two-moment explanation after the learner said widening adds only three squares. The explanation kept height 2, changed width 3 to 6, and correctly described six additional squares. The two requests took approximately 7 and 5 seconds.
+
+A second topic, splitting 4 × 8 into 4 × 5 + 4 × 3, produced a three-moment response to the claim that splitting creates extra squares: show the split, remove it while retaining all 32 cells, and restore it with the equation. The prediction took about 5 seconds and the explanation about 15 seconds, including any bounded validation repair. These are observations, not benchmark guarantees. New explanation latency is still material.
+
+The server requires an assessment of the latest explanation before choosing its next step. An assessed misconception after diagnosis must move to an intuition demonstration, preventing a repeated diagnostic-still loop. Unclear responses can still receive clarification. This remains a tentative model assessment, not proof of mastery.
+
+Automated coverage includes sequential compilation, invalid intermediate commands, final-question placement, local replay without another model call or evidence, resetting learner edits on replay, timed progression, pause, restarting the reading interval on replay, and timer cleanup when leaving the lesson.

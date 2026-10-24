@@ -167,3 +167,10 @@ Replay is deliberate: call `director.replay()`, bind its new token to a newly sp
 - Duplicate transport requests/actions do not produce repeated visual changes.
 
 The local test suite verifies the visual-side lifecycle and actions. Room connectivity, Cartesia audio, transport ordering, latency, and real spoken interruption remain integration tests for the teammate's adapter.
+
+
+## Multi-moment explanations
+
+The compact planner can now return 1–4 `TeachingStep.beats` from a single request. Each contains a short narration and a cue at `atMs: 0`; later beats update the existing mathematical scene. Speak each beat through Cartesia and advance only after its audio finishes, using the existing VisualDirector token lifecycle. Enable learner input and call `planner.presented(step.id)` only after the final beat. A new learner turn is the next planning boundary; do not re-query the LLM between beats.
+
+The standalone text UI currently uses local reading-time autoplay, Pause, Next and Replay. These are not speech timestamps. Disable that timer when integrating actual audio, and invalidate old callbacks when interrupted or replayed. `TeachingSession.replay()` is for the text rehearsal; voice replay must reset the corresponding audio as well. Geometry interpolation takes one second; it runs locally from the command at the beginning of a beat. See [COMPACT_MATH.md](COMPACT_MATH.md#generated-visual-sequences) for the compact `sequence` fields.
