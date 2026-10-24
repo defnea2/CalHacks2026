@@ -13,7 +13,11 @@ export function trustedRequest(req: IncomingMessage, port: number) {
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   return hosts.includes(req.headers.host ?? "") && (!req.headers.origin || hosts.some(h => req.headers.origin === `http://${h}`));
 }
-async function readJson(req: IncomingMessage) {
+export async function readJson(req: IncomingMessage, signal: AbortSignal) {
+  signal.throwIfAborted();
+  const cancel = () => req.destroy(new Error("Request cancelled."));
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -22,6 +26,7 @@ async function readJson(req: IncomingMessage) {
     chunks.push(Buffer.from(chunk));
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } finally { signal.removeEventListener("abort", cancel); }
 }
 export function teachingPlugin(options: CodexOptions = {}, generate: GenerateCandidate = createCodexGenerator(options)): Plugin {
   let active = false;
@@ -48,7 +53,7 @@ export function teachingPlugin(options: CodexOptions = {}, generate: GenerateCan
         res.once("close", disconnected);
         try {
           let request;
-          try { request = parseModelRequest(await readJson(req)); }
+          try { request = parseModelRequest(await readJson(req, controller.signal)); }
           catch (error) {
             return reply(res, 400, { error: error instanceof z.ZodError ? "Invalid lesson context. Refresh and start a new lesson." : "Invalid or oversized JSON request." });
           }
