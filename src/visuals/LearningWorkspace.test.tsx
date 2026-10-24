@@ -55,3 +55,19 @@ it('colours equal parts and compares amounts after repartitioning', () => {
   fireEvent.click(within(screen.getByRole('region', { name: 'Bar B' })).getByRole('button', { name: 'Clear colour' }));
   expect(screen.getByRole('region', { name: 'Equal-scale comparison' })).toHaveTextContent('1/6 > 0/6');
 });
+
+it('reorders stages and creates and removes a visible connection', () => {
+  function Harness() {
+    const [scene, setScene] = useState(() => createScene(getFixture('water')));
+    return <LearningWorkspace scene={scene} onAction={action => setScene(current => applySceneCommand(current, commandFromAction(action)).scene)}/>;
+  }
+  render(<Harness/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Move Water evaporates earlier' }));
+  expect(screen.getByRole('button', { name: 'Water evaporates' })).toHaveTextContent('2');
+  fireEvent.click(screen.getByRole('button', { name: 'Water in the sea' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Connect from selected' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Water evaporates' }));
+  expect(within(screen.getByRole('list', { name: 'Connections' })).getByRole('listitem')).toHaveTextContent('Water in the sea → Water evaporates');
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection from Water in the sea to Water evaporates' }));
+  expect(within(screen.getByRole('list', { name: 'Connections' })).queryByRole('listitem')).not.toBeInTheDocument();
+});
