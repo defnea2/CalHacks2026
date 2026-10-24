@@ -40,3 +40,18 @@ it('shows a recoverable validation error for an invalid scene', () => {
   render(<LearningWorkspace scene={scene} onAction={vi.fn()}/>);
   expect(screen.getByRole('alert')).toHaveTextContent('This activity needs a small fix');
 });
+
+it('colours equal parts and compares amounts after repartitioning', () => {
+  function Harness() {
+    const [scene, setScene] = useState(() => createScene(getFixture('bars')));
+    return <LearningWorkspace scene={scene} onAction={action => setScene(current => applySceneCommand(current, commandFromAction(action)).scene)}/>;
+  }
+  render(<Harness/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Shade 2 of 6 parts in Bar B' }));
+  fireEvent.click(screen.getByRole('button', { name: /Compare coloured amounts/ }));
+  expect(screen.getByRole('region', { name: 'Equal-scale comparison' })).toHaveTextContent('1/3 = 2/6');
+  fireEvent.change(screen.getByRole('combobox', { name: 'Bar A equal parts' }), { target: { value: '6' } });
+  expect(screen.getByRole('region', { name: 'Equal-scale comparison' })).toHaveTextContent('1/6 < 2/6');
+  fireEvent.click(within(screen.getByRole('region', { name: 'Bar B' })).getByRole('button', { name: 'Clear colour' }));
+  expect(screen.getByRole('region', { name: 'Equal-scale comparison' })).toHaveTextContent('1/6 > 0/6');
+});
