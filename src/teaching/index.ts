@@ -4,3 +4,4 @@ export { numericValue, assessResponse, validateCheck } from "./checks";
 export { allowedPhases } from "./policy";
 export { TEACHING_INSTRUCTIONS } from "./prompts";
 export { createHttpPlanningModel } from "./modelAdapter";
+export { TeachingSession } from "./TeachingSession";
