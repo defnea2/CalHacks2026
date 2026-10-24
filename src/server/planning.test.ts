@@ -62,7 +62,7 @@ describe("local no-key model bridge", () => {
     const args = codexArgs("/tmp/tutor test", "chosen-model");
     expect(args[args.indexOf("--model") + 1]).toBe("chosen-model");
     const defaults = codexArgs("/tmp/tutor test");
-    expect(defaults[defaults.indexOf("--model") + 1]).toBe("gpt-6-luna");
+    expect(defaults[defaults.indexOf("--model") + 1]).toBe("gpt-5.6-luna");
     expect(defaults).toContain('model_reasoning_effort="low"');
     expect(args).toContain("--ignore-user-config");
     expect(args).toContain("--ephemeral");

@@ -7,7 +7,7 @@ const outputSchema = {
   type: "object", properties: { step_json: { type: "string" } },
   required: ["step_json"], additionalProperties: false,
 };
-export const DEFAULT_TUTOR_MODEL = "gpt-6-luna";
+export const DEFAULT_TUTOR_MODEL = "gpt-5.6-luna";
 export interface CodexOptions { binary?: string; model?: string }
 export function codexArgs(dir: string, model = DEFAULT_TUTOR_MODEL) {
   return [
