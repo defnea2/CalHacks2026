@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { IdSchema } from "../shared";
+import { IdSchema, ActivitySpecSchema, SceneCommandSchema, type SceneState } from "../shared";
+import { MathVisualSchema, MathChangeSchema, type MathScene } from "./math/models";
 
 export const ToneSchema = z.enum([
   "sky",
@@ -48,6 +49,10 @@ const PatchSchema = CanvasNodeSchema.omit({ id: true, kind: true })
   })
   .partial();
 export const CanvasCommandSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("show_math"), visual: MathVisualSchema }).strict(),
+  z.object({ type: z.literal("update_math"), id: IdSchema, change: MathChangeSchema }).strict(),
+  z.object({ type: z.literal("show_activity"), sceneId: IdSchema, activity: ActivitySpecSchema }).strict(),
+  z.object({ type: z.literal("activity_command"), command: SceneCommandSchema }).strict(),
   z
     .object({ type: z.literal("clear"), title: z.string().min(1).max(120) })
     .strict(),
@@ -130,6 +135,8 @@ export type VisualBeat = z.infer<typeof VisualBeatSchema>;
 export type BeatInput = z.input<typeof VisualBeatSchema>;
 export interface CanvasState {
   title: string;
+  math: MathScene | null;
+  activity: SceneState | null;
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   highlightedIds: string[];
@@ -138,6 +145,8 @@ export interface CanvasState {
 }
 export const emptyCanvas = (): CanvasState => ({
   title: "Let’s explore an idea",
+  math: null,
+  activity: null,
   nodes: [],
   edges: [],
   highlightedIds: [],
