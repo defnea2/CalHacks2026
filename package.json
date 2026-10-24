@@ -18,7 +18,8 @@
     "check": "npm run typecheck && npm test && npm run build",
     "dev:teaching": "vite --config vite.teaching.config.ts",
     "build:teaching": "tsc --noEmit && vite build --config vite.teaching.config.ts",
-    "test:teaching": "vitest run src/teaching"
+    "test:teaching": "vitest run src/teaching",
+    "test:live-model": "node scripts/smoke-model.mjs"
   },
   "dependencies": {
     "motion": "14.6.0",

@@ -36,16 +36,24 @@ function edgePath(from: CanvasNode, to: CanvasNode) {
 }
 function NodeContent({ node }: { node: CanvasNode }) {
   const { width: w, height: h } = node;
-  if (node.kind === "label")
+  if (node.kind === "label") {
+    let fontSize = 34;
+    let wrapped = lines(node.label, w - 12, fontSize);
+    while (fontSize > 12 && (wrapped.length * fontSize * 1.18 > h - 8 || wrapped.some(line => line.length * fontSize * 0.53 > w - 12))) {
+      fontSize -= 2;
+      wrapped = lines(node.label, w - 12, fontSize);
+    }
+    const lineHeight = fontSize * 1.18;
     return (
-      <text className="canvas-large-label" textAnchor="middle">
-        {lines(node.label, w, 34).map((line, index) => (
-          <tspan key={index} x="0" dy={index === 0 ? 0 : 40}>
+      <text className="canvas-large-label" textAnchor="middle" dominantBaseline="central" style={{ fontSize }}>
+        {wrapped.map((line, index) => (
+          <tspan key={index} x="0" y={(index - (wrapped.length - 1) / 2) * lineHeight}>
             {line}
           </tspan>
         ))}
       </text>
     );
+  }
   if (node.kind === "shape")
     return (
       <>

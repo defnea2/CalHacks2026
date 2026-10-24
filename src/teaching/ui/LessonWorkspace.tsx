@@ -108,9 +108,9 @@ function Lesson({ session, source, onExit }: { session: TeachingSession; source:
       </div>
       <aside className="lesson-conversation" aria-label="Tutor conversation">
         <div className="lesson-turn-label"><span className="lesson-tutor-mark" aria-hidden="true">↗</span><span>{step ? phaseLabels[step.phase] : "Let's begin"}</span><span className="lesson-turn-number">{String(teaching.history.length || 1).padStart(2, "0")}</span></div>
-        <h2 ref={heading} tabIndex={-1} className="lesson-narration">{spoken}</h2>
+        <h2 ref={heading} tabIndex={-1} className="lesson-narration">{spoken || check?.prompt || narration}</h2>
         {waiting && check && <form className="lesson-response" onSubmit={e => { e.preventDefault(); if (answer.trim()) respond({ kind: "answer", text: answer.trim() }); }}>
-          <p className="lesson-question">{check.prompt}</p>
+          {spoken && <p className="lesson-question">{check.prompt}</p>}
           {check.kind === "choice" ? <div className="lesson-choices">{check.options.map((option, i) => <button key={option.id} type="button" onClick={() => respond({ kind: "choice", optionId: option.id })}><span aria-hidden="true">{String.fromCharCode(65+i)}</span>{option.label}<span aria-hidden="true">↗</span></button>)}</div>
             : ["math_value", "placement", "order"].includes(check.kind) ? <><p className="lesson-response-hint">Make your changes in the picture, then share your answer.</p><button className="lesson-primary" type="button" onClick={() => respond({ kind: "interaction" })}>Check my picture →</button></>
               : <><label htmlFor="lesson-answer">Your thinking</label><div className="lesson-answer-row"><input id="lesson-answer" autoComplete="off" maxLength={2000} value={answer} onChange={e => setAnswer(e.target.value)} placeholder={check.kind === "number" ? "A number, or write it in words…" : "Tell me how you see it…"} /><button className="lesson-primary" type="submit" disabled={!answer.trim()} aria-label="Send answer">→</button></div></>}
