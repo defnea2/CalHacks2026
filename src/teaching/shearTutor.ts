@@ -57,7 +57,7 @@ export function httpShearTutor(endpoint = "/api/teaching/shear-feedback", fetche
     const response = await fetcher(endpoint, { method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
     if (!response.ok) {
       let detail = "";
-      try { const value = await response.json(); if (typeof value.error === "string") detail = value.error.slice(0, 600); } catch { /* non-JSON proxy */ }
+      try { const value = (await response.json()) as { error?: unknown }; if (typeof value.error === "string") detail = value.error.slice(0, 600); } catch { /* non-JSON proxy */ }
       throw new Error(detail || `Tutor endpoint returned HTTP ${response.status}.`);
     }
     return response.json();

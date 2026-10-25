@@ -3,7 +3,8 @@
 import { pack } from '@tutor/shared';
 import { Agent } from './agent';
 import { loadConfig } from './env';
-import { createLlm } from './providers';
+import { createLessonLlm, createLlm } from './providers';
+import { TutorRequests } from './tutorRequests';
 import { StdbLink } from './stdb';
 import { teachingOutput } from './teachingOutput';
 
@@ -37,6 +38,7 @@ const link = new StdbLink({
 const agent = new Agent({
   transport: link.transport,
   llm: teachingOutput(llm),
+  lessonLlm: createLessonLlm(cfg),
   pack,
   log,
   opts: {
@@ -45,17 +47,30 @@ const agent = new Agent({
     maxToolRounds: cfg.maxToolRounds,
     recentTurns: cfg.recentTurns,
     toolTimeoutMs: cfg.toolTimeoutMs,
+    replyMode: cfg.replyMode,
   },
 });
+const tutor = TutorRequests.anthropic(link.transport, cfg.anthropicApiKey, cfg.anthropicModel, log);
 
 log(
   `worker: ${modelInfo}, ` +
-    `preemptive ${cfg.preemptive ? `on (${cfg.preemptiveSilenceMs} ms)` : 'off'}, pack ${pack.version}, ${agent.router.tools.length} tools`
+    `preemptive ${cfg.preemptive ? `on (${cfg.preemptiveSilenceMs} ms)` : 'off'}, pack ${pack.version}, ${agent.router.tools.length} tools, ` +
+    `reply mode ${cfg.replyMode}${cfg.replyMode === 'lesson' ? ` (effort ${cfg.lessonEffort})` : ''}`
 );
-link.start(agent);
+link.start(agent, tutor);
+
+// agent_status heartbeat (replaces /api/teaching/status).
+const heartbeat = setInterval(() => {
+  if (!link.transport.conn) return;
+  const busy = [...agent.sessions.values()].filter(s => s.live?.open).length;
+  link.transport
+    .agentHeartbeat({ model: cfg.llmProvider === 'anthropic' ? cfg.anthropicModel : cfg.openrouterModel, provider: cfg.llmProvider, busySessions: busy })
+    .catch(e => log(`heartbeat failed: ${e instanceof Error ? e.message : String(e)}`));
+}, cfg.heartbeatMs);
 
 const shutdown = () => {
   log('worker: shutting down');
+  clearInterval(heartbeat);
   agent.closeAll();
   link.stop();
   setTimeout(() => process.exit(0), 200);

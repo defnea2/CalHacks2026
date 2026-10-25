@@ -19,7 +19,7 @@ import {
 } from './ctx';
 import { onTurnAppended } from './memory';
 import { queueTextSentence } from './text_mode';
-import { onUtteranceEnd } from './pipeline';
+import { hasLessonBeats, onUtteranceEnd } from './pipeline';
 import { ProviderError, synthesize, ttsRequest } from './providers';
 
 const PENDING: SentenceStatus = 'pending';
@@ -237,7 +237,8 @@ export function appendTutorTurn(
   const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
   // The opening reply (OPENING_TURN_IDX) answers no student turn: it goes before all of them.
   const replyToIdx = m && m.turnIdx !== OPENING_TURN_IDX ? m.turnIdx : -1;
-  const text = args.text.trim();
+  // An interrupted lesson records what was actually played (the worker cannot map beats to sentences).
+  const text = (args.interrupted && hasLessonBeats(ctx, args.sessionId, args.utteranceId) ? heardText(ctx, args.sessionId, args.utteranceId) : args.text).trim();
 
   if (m) {
     const answered = findTurn(ctx, args.sessionId, m.turnIdx);

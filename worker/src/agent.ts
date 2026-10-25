@@ -7,6 +7,7 @@
 import { OPENING_TURN_IDX, renderPhaseBlock, VOICE_DEFAULTS, type LessonPack, type LlmProvider, type PhraseStatus, type SentenceStatus, type TurnState, type TurnStatus, buildToolSpecs } from '@tutor/shared';
 import { buildSystemPrompt } from './prompt';
 import { ReplyRun, type ReplyDeps } from './reply';
+import { LessonRun, type LessonDeadlines } from './lesson';
 import { ToolRouter } from './router';
 import { createToolDefs } from './tools/index';
 import type { ToolDef } from './tools/types';
@@ -26,7 +27,16 @@ export interface AgentOptions {
   toolTimeoutMs: number;
   /** Default true. False is reserved for transport tests using scripted prose. */
   verifiedSpeech?: boolean;
+  /** 'lesson' (default): the team's streaming lesson planner (beats via addBeat);
+   *  'tools': the tool-based reply loop (show_board_item(math_canvas), ask_learner, ...). */
+  replyMode?: 'lesson' | 'tools';
+  lessonDeadlines?: Partial<LessonDeadlines>;
+  /** A ready student turn with no utterance after this long (worker failure) is answered again, once. Default 12 s; 0 = off. */
+  stallRetryMs?: number;
 }
+
+/** A tutor reply: the tool loop (ReplyRun) or the lesson planner (LessonRun). */
+export type Run = ReplyRun | LessonRun;
 
 export interface AgentDeps {
   transport: Transport;
@@ -34,6 +44,8 @@ export interface AgentDeps {
   pack: LessonPack;
   opts: AgentOptions;
   log?: (msg: string) => void;
+  /** LLM for lesson mode (own effort setting). Default: llm. */
+  lessonLlm?: LlmProvider;
   /** Override the tool set (tests). Default: the registry joined with the pack's tool specs. */
   tools?: ToolDef[];
   now?: () => number;
@@ -51,7 +63,7 @@ const TRANSCRIBING: PhraseStatus = 'transcribing';
 const CLOSING: TurnStatus = 'closing';
 const DEFAULT_CONTEXT_TTL_MS = 10_000;
 /** Transport calls that change what buildContext returns (board, phase, topic, memory). */
-const MUTATIONS = ['setPhase', 'showBoardItem', 'clearBoard', 'remember', 'setTopic', 'appendTutorTurn'] as const;
+const MUTATIONS = ['setPhase', 'showBoardItem', 'clearBoard', 'remember', 'setTopic', 'appendTutorTurn', 'beginLesson', 'addBeat'] as const;
 
 export class Agent {
   readonly sessions = new Map<bigint, SessionAgent>();
@@ -149,9 +161,11 @@ export class SessionAgent {
   readonly phrases = new Map<number, PhraseRow>();
   readonly sentences = new Map<string, SentenceRow>();
   /** Reply whose output reaches SpacetimeDB. */
-  live?: ReplyRun;
+  live?: Run;
   /** Preemptive reply, output held in memory. */
-  held?: ReplyRun;
+  held?: Run;
+  private stallTimer?: ReturnType<typeof setTimeout>;
+  private readonly stallRetried = new Set<number>();
   /** Highest student turn idx a reply was started for. */
   handledIdx = -1;
   /** Estimated end of the student's latest speech (local clock). For a phrase-final chunk
@@ -283,6 +297,7 @@ export class SessionAgent {
 
   close(): void {
     this.closed = true;
+    clearTimeout(this.stallTimer);
     this.clearPreemptTimer();
     this.held?.discard('session ended');
     this.held = undefined;
@@ -353,7 +368,7 @@ export class SessionAgent {
     if (this.live?.open) this.live.interrupt('newer student turn');
     const held = this.held;
     this.held = undefined;
-    let run: ReplyRun;
+    let run: Run;
     if (held && held.open && held.turnIdx === turn.idx && held.transcript === turn.text) {
       run = held;
       run.release(true);
@@ -366,6 +381,31 @@ export class SessionAgent {
     if (run.imageIncluded) this.imageSent = true;
     else void run.done.then(() => run.imageIncluded && (this.imageSent = true));
     this.live = run;
+    this.armStallWatchdog(turn);
+  }
+
+  /** Worker-failure watchdog: the turn is still the latest, still unanswered and no utterance is
+   *  speaking for it after stallRetryMs -> answer it again (once per turn). */
+  private armStallWatchdog(turn: TurnRow): void {
+    const ms = this.agent.deps.opts.stallRetryMs ?? 12_000;
+    clearTimeout(this.stallTimer);
+    if (!ms || this.stallRetried.has(turn.idx)) return;
+    this.stallTimer = setTimeout(() => {
+      this.stallTimer = undefined;
+      const latest = this.latestTurn();
+      if (this.closed || !this.row?.active || !latest || latest.idx !== turn.idx || latest.status !== READY) return;
+      if (this.row.currentUtteranceId !== 0n || [...this.turns.values()].some(t => t.role !== STUDENT && t.idx > turn.idx)) return;
+      if (this.live?.open && this.live.llmActive && this.live.turnIdx === turn.idx && this.liveBegan()) return;
+      this.stallRetried.add(turn.idx);
+      this.log(`t${turn.idx} stalled: no utterance after ${ms} ms, answering again`);
+      if (this.live?.open) this.live.interrupt('stall retry');
+      this.live = this.newRun(latest, false);
+    }, ms);
+  }
+
+  /** The live run's utterance reached SpacetimeDB (the session row names it). */
+  private liveBegan(): boolean {
+    return !!this.live && this.row?.currentUtteranceId === this.live.utteranceId;
   }
 
   private armPreemptive(turn: TurnRow): void {
@@ -395,8 +435,22 @@ export class SessionAgent {
     this.preemptTimer = undefined;
   }
 
-  private newRun(turn: { idx: number; text: string }, held: boolean, opening = false): ReplyRun {
+  private newRun(turn: { idx: number; text: string }, held: boolean, opening = false): Run {
     const a = this.agent;
+    if ((a.deps.opts.replyMode ?? 'lesson') === 'lesson') {
+      return new LessonRun(
+        { transport: this.transport(), llm: a.deps.lessonLlm ?? a.deps.llm, log: a.log, now: a.now, deadlines: a.deps.opts.lessonDeadlines },
+        {
+          sessionId: this.id,
+          turnIdx: turn.idx,
+          opening,
+          transcript: turn.text,
+          utteranceId: a.nextUtteranceId(),
+          wantImage: !this.imageSent && !!this.row?.hasImage,
+          held,
+        }
+      );
+    }
     const deps: ReplyDeps = {
       transport: this.transport(),
       llm: a.deps.llm,

@@ -105,6 +105,9 @@ describe('beginLesson + addBeat', () => {
     expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 999n, meta: JSON.stringify(miniMeta) })).toThrow(/not current/);
     expect(() => addBeat(e, 0)).toThrow(/beginLesson first/);
     call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: U, meta: JSON.stringify(miniMeta) });
+    // Repair round: re-planning before anything was spoken replaces the plan; after a beat it is refused.
+    call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: U, meta: JSON.stringify(miniMeta) });
+    addBeat(e, 0);
     expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: U, meta: JSON.stringify(miniMeta) })).toThrow(/already has a lesson/);
     expect(() => call(e.h, e.client, mod.addBeat, { sessionId: e.s.id, utteranceId: U, idx: 0, ...momentArgs(0) })).toThrow(/agent only/);
   });

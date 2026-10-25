@@ -51,6 +51,12 @@ export interface WorkerConfig {
   recentTurns: number;
   toolTimeoutMs: number;
   tokenFile: string;
+  /** lesson (team streaming planner, default) | tools (tool loop with show_board_item). */
+  replyMode: 'lesson' | 'tools';
+  /** output_config.effort for lesson mode (default low: measured faster, same rejection rate). */
+  lessonEffort: 'low' | 'medium' | 'high';
+  /** Worker heartbeat period (agent_status). */
+  heartbeatMs: number;
 }
 
 const bool = (v: string | undefined, d: boolean) => (v === undefined || v === '' ? d : !/^(0|false|off|no)$/i.test(v));
@@ -83,5 +89,8 @@ export function loadConfig(): WorkerConfig {
     recentTurns: num(env.RECENT_TURNS, WORKER_DEFAULTS.RECENT_TURNS),
     toolTimeoutMs: num(env.TOOL_TIMEOUT_MS, WORKER_DEFAULTS.TOOL_TIMEOUT_MS),
     tokenFile: env.AGENT_TOKEN_FILE || path.join(WORKER_DIR, '.agent-token'),
+    replyMode: env.REPLY_MODE === 'tools' ? 'tools' : 'lesson',
+    lessonEffort: (['low', 'medium', 'high'].includes(env.LESSON_EFFORT ?? '') ? env.LESSON_EFFORT : 'low') as WorkerConfig['lessonEffort'],
+    heartbeatMs: num(env.HEARTBEAT_MS, 5000),
   };
 }
