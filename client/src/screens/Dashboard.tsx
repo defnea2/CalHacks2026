@@ -164,7 +164,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
     }
   };
   const updatedMs = summary ? tsMs(summary.updatedAt) : null;
-  const next = nextLabel(now, { running: refreshing || !!state?.running, impersonating: !!observing, nextDueMs: state ? tsMs(state.nextDueAt) : null, lastError: state?.lastError ?? '' });
+  const next = !cls?.active ? '' : nextLabel(now, { running: refreshing || !!state?.running, impersonating: !!observing, nextDueMs: state ? tsMs(state.nextDueAt) : null, lastError: state?.lastError ?? '' });
 
   // ------------------------------------------------------------ end class
   const [confirmEnd, setConfirmEnd] = useState(false);
@@ -248,7 +248,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
 
       {tab === 'groups' ? (
         <div className="db-rows" data-testid="cluster-grid">
-          {students.size === 0 && <p className="pr-note">No students in this class yet. Students who are waiting join when a class starts.</p>}
+          {students.size === 0 && <p className="pr-note">{cls.active ? 'No students in this class yet. Students who are waiting join when a class starts.' : 'This class has ended. The students are back in the waiting room.'}</p>}
           {rows.map((row, i) => (
             <div key={i} className="db-row" data-testid="cluster-row" data-sizes={row.map(c => c.learnerIds.length).join('+')}>
               {row.map(c => (
@@ -365,7 +365,7 @@ function AllSessions({ order, students, clusterOf, onObserve }: { order: string[
               <td>{s.stage}</td>
               <td>{s.session.turnState || '—'}</td>
               <td>{s.turns}</td>
-              <td className="db-last">{s.lastIn || s.lastOut || '—'}</td>
+              <td className="db-last"><span>{s.lastIn || s.lastOut || '—'}</span></td>
               <td style={{ textAlign: 'right' }}>
                 <button className="pr-secondary" data-testid="observe-student-row" onClick={() => onObserve(id)}>Observe</button>
               </td>

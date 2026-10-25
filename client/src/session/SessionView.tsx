@@ -455,7 +455,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
           {readOnly && (
             <footer className="stage-controls">
               <div className="stage-presence">
-                <TutorAvatar state={avatarState} size={40} />
+                <TutorAvatar state={avatarState} size={46} />
                 <span className="stage-status" role="status" data-testid="stage-status">{stateLabel}</span>
               </div>
             </footer>
@@ -463,7 +463,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
           {!readOnly && (
             <footer className="stage-controls">
               <div className="stage-presence">
-                <TutorAvatar state={avatarState} level={avatarLevel} size={48} />
+                <TutorAvatar state={avatarState} level={avatarLevel} size={58} />
                 <span className="stage-status" role="status" data-testid="stage-status">{stateLabel}</span>
               </div>
               <div className="voice-control">

@@ -50,28 +50,28 @@ export function TutorAvatar({ state, level, size = 56, label }: TutorAvatarProps
   return (
     <div
       ref={el}
-      className="tutor-avatar"
+      className="tf-avatar"
       data-testid="tutor-avatar"
       data-state={state}
       style={{ width: size, height: size }}
       role="img"
       aria-label={label ?? `Tutor is ${state === 'idle' ? 'here' : state}`}
     >
-      <span className="tutor-halo" aria-hidden="true" />
+      <span className="tf-halo" aria-hidden="true" />
       <svg viewBox="0 0 100 100" aria-hidden="true">
         {/* sprout */}
-        <path className="tutor-sprout" d="M50 16 C50 9 54 5 60 4 C60 10 56 14 50 16 Z M50 16 C49 11 45 8 40 8 C41 13 45 16 50 16 Z" />
-        <circle className="tutor-body" cx="50" cy="56" r="38" />
-        <circle className="tutor-cheek" cx="27" cy="66" r="5" />
-        <circle className="tutor-cheek" cx="73" cy="66" r="5" />
-        <g className="tutor-eyes">
-          <ellipse className="tutor-eye" cx="37" cy="51" rx="5" ry="6.5" />
-          <ellipse className="tutor-eye" cx="63" cy="51" rx="5" ry="6.5" />
+        <path className="tf-sprout" d="M50 16 C50 9 54 5 60 4 C60 10 56 14 50 16 Z M50 16 C49 11 45 8 40 8 C41 13 45 16 50 16 Z" />
+        <circle className="tf-body" cx="50" cy="56" r="38" />
+        <circle className="tf-cheek" cx="27" cy="66" r="5" />
+        <circle className="tf-cheek" cx="73" cy="66" r="5" />
+        <g className="tf-eyes">
+          <ellipse className="tf-eye" cx="37" cy="51" rx="5" ry="6.5" />
+          <ellipse className="tf-eye" cx="63" cy="51" rx="5" ry="6.5" />
         </g>
-        <path className="tutor-smile" d="M39 67 Q50 76 61 67" />
-        <ellipse className="tutor-mouth" cx="50" cy="69" rx="8" ry="6" />
+        <path className="tf-smile" d="M39 67 Q50 76 61 67" />
+        <ellipse className="tf-mouth" cx="50" cy="69" rx="10" ry="8" />
       </svg>
-      <span className="tutor-dots" aria-hidden="true"><i /><i /><i /></span>
+      <span className="tf-dots" aria-hidden="true"><i /><i /><i /></span>
     </div>
   );
 }
