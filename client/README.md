@@ -24,7 +24,7 @@ Subscriptions are narrow: a session tab subscribes to `session WHERE id = X`, `l
 
 Every value of `VOICE_DEFAULTS` and `PLAYBACK_DEFAULTS` (`@tutor/shared`) can be overridden with a lower-case query parameter, for example `?vad_turn_ms=900&barge_in_threshold=0.8&sentence_pause_ms=150`. So can the client-only knobs in `src/config.ts` (`vad_candidate_gap_ms`, `vad_hysteresis`, `noise_floor_max_prob`, `playback_gap_timeout_ms`, `playback_lead_ms`, `vad_model=v5|legacy`).
 
-SpacetimeDB: `VITE_SPACETIME_URI` / `VITE_SPACETIME_DB` (defaults `ws://127.0.0.1:3000`, `tutor`), overridable with `?uri=` and `?db=`. Other params: `?debug=0` hides the debug panel, `?theme=dark|light`. UI copy lives in `src/app-config.ts`.
+SpacetimeDB: `VITE_SPACETIME_URI` / `VITE_SPACETIME_DB` (defaults `ws://127.0.0.1:3000`, `voice-tutor`), overridable with `?uri=` and `?db=`. Other params: `?debug=0` hides the debug panel, `?theme=dark|light`. UI copy lives in `src/app-config.ts`.
 
 ## Voice pipeline
 

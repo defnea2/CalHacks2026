@@ -53,6 +53,6 @@ export function loadSettings(search: string, env: Record<string, string | undefi
     playback: overrideNumbers({ ...PLAYBACK_DEFAULTS } as PlaybackSettings, params),
     client: overrideNumbers({ ...CLIENT_DEFAULTS }, params),
     spacetimeUri: params.get('uri') ?? env.VITE_SPACETIME_URI ?? 'ws://127.0.0.1:3000',
-    spacetimeDb: params.get('db') ?? env.VITE_SPACETIME_DB ?? 'tutor',
+    spacetimeDb: params.get('db') ?? env.VITE_SPACETIME_DB ?? 'voice-tutor',
   };
 }

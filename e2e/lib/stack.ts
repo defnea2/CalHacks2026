@@ -42,7 +42,7 @@ export async function freePort(from: number): Promise<number> {
 if (!process.env.PATH?.includes(path.dirname(SPACETIME))) process.env.PATH = `${path.dirname(SPACETIME)}:${process.env.PATH}`;
 
 export function publish(o: StackOptions): void {
-  if (o.db === 'tutor') throw new Error('refusing to publish to the live database "tutor"');
+  if (o.db === 'tutor' || o.db === 'voice-tutor') throw new Error(`refusing to publish to the live database "${o.db}"`);
   const keys = loadKeys();
   const env = {
     ...process.env,

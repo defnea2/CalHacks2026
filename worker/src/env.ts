@@ -60,7 +60,7 @@ export function loadConfig(): WorkerConfig {
   };
   return {
     spacetimeUri: env.SPACETIME_URI || 'ws://127.0.0.1:3000',
-    spacetimeDb: env.SPACETIME_DB || 'tutor',
+    spacetimeDb: env.SPACETIME_DB || 'voice-tutor',
     agentSecret: env.AGENT_SECRET ?? '',
     openrouterApiKey: env.OPENROUTER_API_KEY ?? '',
     openrouterModel: env.OPENROUTER_MODEL ?? '',

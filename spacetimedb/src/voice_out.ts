@@ -177,8 +177,20 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
   const utteranceId = session.currentUtteranceId;
   if (utteranceId === 0n && session.turnState === LISTENING) return; // nothing to interrupt
   if (utteranceId !== 0n) {
-    for (const s of utteranceSentences(ctx, sessionId, utteranceId)) {
+    const sentences = utteranceSentences(ctx, sessionId, utteranceId);
+    for (const s of sentences) {
       if (s.status === PENDING || s.status === READY) ctx.db.replySentence.id.update({ ...s, status: DROPPED });
+    }
+    // The worker usually appends the tutor turn as soon as the LLM finishes, before playback
+    // ends. Then the turn must be corrected to what the student actually heard.
+    const tutorTurn = tutorTurnFor(ctx, sessionId, utteranceId);
+    if (tutorTurn) {
+      const heard = sentences
+        .filter(s => s.status === PLAYED)
+        .sort((a, b) => a.idx - b.idx)
+        .map(s => s.display)
+        .join(' ');
+      ctx.db.turn.id.update({ ...tutorTurn, interrupted: true, text: heard });
     }
   }
   ctx.db.playbackFlush.insert({ sessionId, utteranceId });

@@ -113,6 +113,22 @@ describe('turn closing', () => {
     expect(session(h, s.id).turnState).toBe('thinking');
   });
 
+  it('reportNoise right after a turn that became ready at once lands on that turn (no phantom row)', () => {
+    const { h, client, s } = start();
+    call(h, client, mod.pushAudio, { sessionId: s.id, phraseId: 1, seq: 0, pcm: pcm(300), final: true });
+    runStt(h, sttOk('yes'));
+    call(h, client, mod.endTurn, { sessionId: s.id });
+    call(h, client, mod.reportNoise, { sessionId: s.id, noiseDb: -47.5 });
+    const rows = [...h.db.turnMetrics.sessionId.filter(s.id)];
+    expect(rows.map(r => [r.turnIdx, r.noiseDb])).toEqual([[0, -47.5]]);
+  });
+
+  it('reportNoise before any student turn is ignored', () => {
+    const { h, client, s } = start();
+    call(h, client, mod.reportNoise, { sessionId: s.id, noiseDb: -60 });
+    expect([...h.db.turnMetrics.sessionId.filter(s.id)]).toEqual([]);
+  });
+
   it('speech after endTurn but before ready reopens the same turn', () => {
     const { h, client, s } = start();
     call(h, client, mod.pushAudio, { sessionId: s.id, phraseId: 1, seq: 0, pcm: pcm(300), final: true });

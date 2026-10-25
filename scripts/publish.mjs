@@ -16,7 +16,7 @@ const moduleEnv = {
 };
 for (const k of ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS']) if (env[k]) moduleEnv[k] = env[k];
 
-const db = env.SPACETIME_DB || 'tutor';
+const db = env.SPACETIME_DB || 'voice-tutor';
 // SPACETIME_SERVER=maincloud publishes to SpacetimeDB's hosted cloud (needs `spacetime login`).
 const server = env.SPACETIME_SERVER || 'local';
 if (server !== 'local' && (!env.STT_BASE_URL || /^https?:\/\/(127\.|localhost)/.test(env.STT_BASE_URL))) {

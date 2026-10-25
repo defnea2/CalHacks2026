@@ -125,6 +125,21 @@ describe('interrupt', () => {
     expect(session(h, s.id).turnState).toBe('listening');
   });
 
+  it('interrupt after the tutor turn was appended marks it interrupted and keeps only heard sentences', () => {
+    const { h, agent, client, s } = ready();
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 21n, replyToIdx: 0, preemptive: false });
+    for (let i = 0; i < 3; i++) call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 21n, idx: i, display: `S${i}.`, speech: `S${i}.` });
+    runTts(h, ttsOk);
+    // The LLM finished: the worker appends the full text before playback ends.
+    call(h, agent, mod.appendTutorTurn, { sessionId: s.id, utteranceId: 21n, text: 'S0. S1. S2.', interrupted: false });
+    call(h, client, mod.markPlayed, { sessionId: s.id, utteranceId: 21n, idx: 0 });
+    call(h, client, mod.interrupt, { sessionId: s.id });
+    const tutor = turns(h, s.id).find(t => t.role === 'tutor')!;
+    expect(tutor.interrupted).toBe(true);
+    expect(tutor.text).toBe('S0.');
+    expect(sentences(h, 21n).map(x => x.status)).toEqual(['played', 'dropped', 'dropped']);
+  });
+
   it('a sentence dropped while TTS is in flight is not emitted', () => {
     const { h, agent, client, s } = ready();
     call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 4n, replyToIdx: 0, preemptive: false });
