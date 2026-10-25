@@ -27,6 +27,7 @@ import { shouldStartConversation } from '../lib/conversation';
 import { latestUtteranceBeats, orderBeats, parseScene, playbackOver, revealCount, withoutUnheard } from '../lesson/beatPlayer';
 import { parseNotes } from '@tutor/visual/teaching/spacetimeModel';
 import { LessonCanvas } from './LessonCanvas';
+import { PhotoButton } from './PhotoButton';
 import { useTextPlayback } from './useTextPlayback';
 import { useAgentStatus } from './useAgentStatus';
 import { STAGE_LABELS } from './stages';
@@ -491,6 +492,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
                   </Button>
                 )}
               </div>
+              {active && <PhotoButton conn={conn} sessionId={sessionId} pending={!!session?.pendingPhoto} />}
               {active && (
                 <form
                   className="stage-compose"
