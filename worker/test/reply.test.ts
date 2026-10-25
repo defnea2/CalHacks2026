@@ -139,6 +139,7 @@ describe('reply', () => {
     const llm = new FakeLlm(() => [tool(TOOL_NAMES.setTopic, { category }), done]);
     const { transport, logs } = await answer(llm);
     expect(llm.calls).toHaveLength(3); // first call + 2 tool rounds
+    expect(llm.calls.map(c => c.tools.length > 0)).toEqual([true, true, false]); // last round must speak
     expect(transport.of('setTopic')).toHaveLength(3);
     expect(logs.some(l => l.includes('max tool rounds'))).toBe(true);
   });

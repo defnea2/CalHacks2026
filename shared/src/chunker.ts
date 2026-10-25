@@ -23,6 +23,9 @@ const CONJUNCTIONS = new Set([
 /** Terminal punctuation run, optional closing quotes/brackets, then whitespace and a lookahead char. */
 const BOUNDARY = /[.!?…]+["'”’)\]]*(?=\s+(\S))|\n+(?=\s*(\S))/g;
 
+/** Emitted pieces: trimmed, inner whitespace (incl. newlines) collapsed. */
+const tidy = (s: string) => s.trim().replace(/\s+/g, ' ');
+
 function countWords(s: string): number {
   const m = s.trim().match(/\S+/g);
   return m ? m.length : 0;
@@ -100,7 +103,7 @@ export class SentenceChunker {
       if (end < 0) break;
       const sentence = this.buf.slice(0, end).trim();
       this.buf = this.buf.slice(end).replace(/^\s+/, '');
-      out.push(...this.splitLong(sentence));
+      out.push(...this.splitLong(sentence).map(tidy));
     }
     // Rare fallback: a sentence that runs on without terminal punctuation.
     if (countWords(this.buf) > this.maxWords) {
@@ -108,7 +111,7 @@ export class SentenceChunker {
       if (pieces.length > 1) {
         // The last piece is still growing; keep it (with its trailing whitespace) in the buffer.
         this.buf = pieces.pop()!;
-        out.push(...pieces);
+        out.push(...pieces.map(tidy));
       }
     }
     return out;
@@ -126,7 +129,7 @@ export class SentenceChunker {
   flush(): string[] {
     const s = this.buf.trim();
     this.buf = '';
-    return s ? this.splitLong(s) : [];
+    return s ? this.splitLong(s).map(tidy) : [];
   }
 
   /** End offset of the first confirmed boundary whose piece has >= minWords words, or -1. */

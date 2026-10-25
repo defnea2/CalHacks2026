@@ -229,7 +229,11 @@ export class ReplyRun {
         let text = '';
         const calls: ToolResult['call'][] = [];
         const results: Promise<ToolResult>[] = [];
-        const stream = this.deps.llm.stream({ messages: this.history, tools: this.deps.router.specs(), signal: this.abort.signal });
+        // Last allowed round: offer no tools, so the model has to speak (it otherwise tends to
+        // chain tool-only rounds and the student hears nothing).
+        const last = round >= this.deps.maxToolRounds && round > 0;
+        const tools = last ? [] : this.deps.router.specs();
+        const stream = this.deps.llm.stream({ messages: this.history, tools, signal: this.abort.signal });
         for await (const ev of stream) {
           if (this.aborted) break;
           if (ev.type === 'text') {

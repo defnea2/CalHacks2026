@@ -129,6 +129,10 @@ describe('SentenceChunker', () => {
     expect(c.flushComplete()).toEqual(['Wait for 3.']);
   });
 
+  it('collapses newlines and extra spaces inside a piece', () => {
+    expect(chunk('Does that make sense?\n\nLet us see it as a picture.')).toEqual(['Does that make sense? Let us see it as a picture.']);
+  });
+
   it('respects custom limits', () => {
     expect(chunk('Yes. No. Maybe.', 2, { minWords: 1 })).toEqual(['Yes.', 'No.', 'Maybe.']);
   });
