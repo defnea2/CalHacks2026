@@ -41,6 +41,8 @@ interface Scheduled {
 export class PlaybackQueue {
   private orderer: SentenceOrderer<AudioBlockIn>;
   private scheduled: Scheduled[] = [];
+  /** Start triggers of all-silent blocks (nothing to play, but markPlayed must still happen). */
+  private silent = new Set<{ utteranceId: bigint; timer: ReturnType<typeof setTimeout> }>();
   private nextStart = 0;
   private gain: GainNode;
   /** Output level for the tutor avatar (absent on fake contexts in tests). */
@@ -93,6 +95,11 @@ export class PlaybackQueue {
   flush(utteranceId?: bigint, reason = 'flush'): void {
     const all = !utteranceId || utteranceId === 0n;
     this.orderer.flush(utteranceId);
+    for (const x of [...this.silent]) {
+      if (!all && x.utteranceId !== utteranceId) continue;
+      clearTimeout(x.timer);
+      this.silent.delete(x);
+    }
     let stopped = 0;
     this.scheduled = this.scheduled.filter(s => {
       if (!all && s.utteranceId !== utteranceId) return true;
@@ -147,6 +154,7 @@ export class PlaybackQueue {
     const [s, e] = trimRange(ints, this.cfg.TRIM_SILENCE_LEVEL);
     if (e <= s) {
       eventLog.log('audio.empty', { utteranceId: b.utteranceId.toString(), idx: b.idx });
+      this.scheduleSilent(b);
       return;
     }
     const samples = applyFades(int16ToFloat(ints.subarray(s, e)), sampleRate, this.cfg.FADE_MS);
@@ -187,6 +195,19 @@ export class PlaybackQueue {
       trimmedEnd: ints.length - e,
     });
     this.updatePlaying(true);
+  }
+
+  /** An all-silent block plays nothing, but its sentence still "starts" in its slot (markPlayed,
+   *  captions, reveal), or the server would wait for it forever and the session never listens. */
+  private scheduleSilent(b: SentenceBlock<AudioBlockIn>): void {
+    const now = this.ctx.currentTime;
+    const startAt = Math.max(now + this.client.PLAYBACK_LEAD_MS / 1000, this.nextStart);
+    const entry = { utteranceId: b.utteranceId, timer: undefined as unknown as ReturnType<typeof setTimeout> };
+    entry.timer = setTimeout(() => {
+      this.silent.delete(entry);
+      this.cb.onSentenceStart?.(b.utteranceId, b.idx, { startMs: performance.now(), durationMs: 0, trimStartMs: 0, wordStartsMs: [], wordEndsMs: [] });
+    }, Math.max(0, (startAt - now) * 1000));
+    this.silent.add(entry);
   }
 
   private watchStart(item: Scheduled): void {

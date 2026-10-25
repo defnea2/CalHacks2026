@@ -168,4 +168,16 @@ describe('audio-clock visual triggers', () => {
     expect(onStart.mock.calls[0]!.slice(0, 2)).toEqual([7n, 1]);
     q.destroy();
   });
+  it('an all-silent block still starts its sentence (markPlayed), and flush cancels that', () => {
+    const { q, onStart } = harness();
+    q.push({ utteranceId: 7n, idx: 0, sampleRate: 24000, pcm: new Uint8Array(4800) }); // zeros: trimmed to nothing
+    vi.advanceTimersByTime(50);
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(onStart.mock.calls[0]!.slice(0, 2)).toEqual([7n, 0]);
+    q.push({ utteranceId: 8n, idx: 0, sampleRate: 24000, pcm: new Uint8Array(4800) });
+    q.flush(8n);
+    vi.advanceTimersByTime(50);
+    expect(onStart).toHaveBeenCalledTimes(1);
+    q.destroy();
+  });
 });
