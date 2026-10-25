@@ -62,7 +62,9 @@ function vadAssets(): Plugin {
 
 export default defineConfig({
   envDir: '..',
-  resolve: { dedupe: ['react', 'react-dom'] },
+  // The team's UI (repo-root src/: app, teaching, presentation, visuals, interactions, visual-math)
+  // is part of this one static build under the alias @tutor/visual (folder names unchanged).
+  resolve: { dedupe: ['react', 'react-dom', 'zod', 'motion', 'mafs', 'katex'], alias: { '@tutor/visual': join(here, '..', 'src') } },
   plugins: [vadAssets(), react(), tailwindcss()],
   // Team canvas deps pre-bundled too: a mid-session re-optimisation reloads the page (E2E flake).
   optimizeDeps: { include: ['@ricky0123/vad-web', 'onnxruntime-web/wasm', 'katex', 'mafs', 'motion/react'] },

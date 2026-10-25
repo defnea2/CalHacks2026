@@ -43,7 +43,7 @@ export function App({ settings }: { settings: AppSettings }) {
   }, [route, status]);
 
   return (
-    <div className={`min-h-screen ${route.name === 'session' ? 'studio-app' : ''}`}>
+    <div className={`min-h-screen ${route.name === 'session' || route.name === 'observe' ? 'studio-app' : ''}`}>
       <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <a
@@ -57,6 +57,7 @@ export function App({ settings }: { settings: AppSettings }) {
             {APP_CONFIG.pageTitle}
           </a>
           <nav className="flex items-center gap-3 text-sm">
+            <a href="?lesson" data-testid="nav-lesson" className="text-muted-foreground hover:text-foreground">Lesson lab</a>
             <a href="?canvasPreview" className="text-muted-foreground hover:text-foreground">Test canvas</a>
             <a
               data-testid="nav-overview"
@@ -76,7 +77,7 @@ export function App({ settings }: { settings: AppSettings }) {
           </nav>
         </div>
       </header>
-      <main className={route.name === 'session' ? 'studio-main' : 'mx-auto max-w-6xl px-4 py-6'}>
+      <main className={route.name === 'session' || route.name === 'observe' ? 'studio-main' : 'mx-auto max-w-6xl px-4 py-6'}>
         {status === 'error' ? (
           <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Cannot reach SpacetimeDB at {settings.spacetimeUri} / {settings.spacetimeDb}: {error}

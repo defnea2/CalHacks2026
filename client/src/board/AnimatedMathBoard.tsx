@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { TeachingCanvas } from '../../../src/presentation/TeachingCanvas';
-import { SpeechCanvasPlayer, type SpeechCanvasItem, type StartedSentences } from '../../../src/presentation/voice/SpeechCanvasPlayer';
+import { TeachingCanvas } from '@tutor/visual/presentation/TeachingCanvas';
+import { SpeechCanvasPlayer, type SpeechCanvasItem, type StartedSentences } from '@tutor/visual/presentation/voice/SpeechCanvasPlayer';
 import type { RendererProps } from './types';
 
 export function AnimatedMathBoard({ items, started, interactive = false }: {

@@ -159,6 +159,18 @@ export class VoiceSession {
     }
   }
 
+  get capturing(): boolean {
+    return this.capture !== null;
+  }
+
+  /** Microphone off, tutor audio keeps playing (typing student in a voice session). */
+  async stopCapture(): Promise<void> {
+    const c = this.capture;
+    this.capture = null;
+    await c?.stop();
+    this.o.onUi({ listening: false, speaking: false });
+  }
+
   async stop(): Promise<void> {
     if (this.stopped) return;
     this.stopped = true;
