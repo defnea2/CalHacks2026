@@ -56,6 +56,9 @@ export class StdbTransport implements Transport {
   async beginUtterance(a: Parameters<Transport['beginUtterance']>[0]) {
     return this.c().reducers.beginUtterance(a);
   }
+  async beginOpening(a: Parameters<Transport['beginOpening']>[0]) {
+    return this.c().reducers.beginOpening(a);
+  }
   async addSentence(a: Parameters<Transport['addSentence']>[0]) {
     return this.c().reducers.addSentence(a);
   }
