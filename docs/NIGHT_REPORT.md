@@ -35,8 +35,27 @@ Routes: `/` entry (student or teacher) · `?student` · `?wait=<id>` waiting roo
 | 8 | `night/dashboard-watchdog` | `3ff724a` | Dashboard refresh recovers by itself after a crash (backup job) | `git revert -m 1 3ff724a` |
 | 9 | `night/docs` | `b776f79` | `docs/ARCHITECTURE.md` (diagrams, every table/reducer, why it's SpacetimeDB-idiomatic), `docs/SERVICES.md`, README rewrite, `docs/DEMO.md` | `git revert -m 1 b776f79` |
 | 10 | `night/config-fixes` | `3ec0a70` | STT default = Cartesia batch `ink-whisper` (the local ink-2 proxy can't be reached from procedures); OpenRouter optional; `.env.example` cleaned | `git revert -m 1 3ec0a70` |
-| 12 | `night/demo-seed` | (see git log) | Demo users Ava Chen, Sam Rivera, Priya Patel; teachers Ms. Park, Mr. Alvarez; copy-paste tasks + class setups in `docs/DEMO.md`; `voice-tutor` DB published + seeded | `git revert -m 1 <sha>` |
+| 12 | `night/demo-seed` | `5566987` | Demo users Ava Chen, Sam Rivera, Priya Patel; teachers Ms. Park, Mr. Alvarez; copy-paste tasks + class setups in `docs/DEMO.md`; `voice-tutor` DB published + seeded | `git revert -m 1 <sha>` |
 | 11 | `night/lesson-2min` | `983c230` | Can's rigid 2-minute arc (default `LESSON_ARC=demo2min`): authored lead-in → visualized explanation → formalization (equation on its sentence) → one task → hand back (one repair if needed). Explanation 8–11 s, formalization 21–32 s, task 33–49 s after the click; worst case ~90 s. Topic prefetch + library index (no added latency), `interruptUtterance` (barge-in in the last sentence), E2E lesson-mode timeouts. Its E2E run 1: 8/8 | `git revert -m 1 983c230` (or set `LESSON_ARC=adaptive`) |
+
+
+### Morning wave (2026-10-25, 06:30–08:00) — same rules: one `--no-ff` merge per branch on `main`
+
+| # | Branch | Merge commit | What it does | Undo |
+|---|---|---|---|---|
+| 13 | `night/pitch` | `0458f8f` | `docs/PITCH.md`: 60 s / 3 min pitch, "Why SpacetimeDB" with sourced numbers, judge Q&A | `git revert -m 1 0458f8f` |
+| 14 | `night/seed-data` | `c16806d` | `seedMemory` reducer (agent-only) + seeded memory for Ava/Sam/Priya; `scripts/simulate.mjs`; optional reset of simulated students (`startClassSessionWith`, `resetSimulatedStudents`, checkbox + button in teacher setup) | `git revert -m 1 c16806d` |
+| 15 | `night/insights-module` | `86ba70e` | `learnerInsights` procedure (teacher-gated, optional `INSIGHTS_KEY`), contract `shared/src/insights.ts` | `git revert -m 1 86ba70e` (revert 16 first) |
+| 16 | `night/insights-ui` | `33420e0` | Teacher-only **Student profile**: dashboard "Profile" drawer + `?profile=<id>&as=<teacherId>`; notes in plain words, mastery, past sessions; privacy guard test | `git revert -m 1 33420e0` |
+| 17 | `night/judging-docs` | `50b4add` | README "For judges", `docs/JUDGING.md` (per-track evidence, repo map), `docs/DEVPOST.md` draft; secret scan of history clean | `git revert -m 1 50b4add` |
+| 18 | `night/demo-polish` | `d2a81e7` | Rehearsal fixes: beats appear when their sentence plays (no lesson spoiler in voice mode), unheard beats dropped after barge-in, debug/observer layout; 54 rehearsal screenshots | `git revert -m 1 d2a81e7` |
+| 19 | `night/robustness` | `d021332` | Risk-review fixes: orphaned phrase no longer blocks a session, worker resets state on reconnect, interrupted → listening, superseded utterance dropped, crash guard, "Tap for sound" | `git revert -m 1 d021332` |
+
+**Not merged, waiting for a decision:** `night/lesson-quality` (deterministic task guards: homework repeat by numbers, one correct option, answer not visible; equivalent-fraction grading; "Say" instead of "Type"; opening first beat +1.5 s) and `night/pushback` (confirmation before big jumps: "Are you sure I should tell you the answer?", skipping ahead; off-topic steer-back; tested as a student in text mode, transcripts in `docs/pushback-test/`).
+
+**Final state `d021332`:** 627 unit tests green (teaching 52, shared 157, module 147, client 161, worker 110), typecheck clean, static client build. Full E2E **8/8 PASS**, 0 external flakes; turn end → first audio p50 3.44 s (min 2.87, max 5.09; the 06:25 run had p50 2.75 s — a dev stack and an agent worker ran alongside, not yet isolated); "Start talking" → opening audio p50 1.27 s.
+
+**Incident 07:07:** the shared SpacetimeDB server died because the disk was full (`No space left on device`). 26 finished agent worktrees removed (all pushed), server restarted 07:25 with the same data; demo data intact. Keep ≥ 10 GB free.
 
 Small direct commits on `night/integration`: night plan / contract docs, `164eda5` (e2e smoke typecheck fix), this report.
 
