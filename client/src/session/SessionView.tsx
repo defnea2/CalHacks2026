@@ -50,9 +50,9 @@ interface CheckView {
   options: { id: string; label: string }[];
 }
 
+/** The open check: lesson_state.notes.check (public view, no answer key) or checkPrompt. */
 function checkOf(notes: ReturnType<typeof parseNotes>, prompt: string): CheckView | null {
-  const step = notes.step as { check?: { kind?: string; prompt?: string; options?: { id: string; label: string }[] } | null } | undefined;
-  const c = step?.check;
+  const c = notes.check as { kind?: string; prompt?: string; options?: { id: string; label: string }[] } | null | undefined;
   if (c && typeof c.prompt === 'string') return { kind: c.kind ?? 'explanation', prompt: c.prompt, options: Array.isArray(c.options) ? c.options : [] };
   return prompt ? { kind: 'explanation', prompt, options: [] } : null;
 }
@@ -88,25 +88,27 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
   const listening = !!voice?.capturing && ui.listening;
 
   const { progress, serverOver } = useUtteranceState(data, readOnly ? EMPTY_STARTED : localStarted);
-  const mode: 'voice' | 'text' = session?.voice === false ? 'text' : 'voice';
+  const mode: 'voice' | 'typed' = session?.voice === false ? 'typed' : 'voice';
 
   // ------------------------------------------------------------ lesson rows → canvas
   const beats = useMemo(() => orderBeats(data.beats), [data.beats]);
   const latest = useMemo(() => latestUtteranceBeats(beats), [beats]);
-  const text = useTextPlayback(latest, mode === 'text' && !readOnly, reducedMotion);
+  const text = useTextPlayback(latest, mode === 'typed' && !readOnly, reducedMotion);
   const started = useMemo(() => {
     const m = new Map<string, number[]>();
     for (const s of data.sentences) if (s.status === PLAYED) m.set(s.utteranceId.toString(), [...(m.get(s.utteranceId.toString()) ?? []), s.idx]);
     if (!readOnly) for (const [u, idx] of localStarted) m.set(u, [...new Set([...(m.get(u) ?? []), ...idx])]);
     return m;
   }, [data.sentences, localStarted, readOnly]);
-  const shownCount = revealCount({ beats, started, over: serverOver, mode: readOnly && mode === 'text' ? 'voice' : mode, textShown: text.shown });
+  const shownCount = revealCount({ beats, started, over: serverOver, mode: readOnly && mode === 'typed' ? 'voice' : mode, textShown: text.shown });
   // Observer of a text session: the module marks sentences played after their reading time.
-  const count = readOnly && mode === 'text' ? Math.max(shownCount, revealCount({ beats, started, over: () => true, mode: 'voice', textShown: 0 })) : shownCount;
+  const count = readOnly && mode === 'typed' ? Math.max(shownCount, revealCount({ beats, started, over: () => true, mode: 'voice', textShown: 0 })) : shownCount;
   const fallback = useMemo(() => parseScene(data.canvasState?.scene), [data.canvasState?.scene]);
   const current = beats[count - 1];
   const notes = useMemo(() => parseNotes(data.lessonState), [data.lessonState]);
+  /** Planner status (needs_plan | presenting | awaiting_response | completed); the label is the step's phase. */
   const stage = data.lessonState?.stage || '';
+  const phase = notes.phase ?? '';
   const awaiting = !!data.lessonState?.awaitingResponse && session?.turnState !== 'thinking';
   const check = awaiting ? checkOf(notes, data.lessonState?.checkPrompt ?? '') : null;
   const thinking = session?.turnState === 'thinking';
@@ -122,7 +124,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
     st.turnState = session?.turnState ?? '';
     st.category = session?.category ?? '';
     st.concept = session?.concept ?? '';
-    st.lesson = { mode, stage, awaiting, beats: beats.length, shown: count, agentOnline: agent.online };
+    st.lesson = { mode, stage, phase, awaiting, beats: beats.length, shown: count, agentOnline: agent.online };
     st.boardItems = data.boardItems.map(b => ({ id: b.id.toString(), idx: b.idx, kind: b.kind, visible: b.visible, utteranceId: b.utteranceId.toString(), sentenceIdx: b.sentenceIdx, markerPos: b.markerPos, answerState: b.answerState }));
     if (readOnly) {
       st.flushes = flushes;
@@ -135,7 +137,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
     st.phrases = data.phrases.map(p => ({ phraseId: p.phraseId, turnIdx: p.turnIdx, status: p.status, text: p.text }));
     st.sentences = data.sentences.map(s => ({ utteranceId: s.utteranceId.toString(), idx: s.idx, status: s.status, display: s.display }));
     st.localLatencyMs = [...localLatency.values()];
-  }, [readOnly, sessionId, data, session, ui, localLatency, flushes, mode, stage, awaiting, beats.length, count, agent.online]);
+  }, [readOnly, sessionId, data, session, ui, localLatency, flushes, mode, stage, phase, awaiting, beats.length, count, agent.online]);
 
   // Observer: count playback flushes (E2E barge-in checks).
   useEffect(() => {
@@ -192,7 +194,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
 
   /** Tutor audio needs an AudioContext from a user gesture: created on the first click/send. */
   const ensureAudio = useCallback((): VoiceSession | null => {
-    if (readOnly || !settings || mode === 'text') return voiceRef.current;
+    if (readOnly || !settings || mode === 'typed') return voiceRef.current;
     if (voiceRef.current) return voiceRef.current;
     const v = new VoiceSession({
       conn,
@@ -264,7 +266,11 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
     if (!r.ok) setError(r.error ?? 'Could not send.');
     return r.ok;
   };
-  const sendInteraction = (kind: string, payload: unknown) => {
+  /** submitInteraction kinds (module): math_action | activity_action (payload = the team action),
+   *  choice ({optionId}), submit ({}). Choice/submit are assessed by the module, which then submits the turn. */
+  const sendInteraction = (kind: 'math_action' | 'activity_action' | 'choice' | 'submit', payload: unknown) => {
+    setError('');
+    ensureAudio();
     const args = { sessionId, kind, payload: JSON.stringify(payload) };
     void callReducer('submitInteraction', args, () => conn.reducers.submitInteraction(args)).then(r => {
       if (!r.ok) eventLog.log('ui.interaction_rejected', { kind, error: r.error ?? '' });
@@ -292,16 +298,21 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
     [speechOf]
   );
 
-  const shownBeatSentences = useMemo(() => new Set(beats.slice(0, count).map(b => `${b.utteranceId}:${b.sentenceIdx}`)), [beats, count]);
-  const beatSentences = useMemo(() => new Set(beats.map(b => `${b.utteranceId}:${b.sentenceIdx}`)), [beats]);
+  // Text mode: a beat's narration may span several sentences (from beat.sentenceIdx up to the next
+  // beat's); captions of the latest utterance stop before the first beat not yet on the canvas.
+  const hiddenFrom = useMemo(() => {
+    const next = beats[count];
+    return next && mode === 'typed' && !readOnly ? { utteranceId: next.utteranceId, idx: next.sentenceIdx } : null;
+  }, [beats, count, mode, readOnly]);
   const tutorShown = useCallback(
     (s: ReplySentence) => {
-      const k = `${s.utteranceId}:${s.idx}`;
-      if (s.status === PLAYED || (!readOnly && (localStarted.get(s.utteranceId.toString()) ?? []).includes(s.idx))) return true;
-      if (mode !== 'text' || s.status === DROPPED) return false;
-      return beatSentences.has(k) ? shownBeatSentences.has(k) : s.status !== 'pending';
+      if (mode === 'typed' && !readOnly) {
+        if (s.status === DROPPED || s.status === 'pending') return false;
+        return !hiddenFrom || s.utteranceId !== hiddenFrom.utteranceId || s.idx < hiddenFrom.idx;
+      }
+      return s.status === PLAYED || (!readOnly && (localStarted.get(s.utteranceId.toString()) ?? []).includes(s.idx));
     },
-    [readOnly, localStarted, mode, beatSentences, shownBeatSentences]
+    [readOnly, localStarted, mode, hiddenFrom]
   );
 
   if (data.error) return <ErrorNote>Subscription failed: {data.error}</ErrorNote>;
@@ -313,12 +324,13 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
     );
   }
 
-  const canvasInteractive = !readOnly && active && session?.turnState === 'listening' && !ui.tutorAudio;
-  const stateLabel = !active ? 'Finished' : ui.tutorAudio ? 'Speaking' : thinking ? 'Thinking' : session?.turnState === SPEAKING ? 'Speaking' : listening ? 'Listening' : readOnly ? 'Observing' : mode === 'text' ? 'Your turn' : 'Microphone off';
+  // The module accepts manipulations only while a check is open (otherwise the local picture would drift from canvas_state).
+  const canvasInteractive = !readOnly && active && awaiting && session?.turnState === 'listening' && !ui.tutorAudio;
+  const stateLabel = !active ? 'Finished' : ui.tutorAudio ? 'Speaking' : thinking ? 'Thinking' : session?.turnState === SPEAKING ? 'Speaking' : listening ? 'Listening' : readOnly ? 'Observing' : mode === 'typed' ? 'Your turn' : 'Microphone off';
   const narration = current?.narration ?? '';
   const spoken = check && narration.endsWith(check.prompt) ? narration.slice(0, -check.prompt.length).trim() : narration;
   const hasBoard = data.boardItems.some(b => b.visible);
-  const presenting = mode === 'text' && !readOnly && latest.length > 0 && text.shown > 0;
+  const presenting = mode === 'typed' && !readOnly && latest.length > 0 && text.shown > 0;
 
   return (
     <div
@@ -342,7 +354,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
           {narration && <h2 data-testid="lesson-narration" className="stage-narration">{spoken || check?.prompt || narration}</h2>}
           <div className="lesson-picture">
             {beats.length ? (
-              <LessonCanvas beats={beats} count={count} run={text.run} fallback={fallback} interactive={canvasInteractive} onInteraction={sendInteraction} />
+              <LessonCanvas beats={beats} count={count} run={text.run} fallback={fallback} interactive={canvasInteractive} onInteraction={(kind, action) => sendInteraction(kind === 'math' ? 'math_action' : 'activity_action', action)} />
             ) : hasBoard ? (
               <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={readOnly ? undefined : submitAnswer} markerAt={readOnly ? undefined : markerAt} allowCanvasInteraction={canvasInteractive} />
             ) : (
@@ -370,7 +382,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
               <div className="voice-control">
                 {!active ? (
                   <Button size="lg" onClick={() => navigate(homeUrl())}>Start another question</Button>
-                ) : mode === 'text' ? null : !listening ? (
+                ) : mode === 'typed' ? null : !listening ? (
                   <Button size="lg" data-testid="start-talking" onClick={startTalking} disabled={starting || !active}>
                     <MicIcon />
                     {starting ? 'Starting…' : APP_CONFIG.startButtonText}
@@ -408,7 +420,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
         </section>
         <aside id={`lesson-conversation-${sessionId}`} className="lesson-conversation" hidden={!conversationOpen} aria-label="Conversation">
           <div className="conversation-heading">
-            <h2 data-testid="lesson-stage" data-stage={stage}>{STAGE_LABELS[stage] ?? 'Conversation'}</h2>
+            <h2 data-testid="lesson-stage" data-stage={stage} data-phase={phase}>{STAGE_LABELS[phase] ?? 'Conversation'}</h2>
             <span>{data.learner?.name || 'You'} + tutor</span>
           </div>
           <Captions data={data} tutorShown={tutorShown} />
@@ -424,7 +436,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
               {check.kind === 'choice' && check.options.length ? (
                 <div className="lesson-choices">
                   {check.options.map((o, i) => (
-                    <button key={o.id} type="button" data-testid="choice-option" data-option-id={o.id} onClick={() => void sendTurn(o.label, '')}>
+                    <button key={o.id} type="button" data-testid="choice-option" data-option-id={o.id} onClick={() => sendInteraction('choice', { optionId: o.id })}>
                       <span aria-hidden="true">{String.fromCharCode(65 + i)}</span>
                       {o.label}
                       <span aria-hidden="true">↗</span>
@@ -436,10 +448,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
                   className="lesson-primary"
                   type="button"
                   data-testid="check-picture"
-                  onClick={() => {
-                    sendInteraction('check_picture', { canvas: fallback });
-                    void sendTurn('Check my picture.', '');
-                  }}
+                  onClick={() => sendInteraction('submit', {})}
                 >
                   Check my picture →
                 </button>

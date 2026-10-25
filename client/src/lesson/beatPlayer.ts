@@ -49,7 +49,7 @@ export interface RevealInput {
   started: ReadonlyMap<string, readonly number[]>;
   /** The utterance is over (tutor turn written, or no longer current). */
   over: (utteranceId: bigint) => boolean;
-  mode: 'voice' | 'text';
+  mode: 'voice' | 'typed';
   /** Text mode: beats shown of the latest utterance (cursor + 1). */
   textShown: number;
 }
@@ -61,7 +61,7 @@ export function revealCount({ beats, started, over, mode, textShown }: RevealInp
   let n = 0;
   for (const b of beats) {
     let shown: boolean;
-    if (mode === 'text') shown = b.utteranceId !== latest || b.idx < textShown;
+    if (mode === 'typed') shown = b.utteranceId !== latest || b.idx < textShown;
     else shown = over(b.utteranceId) || b.sentenceIdx < 0 || (started.get(b.utteranceId.toString()) ?? []).includes(b.sentenceIdx);
     if (!shown) break;
     n++;

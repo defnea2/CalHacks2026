@@ -1,16 +1,21 @@
 // SpacetimeDB planning adapter: the team's PlanningModel contract over SpacetimeDB rows.
 //
-// Trigger  = a reducer call (submitTextTurn with an intent, submitInteraction, startConversation).
+// Trigger  = a reducer call (submitTextTurn with an intent, submitInteraction choice/submit,
+//            startConversation).
 // Response = the session's `beat` rows of the NEXT tutor utterance (one row per complete moment,
-//            compiled + validated by the module), its step metadata from `lesson_state`, and its
-//            end (the tutor `turn` row of that utterance). Abort = `interrupt`.
-// See docs/CONTRACT-night.md section 1 and client/README.md "Team lesson over SpacetimeDB".
+//            compiled + validated by the module) and the step the module accepts at the final beat
+//            (public view in `lesson_state.notes`). A tutor turn that ends without an accepted step
+//            is an error. Abort = `interrupt`.
+// The module is authoritative (assessment, evidence, answer keys). A TeachingSession on this
+// adapter presents the lesson; its local assessment uses placeholder answer keys and is not
+// meaningful — the product screen (client SessionView) reads lesson_state instead.
+// See docs/CONTRACT-night.md sections 1 and 4.
 //
 // Pure TypeScript: `LessonFeed` is the seam (unit tests use a fake; `connectionFeed` wraps a
 // generated DbConnection structurally, so this file never imports client bindings).
 import { z } from "zod";
 import type { PlanningModel, PlanningRequest } from "./TeachingPlanner";
-import { PhaseSchema, TeachingStepSchema, type TeachingStep } from "./contracts";
+import { PhaseSchema, TeachingStepSchema, type TeachingCheck, type TeachingStep } from "./contracts";
 import { VisualBeatSchema, type VisualBeat } from "../presentation/contracts";
 import { blueprintOf } from "./streaming";
 
@@ -102,39 +107,63 @@ export function contiguousBeats(beats: readonly BeatRowLike[], utteranceId: bigi
   return out;
 }
 
-const StepMetaSchema = z.object(TeachingStepSchema.shape).omit({ beats: true }).partial();
-type StepMeta = Omit<TeachingStep, "beats">;
-const NotesSchema = z.object({ step: z.unknown().optional(), utteranceId: z.union([z.string(), z.number()]).optional(), error: z.string().optional() }).passthrough();
+// lesson_state.notes (night/pipeline, spacetimedb/src/pipeline.ts publishState): the accepted step's
+// public view. The check comes without its answer key (the module assesses).
+const PublicCheckSchema = z.object({ kind: z.string(), prompt: z.string() }).passthrough();
+const NotesSchema = z.object({
+  stepId: z.string().nullable().optional(),
+  phase: z.string().nullable().optional(),
+  learningGoal: z.string().nullable().optional(),
+  approach: z.string().nullable().optional(),
+  beatCount: z.number().optional(),
+  check: PublicCheckSchema.nullable().optional(),
+}).passthrough();
+export type LessonNotes = z.infer<typeof NotesSchema>;
 
-export function parseNotes(state: LessonStateLike | undefined): z.infer<typeof NotesSchema> {
+export function parseNotes(state: LessonStateLike | undefined): LessonNotes {
   try { return NotesSchema.parse(JSON.parse(state?.notes || "{}")); } catch { return {}; }
 }
 
-/** Step metadata for an utterance: `lesson_state.notes.step` when the module provides it,
- *  otherwise derived from stage + checkPrompt (best effort, always schema-valid with the beats). */
-export function stepMeta(state: LessonStateLike | undefined, utteranceId: bigint, lastNarration?: string): StepMeta {
-  const fromNotes = StepMetaSchema.safeParse(parseNotes(state).step);
-  const notes = fromNotes.success ? fromNotes.data : {};
-  const stage = PhaseSchema.safeParse(notes.phase ?? state?.stage);
-  const prompt = state?.checkPrompt?.trim() ?? "";
-  let check = notes.check !== undefined ? notes.check : prompt ? { kind: "explanation" as const, prompt, rubric: ["Explains the idea in their own words."] } : null;
-  // The final beat must speak the check; known only once the utterance is complete.
-  if (check && lastNarration !== undefined && !lastNarration.includes(check.prompt)) check = null;
-  let phase = stage.success ? stage.data : "intuition";
-  if (!check && ["diagnose", "repair", "solo", "transfer"].includes(phase)) phase = "intuition";
-  if (phase === "return_to_problem" && check) phase = "intuition";
-  const needsExample = ["worked_example", "solo", "transfer"].includes(phase);
-  return {
-    id: notes.id ?? `step-${utteranceId}`,
-    phase,
-    learningGoal: notes.learningGoal ?? "Understand the idea in the picture.",
-    approach: phase === "return_to_problem" ? "handoff" : notes.approach && notes.approach !== "handoff" ? notes.approach : "continue",
-    rationale: notes.rationale ?? "Planned by the tutor.",
-    ...(notes.exampleProblem || needsExample ? { exampleProblem: notes.exampleProblem ?? "The example in the picture." } : {}),
-    check,
-    evidenceToObserve: notes.evidenceToObserve ?? ["The learner's response to the picture."],
-    assessment: notes.assessment ?? null,
-  };
+const ASSESSED = "tutor-assessed";
+/** The team TeachingCheck for a public check. The answer key stays in the module; the client-side
+ *  fields it needs for schema validity are placeholders, so client-side assessment is not meaningful
+ *  (the authoritative evidence is `lesson_state.evidence`). */
+export function checkFromPublic(input: unknown): TeachingCheck | null {
+  const c = PublicCheckSchema.safeParse(input);
+  if (!c.success) return null;
+  const v = c.data as Record<string, unknown> & { kind: string; prompt: string };
+  const zero = { operation: "value" as const, value: 0 };
+  switch (v.kind) {
+    case "choice": {
+      const options = Array.isArray(v.options) ? (v.options as { id: string; label: string }[]) : [];
+      return options.length >= 2 ? { kind: "choice", prompt: v.prompt, options, correctOptionId: options[0]!.id } : null;
+    }
+    case "number": return { kind: "number", prompt: v.prompt, rule: zero };
+    case "math_value": return { kind: "math_value", prompt: v.prompt, visualId: String(v.visualId), field: v.field as never, ...(v.itemId ? { itemId: String(v.itemId) } : {}), rule: zero };
+    case "placement": return { kind: "placement", prompt: v.prompt, sceneId: String(v.sceneId), objectId: String(v.objectId), containerId: ASSESSED };
+    case "order": return { kind: "order", prompt: v.prompt, sceneId: String(v.sceneId), objectIds: [`${ASSESSED}-1`, `${ASSESSED}-2`] };
+    default: return { kind: "explanation", prompt: v.prompt, rubric: ["Assessed by the tutor."] };
+  }
+}
+
+/** The accepted step of an utterance as the team TeachingStep (metadata from lesson_state.notes). */
+export function stepFromRows(state: LessonStateLike | undefined, beats: VisualBeat[]): TeachingStep {
+  const notes = parseNotes(state);
+  const phase = PhaseSchema.safeParse(notes.phase);
+  const p = phase.success ? phase.data : "intuition";
+  const approach = z.enum(["introduce", "continue", "simplify", "change_representation", "hint", "challenge", "handoff"]).safeParse(notes.approach);
+  return TeachingStepSchema.parse({
+    id: notes.stepId ?? `step-${Date.now()}`,
+    phase: p,
+    learningGoal: notes.learningGoal || "Understand the idea in the picture.",
+    approach: approach.success ? approach.data : p === "return_to_problem" ? "handoff" : "continue",
+    rationale: "Planned by the tutor.",
+    ...(["worked_example", "solo", "transfer"].includes(p) ? { exampleProblem: "The example in the picture." } : {}),
+    beats,
+    check: checkFromPublic(notes.check),
+    evidenceToObserve: ["The learner's response to the picture."],
+    assessment: null,
+  });
 }
 
 // ---------------------------------------------------------------- request → trigger
@@ -142,7 +171,7 @@ export function stepMeta(state: LessonStateLike | undefined, utteranceId: bigint
 export type LessonTrigger =
   | { kind: "start" }
   | { kind: "text"; text: string; intent: LessonIntent }
-  | { kind: "interaction"; interaction: string; payload: string; text: string };
+  | { kind: "interaction"; interaction: "choice" | "submit"; payload: string };
 
 /** Which reducer call a planning request stands for. `sent` holds the evidence/context ids
  *  already submitted by this model instance (a retry never duplicates a learner turn). */
@@ -153,13 +182,9 @@ export function triggerFor(request: PlanningRequest, sent: ReadonlySet<string>):
     const r = latest.response;
     const key = latest.eventId;
     if (r.kind === "answer") return { key, trigger: { kind: "text", text: r.text, intent: "" } };
-    if (r.kind === "choice") {
-      const check = context.currentStep?.check;
-      const label = check?.kind === "choice" ? check.options.find(o => o.id === r.optionId)?.label : undefined;
-      return { key, trigger: { kind: "text", text: label ?? r.optionId, intent: "" } };
-    }
-    if (r.kind === "interaction")
-      return { key, trigger: { kind: "interaction", interaction: "check_picture", payload: JSON.stringify({ stepId: latest.stepId, canvas: context.canvas }), text: "Check my picture." } };
+    // The module assesses choices and pictures itself, then submits the learner turn.
+    if (r.kind === "choice") return { key, trigger: { kind: "interaction", interaction: "choice", payload: JSON.stringify({ optionId: r.optionId }) } };
+    if (r.kind === "interaction") return { key, trigger: { kind: "interaction", interaction: "submit", payload: "{}" } };
     return { key, trigger: { kind: "text", text: "", intent: HELP_INTENTS[r.request] ?? "continue" } };
   }
   const spoken = context.session.context.at(-1);
@@ -185,7 +210,10 @@ const knownUtterances = (s: LessonFeedSnapshot) => {
   return max;
 };
 
-/** PlanningModel over a LessonFeed: trigger, then follow the next utterance's rows. */
+/** PlanningModel over a LessonFeed: trigger, then follow the next utterance's rows.
+ *  The module accepts a streamed lesson as a whole at its final beat (the step metadata becomes
+ *  public in lesson_state then), so the blueprint and the beats are reported in arrival order at
+ *  that moment, followed by the complete step. */
 export function createFeedPlanningModel(feed: LessonFeed, options: SpacetimeModelOptions = {}): PlanningModel {
   const sent = new Set<string>();
   const firstBeatMs = options.firstBeatTimeoutMs ?? 60_000;
@@ -193,14 +221,14 @@ export function createFeedPlanningModel(feed: LessonFeed, options: SpacetimeMode
   return (request, signal, onProgress) => new Promise<unknown>((resolve, reject) => {
     if (signal?.aborted) { reject(signal.reason ?? new Error("Planning cancelled.")); return; }
     // Everything up to here belongs to earlier replies; the answer is the first newer utterance.
-    const baseline = knownUtterances(feed.snapshot());
+    const start = feed.snapshot();
+    const baseline = knownUtterances(start);
+    const baselineStep = parseNotes(start.lessonState).stepId ?? null;
     let target: bigint | null = null;
-    let emitted = 0;
-    let meta: StepMeta | null = null;
-    const beats: VisualBeat[] = [];
+    let seen = 0;
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const arm = (ms: number) => { if (timer) clearTimeout(timer); timer = setTimeout(() => finish(new Error(emitted ? "The lesson stopped arriving. Try again." : "The tutor did not answer. Check that the worker is running, then try again.")), ms); };
+    const arm = (ms: number) => { if (timer) clearTimeout(timer); timer = setTimeout(() => finish(new Error(seen ? "The lesson stopped arriving. Try again." : "The tutor did not answer. Check that the worker is running, then try again.")), ms); };
     const finish = (error: Error | null, value?: unknown) => {
       if (settled) return;
       settled = true;
@@ -225,34 +253,22 @@ export function createFeedPlanningModel(feed: LessonFeed, options: SpacetimeMode
           target = next;
         }
         const rows = contiguousBeats(snap.beats, target);
+        if (rows.length > seen) { seen = rows.length; arm(stallMs); }
         const notes = parseNotes(snap.lessonState);
-        if (notes.error && (notes.utteranceId === undefined || String(notes.utteranceId) === String(target)) && rows.length === 0)
-          throw new Error(notes.error);
-        while (emitted < rows.length) {
-          const row = rows[emitted]!;
-          const beat = beatRowToVisual(row);
-          if (emitted === 0) {
-            // Frozen at the first beat: the completed step must match the announced blueprint.
-            meta = stepMeta(snap.lessonState, target);
-            const opening = { ...meta, beats: [beat] } as TeachingStep;
-            onProgress?.({ type: "blueprint", blueprint: { ...blueprintOf(opening), open: true } });
-          }
-          beats.push(beat);
-          onProgress?.({ type: "beat", index: emitted, beat });
-          emitted++;
-          arm(stallMs);
+        const accepted = rows.length > 0 && !!notes.stepId && notes.stepId !== baselineStep && notes.beatCount === rows.length;
+        if (accepted) {
+          const beats = rows.map(beatRowToVisual);
+          const step = stepFromRows(snap.lessonState, beats);
+          onProgress?.({ type: "blueprint", blueprint: { ...blueprintOf(step), open: true } });
+          beats.forEach((beat, index) => onProgress?.({ type: "beat", index, beat }));
+          finish(null, step);
+          return;
         }
         const turn = snap.tutorTurns.find(t => t.utteranceId === target);
         const moved = snap.session !== undefined && snap.session.currentUtteranceId !== target && snap.session.currentUtteranceId !== 0n;
-        if (turn || moved || (snap.session && !snap.session.active)) {
-          if (!beats.length) throw new Error(turn?.interrupted ? "The explanation was interrupted before its picture." : "The tutor answered without a picture.");
-          const all = contiguousBeats(snap.beats, target);
-          if (all.length > emitted) return; // wait: late rows of a finished utterance
-          const last = beats.at(-1)!.narration;
-          // A check announced later than the first beat is honoured only if it is still consistent.
-          const finalMeta = meta ?? stepMeta(snap.lessonState, target, last);
-          finish(null, TeachingStepSchema.parse({ ...finalMeta, beats }));
-        }
+        if (turn || moved || (snap.session && !snap.session.active))
+          throw new Error(!rows.length ? (turn?.interrupted ? "The explanation was interrupted before its picture." : "The tutor answered without a picture.")
+            : turn?.interrupted ? "The explanation was interrupted." : "The tutor could not finish this lesson. Try again.");
       } catch (error) {
         finish(error instanceof Error ? error : new Error(String(error)));
       }
@@ -268,7 +284,7 @@ export function createFeedPlanningModel(feed: LessonFeed, options: SpacetimeMode
         : feed.submitTextTurn(request.context.session.originalQuestion || request.context.session.topic, "")
       : trigger.kind === "text"
         ? feed.submitTextTurn(trigger.text, trigger.intent)
-        : feed.submitInteraction(trigger.interaction, trigger.payload).then(() => feed.submitTextTurn(trigger.text, ""));
+        : feed.submitInteraction(trigger.interaction, trigger.payload);
     call.then(pump, error => finish(error instanceof Error ? error : new Error(String(error))));
   });
 }

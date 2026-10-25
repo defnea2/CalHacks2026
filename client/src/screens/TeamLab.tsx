@@ -15,7 +15,6 @@ import type { Learner, Session } from '../module_bindings/types';
 import type { AppSettings } from '../config';
 import { callReducer, subscribe, useConnection } from '../stdb/connection';
 import { useAgentStatus } from '../session/useAgentStatus';
-import { sessionUrl } from '../lib/format';
 
 type Cb = (...args: any[]) => void;
 interface Watchable<R> {
@@ -69,8 +68,18 @@ export async function startLiveLesson(conn: DbConnection, input: { topic: string
   const session = await waitForRow<Session>(conn, [`SELECT * FROM session WHERE learner_id = ${lid}`], conn.db.session, rows =>
     rows.filter(s => s.learnerId === lid && s.active).sort((a, b) => (a.id > b.id ? -1 : 1))[0]
   );
+  // The lab is the typed lesson: text mode (no STT/TTS, local playback controls).
+  const voiceArgs = { sessionId: session.id, voice: false };
+  await callReducer('setSessionVoice', voiceArgs, () => conn.reducers.setSessionVoice(voiceArgs));
+  const params = new URLSearchParams(window.location.search);
+  for (const k of ['lesson', 'adapter', 'learner', 'harness']) params.delete(k);
+  params.set('session', session.id.toString());
+  const link = `${window.location.pathname}?${params}`;
+  // Default: the one session screen (server-authoritative lesson UI). ?lesson&adapter=1 keeps the
+  // team's Lesson UI on createSpacetimePlanningModel (its local assessment is not meaningful).
+  if (!new URLSearchParams(window.location.search).has('adapter')) return { sessionId: session.id.toString(), link };
   const model = createSpacetimePlanningModel(conn, session.id);
-  return { model, sessionId: session.id.toString(), link: sessionUrl('session', session.id), close: model.close };
+  return { model, sessionId: session.id.toString(), link, close: model.close };
 }
 
 function usePlanning(conn: DbConnection | null): LessonPlanning | undefined {

@@ -28,8 +28,8 @@ describe('revealCount', () => {
     expect(revealCount({ beats, started: new Map(), over: () => true, mode: 'voice', textShown: 0 })).toBe(4);
   });
   it('text: earlier utterances fully, the latest up to the local cursor', () => {
-    expect(revealCount({ beats, started: new Map(), over: () => false, mode: 'text', textShown: 2 })).toBe(3);
-    expect(revealCount({ beats, started: new Map(), over: () => false, mode: 'text', textShown: 0 })).toBe(1);
+    expect(revealCount({ beats, started: new Map(), over: () => false, mode: 'typed', textShown: 2 })).toBe(3);
+    expect(revealCount({ beats, started: new Map(), over: () => false, mode: 'typed', textShown: 0 })).toBe(1);
   });
   it('reading time follows the team formula and its bounds', () => {
     expect(readingMs('a b')).toBe(2500);

@@ -16,7 +16,8 @@ export interface LessonPlanning {
   /** Connection line (the client reads the worker heartbeat row `agent_status`). */
   status: string;
   online: boolean;
-  start(input: { topic: string; originalQuestion: string; age: number }): Promise<{ model: PlanningModel; sessionId: string; link?: string; close?(): void }>;
+  /** Without `model` the host shows the lesson itself: the workspace opens `link`. */
+  start(input: { topic: string; originalQuestion: string; age: number }): Promise<{ model?: PlanningModel; sessionId: string; link?: string; close?(): void }>;
 }
 
 const subjects = [
@@ -66,7 +67,8 @@ export function LessonWorkspace({ planning }: { planning?: LessonPlanning } = {}
       setStarting(true);
       try {
         const opened = await planning.start({ topic: config.topic, originalQuestion: config.originalQuestion, age });
-        ({ model, sessionId } = opened);
+        if (!opened.model) { if (opened.link) window.location.assign(opened.link); return; }
+        ({ model, sessionId } = opened as { model: PlanningModel; sessionId: string });
         connection = { link: opened.link, close: opened.close };
       } catch (error) {
         setSetupError(error instanceof Error ? error.message : "Could not start the live lesson.");

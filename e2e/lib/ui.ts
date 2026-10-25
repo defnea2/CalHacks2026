@@ -34,7 +34,7 @@ export async function createSessionViaUi(page: Page, baseUrl: string, learnerNam
   const id = await page.$eval(tid('session-screen'), el => el.getAttribute('data-session-id'));
   if (!id) throw new Error('session-screen without data-session-id');
   // Voice sessions show the microphone button, text sessions (?voice=0) only the text input.
-  await until(page, 'session ready', 15_000, () => window.__tutor?.state?.sessionReady === true && !!document.querySelector('[data-testid="start-talking"]:not([disabled]), [data-mode="text"] [data-testid="text-input"]'));
+  await until(page, 'session ready', 15_000, () => window.__tutor?.state?.sessionReady === true && !!document.querySelector('[data-testid="start-talking"]:not([disabled]), [data-mode="typed"] [data-testid="text-input"]'));
   return id;
 }
 

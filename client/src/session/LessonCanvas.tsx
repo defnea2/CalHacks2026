@@ -15,7 +15,7 @@ export interface LessonCanvasProps {
   run?: number;
   fallback: CanvasState | null;
   interactive: boolean;
-  /** A learner manipulation the canvas accepted (forwarded to submitInteraction). */
+  /** A learner manipulation the local canvas accepted: the team action, forwarded to submitInteraction. */
   onInteraction?: (kind: 'math' | 'activity', payload: unknown) => void;
 }
 
@@ -49,11 +49,11 @@ export function LessonCanvas({ beats, count, run = 0, fallback, interactive, onI
           interactionEnabled={interactive && player.director.canInteract()}
           onMathAction={(action: MathAction) => {
             const e = player.interactMath(action);
-            if (e) onInteraction?.('math', { action: e.action, scene: e.scene });
+            if (e) onInteraction?.('math', e.action);
           }}
           onActivityAction={(action: LearnerAction) => {
             const e = player.interactActivity(action);
-            if (e) onInteraction?.('activity', e);
+            if (e) onInteraction?.('activity', action);
           }}
         />
       )}

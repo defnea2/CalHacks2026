@@ -82,7 +82,7 @@ Inline markers: the tutor writes `⟦b1⟧` in its text where an item belongs an
 | `learner-active-session`, `learner-new-session` | | pick user |
 | `create-user-form`, `create-name`, `create-age`, `create-grade`, `create-style`, `create-submit` | | pick user |
 | `start-form`, `task-text`, `photo-input`, `text-mode`, `start-session` | | pick user, after choosing a learner without an active session (`text-mode`: checkbox, session starts with `voice = false`) |
-| `session-screen` / `observer-screen` | `data-session-id`, `data-mode` = voice / text | |
+| `session-screen` / `observer-screen` | `data-session-id`, `data-mode` = voice / typed | |
 | `lesson-canvas` | `data-beats` (rows in play order), `data-shown` (on the canvas) | session, observer (contains `.teaching-canvas`) |
 | `lesson-narration`, `lesson-stage` (`data-stage`), `lesson-thinking`, `agent-status` (`data-online`) | | session, observer |
 | `text-form`, `text-input`, `text-send`, `intent-another_way`, `intent-smaller_step`, `intent-continue`, `intent-demonstrate`, `lesson-help`, `stage-status` | | session |
