@@ -45,6 +45,15 @@ procedure refreshDashboard(classSessionId: u64) -> string                    // 
   `'in_session'` when it starts its own session. `clientDisconnected` sets every learner whose
   presence was written from that connection to `offline` (simulated learners excepted). Online =
   `waiting` or `in_session`.
+- **Late joiners.** While a class session is active, a real student whose `setPresence(id,
+  'waiting')` arrives later (waiting room opened after the start, or "wait for my teacher" from an
+  ad-hoc session) is linked into the active class at once, by the same path as the start (new
+  linked session, previous session ended, voice/text mode kept, presence `in_session`); the waiting
+  room jumps to it as usual. Several active classes (several teachers): the newest. A student
+  already in a session of an active class is not moved (re-asserting `waiting` is idempotent).
+  Decision: an explicit ad-hoc session started during a class (`in_session`, "learn by myself")
+  stays ad-hoc: the student chose to learn alone; only `waiting` joins. Module-written `waiting`
+  (after `endClassSession`) does not re-link; the client's next `setPresence('waiting')` does.
 - **startClassSession.** Ends the teacher's previous active class session, inserts the class
   session (+ `class_document` for an image), then moves EVERY online real student (`waiting` or
   `in_session`, ad-hoc or another class) into a new session linked to it; their previous session
@@ -97,11 +106,18 @@ procedure refreshDashboard(classSessionId: u64) -> string                    // 
   refreshes (button returns `{"ok":false,"skipped":"impersonating"}`); the scheduled job is consumed
   without rescheduling. `setImpersonation(id, 0)`: if `nextDueAt` has passed, the refresh runs now;
   otherwise at `nextDueAt`.
-- **LLM call.** ONE Haiku 5.5 call per refresh (effort low, max 6000 tokens) with the teacher's
-  goals/content/delivery and, per active student: name, age, grade, style, phase, topic, tutor
-  state, lesson state, board, canvas, up to 8 memory notes, last 16 turns. Output schema:
-  `{classSummary, clusters: [{name, description, learnerIds}]}`. The prompt states the size rule and
-  the allowed size combinations for the class (e.g. 6 → `4+2 or 2+2+2`).
+- **LLM call.** ONE Haiku 5.5 call per refresh (effort `low`, env `DASHBOARD_EFFORT` =
+  low|medium|high; max 6000 tokens) with the teacher's goals/content/delivery and, per active
+  student: name, age, grade, style, phase, topic, tutor state, lesson state, board, canvas, up to 8
+  memory notes, last 16 turns. Output schema: `{classSummary, clusters: [{name, description,
+  learnerIds}]}`. The prompt states the size rule and the allowed size combinations for the class
+  (e.g. 6 → `4+2 or 2+2+2`).
+- **Names in prose, ids only in `learnerIds`.** Student blocks are headed by name (no id); one
+  roster line `learnerId: name` is the only place ids appear (a block names its id only when two
+  students share a full name). The system prompt says first names only, never an id in brackets.
+  Post-check (`shared/src/classroom/dashboardText.ts` `stripLearnerIds`) on summary, cluster names
+  and descriptions: removes `Jonas (16)`, `Jonas (id 16)`, `Mia [#7]`, `Jonas #16` after known
+  names and turns `student 16` into the first name; maths like `8/8 (= 1)` or `f(3)` is kept.
 - **Validation + repair (in code).** Every active student in exactly one cluster; every cluster
   exactly 2 or 4 students. Exceptions forced by arithmetic: an odd class has exactly one cluster
   of 3 (the only 3); a class of one student has one cluster of 1. Violations are repaired
@@ -143,3 +159,25 @@ Each LLM call logs model, latency and token usage (`simStudentTurn s<id> <name> 
   (4+2+2, 4+4, 2+2+4). Impersonation: no refresh while observing (button returned
   `skipped: impersonating`); stop when overdue → refresh finished 2.9 s later.
 - Memory extraction during the runs: 28 windows for 14 sessions (2 each), no duplicates.
+
+## Effort low vs medium (2026-10-25, DB `night-polish`, n=8, fractions, 5 refreshes each)
+
+Same class (1/4 + 2/4, 1/2 + 1/4, 2/3 + 1/6; "explain why the bottoms are not added"), compared
+against the simulated students' actual messages.
+
+| | low | medium |
+|---|---|---|
+| latency | 3.0-10.1 s (mean 6.9) | 8.2-14.6 s (mean 11.3) |
+| tokens in / out (mean) | 6.7-16.2k / 1.1k | 6.7-17.1k / 2.2k |
+| repaired cluster answers | 0/5 | 1/5 (duplicate id + a cluster of 1) |
+| arithmetic verdicts | all right (flags 2/6, 3/6, 3/9 as adding bottoms; 3/4, 5/6 right) | all right (flags 3/8, 3/6, 5/9; 3/4, 3/5 right) |
+| ids in prose | none | none |
+| grounding slips | 1 student grouped "ready to extend" after answering 2/6 and 3/9; 1 student said to "drift to adding bottoms" without evidence | 1 student said to have "reached unlike denominators" after a counting slip; summary vs cluster inconsistent once |
+
+Decision: keep `low`. The maths check holds at low (no correct answer called wrong, no wrong answer
+called right); medium doubles output tokens and latency and was not more reliable on grouping.
+Samples (low, v2): "Most of the class is working on adding fractions with the same bottom number,
+and most now get 1/4 + 2/4 = 3/4 by counting pieces. Jonas and Yuki explain the rule well ... Mia,
+Leo and Emma still add bottoms or think the bottom changes (2/6, ...), so they need you now".
+(medium, v5): "... Emma still thinks the bottom changes, and Leo's 2/3 + 1/6 answer of 5/9 was never
+corrected, so Emma and Leo need the teacher now."
