@@ -116,7 +116,7 @@ describe('reply', () => {
   });
 
   it('errors come back as tool results, not exceptions', async () => {
-    const llm = new FakeLlm([[tool(TOOL_NAMES.setPhase, { phase: 'nope', reason: 'r' }, 'p1'), done], [...tokens('Let us stay here a little bit longer then.'), done]]);
+    const llm = new FakeLlm([[tool(TOOL_NAMES.setPhase, { phase: phaseId, reason: 'r' }, 'p1'), done], [...tokens('Let us stay here a little bit longer then.'), done]]);
     const { transport } = await answer(llm, t => (t.fail.setPhase = 'invalid transition'));
     expect(llm.calls[1]!.messages.at(-1)).toMatchObject({ role: 'tool', toolCallId: 'p1', content: 'error: invalid transition' });
     expect(transport.of('appendTutorTurn')[0]!.interrupted).toBe(false);

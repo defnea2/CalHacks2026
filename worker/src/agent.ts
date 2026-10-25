@@ -4,7 +4,7 @@
 //
 // The SpacetimeDB adapter (stdb.ts) feeds subscription rows in through the on* methods; tests
 // call them directly with a fake Transport and a fake LlmProvider.
-import type { LessonPack, LlmProvider, PhraseStatus, SentenceStatus, TurnState, TurnStatus } from '@tutor/shared';
+import { VOICE_DEFAULTS, type LessonPack, type LlmProvider, type PhraseStatus, type SentenceStatus, type TurnState, type TurnStatus } from '@tutor/shared';
 import { buildSystemPrompt } from './prompt';
 import { ReplyRun, type ReplyDeps } from './reply';
 import { ToolRouter } from './router';
@@ -14,7 +14,13 @@ import type { PhraseRow, SentenceRow, SessionRow, Transport, TurnRow } from './t
 
 export interface AgentOptions {
   preemptive: boolean;
+  /** Silence after the end of speech before a preemptive reply starts. */
   preemptiveSilenceMs: number;
+  /** How long after the end of speech a phrase's final chunk arrives (the client's phrase
+   *  silence window). Default VOICE_DEFAULTS.VAD_PHRASE_MS. */
+  phraseSilenceMs?: number;
+  /** Max age of a prefetched context that may still be reused. Default 10 s. */
+  contextTtlMs?: number;
   maxToolRounds: number;
   recentTurns: number;
   toolTimeoutMs: number;
@@ -37,6 +43,12 @@ const OPEN_STATUSES: readonly TurnStatus[] = ['open', 'closing'];
 const BUSY_PHRASES: readonly PhraseStatus[] = ['streaming', 'transcribing'];
 const DROPPED: SentenceStatus = 'dropped';
 const STUDENT = 'student';
+const STREAMING: PhraseStatus = 'streaming';
+const TRANSCRIBING: PhraseStatus = 'transcribing';
+const CLOSING: TurnStatus = 'closing';
+const DEFAULT_CONTEXT_TTL_MS = 10_000;
+/** Transport calls that change what buildContext returns (board, phase, topic, memory). */
+const MUTATIONS = ['setPhase', 'showBoardItem', 'clearBoard', 'remember', 'setTopic', 'appendTutorTurn'] as const;
 
 export class Agent {
   readonly sessions = new Map<bigint, SessionAgent>();
@@ -96,8 +108,20 @@ export class Agent {
     this.session(row.sessionId).setSentence(row);
   }
 
-  onSpeechActivity(sessionId: bigint): void {
-    this.sessions.get(sessionId)?.speechActivity();
+  /** A pushAudio chunk arrived. phraseId lets the agent tell a phrase's final chunk (the
+   *  phrase row is already `transcribing`) from ongoing speech. */
+  onSpeechActivity(sessionId: bigint, phraseId?: number): void {
+    this.sessions.get(sessionId)?.speechActivity(phraseId);
+  }
+
+  /** A board item of the session changed (context prefetch is then stale). */
+  onBoardItem(sessionId: bigint): void {
+    this.sessions.get(sessionId)?.contextChanged();
+  }
+
+  /** A learner row changed: every session's prefetched context is stale. */
+  onLearner(): void {
+    for (const s of this.sessions.values()) s.contextChanged();
   }
 
   onPlaybackFlush(sessionId: bigint, utteranceId: bigint): void {
@@ -121,7 +145,14 @@ export class SessionAgent {
   held?: ReplyRun;
   /** Highest student turn idx a reply was started for. */
   handledIdx = -1;
+  /** Estimated end of the student's latest speech (local clock). For a phrase-final chunk
+   *  this is the arrival time minus the phrase silence window. */
   lastSpeechAt = 0;
+  /** Bumped on anything that changes buildContext's result. */
+  private ctxVersion = 0;
+  private ctxKey = '';
+  private ctxCache?: { version: number; at: number; promise: Promise<string> };
+  private transportView?: AgentDeps['transport'];
   imageSent = false;
   private preemptTimer?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -140,6 +171,11 @@ export class SessionAgent {
   setSession(row: SessionRow): void {
     const prev = this.row;
     this.row = row;
+    const key = [row.phase, row.category, row.concept, row.taskText, row.hasImage, row.learnerId].map(String).join('\u0000');
+    if (key !== this.ctxKey) {
+      this.ctxKey = key;
+      this.contextChanged();
+    }
     if (row.turnState === INTERRUPTED && prev?.turnState !== INTERRUPTED) this.live?.interrupt('barge-in');
     this.evaluate();
   }
@@ -152,7 +188,11 @@ export class SessionAgent {
   setPhrase(row: PhraseRow): void {
     const prev = this.phrases.get(row.phraseId);
     this.phrases.set(row.phraseId, row);
-    if (!prev) this.lastSpeechAt = this.agent.now();
+    // A phrase that turns `transcribing` just got its final chunk, sent one phrase window after
+    // the speech ended. Order-independent with the speech_activity event of the same commit.
+    const ended = row.status === TRANSCRIBING && (!prev || prev.status === STREAMING);
+    if (ended && !this.otherPhraseStreaming(row)) this.lastSpeechAt = this.phraseEndAt();
+    else if (!prev) this.lastSpeechAt = this.agent.now();
     this.evaluate();
   }
 
@@ -160,13 +200,70 @@ export class SessionAgent {
     this.sentences.set(`${row.utteranceId}:${row.idx}`, row);
   }
 
-  speechActivity(): void {
-    this.lastSpeechAt = this.agent.now();
+  speechActivity(phraseId?: number): void {
+    const p = phraseId === undefined ? undefined : this.phrases.get(phraseId);
+    // Final chunk: the phrase row (same commit) is already `transcribing`.
+    const final = !!p && p.status === TRANSCRIBING && !this.otherPhraseStreaming(p);
+    this.lastSpeechAt = final ? this.phraseEndAt() : this.agent.now();
     this.clearPreemptTimer();
     if (this.held) {
       this.held.discard('student spoke again');
       this.held = undefined;
     }
+  }
+
+  /** Something buildContext reads changed: a prefetched context must not be reused. */
+  contextChanged(): void {
+    this.ctxVersion++;
+    this.ctxCache = undefined;
+  }
+
+  private phraseEndAt(): number {
+    return this.agent.now() - (this.agent.deps.opts.phraseSilenceMs ?? VOICE_DEFAULTS.VAD_PHRASE_MS);
+  }
+
+  /** Another phrase of the same turn is still streaming (the student is already speaking again). */
+  private otherPhraseStreaming(of: PhraseRow): boolean {
+    for (const p of this.phrases.values()) if (p.phraseId !== of.phraseId && p.turnIdx === of.turnIdx && p.status === STREAMING) return true;
+    return false;
+  }
+
+  /** Context for the next reply: the prefetched one while nothing relevant changed, else fresh. */
+  context(): Promise<string> {
+    const ttl = this.agent.deps.opts.contextTtlMs ?? DEFAULT_CONTEXT_TTL_MS;
+    const c = this.ctxCache;
+    if (c && c.version === this.ctxVersion && this.agent.now() - c.at <= ttl) return c.promise;
+    const version = this.ctxVersion;
+    const promise = this.agent.deps.transport.buildContext({ sessionId: this.id });
+    const entry = { version, at: this.agent.now(), promise };
+    this.ctxCache = entry;
+    promise.catch(() => {
+      if (this.ctxCache === entry) this.ctxCache = undefined;
+    });
+    return promise;
+  }
+
+  /** Starts building the context early (turn closing) so the reply finds it ready. */
+  prefetchContext(): void {
+    if (this.live?.open) return; // a running reply may still change board/phase
+    this.context().catch(() => undefined);
+  }
+
+  /** The transport replies use: buildContext goes through the prefetch cache, and every call
+   *  that changes the context invalidates it (at start and at completion). */
+  private transport(): AgentDeps['transport'] {
+    if (this.transportView) return this.transportView;
+    const base = this.agent.deps.transport;
+    const view: AgentDeps['transport'] = Object.create(base);
+    view.buildContext = () => this.context();
+    for (const name of MUTATIONS) {
+      const fn = base[name] as (a: never) => Promise<unknown>;
+      (view as unknown as Record<string, unknown>)[name] = (a: never) => {
+        this.contextChanged();
+        return fn.call(base, a).finally(() => this.contextChanged());
+      };
+    }
+    return (this.transportView = view);
   }
 
   playbackFlush(utteranceId: bigint): void {
@@ -206,6 +303,7 @@ export class SessionAgent {
     }
     if (OPEN_STATUSES.includes(latest.status as TurnStatus)) {
       this.dropHeldIfStale(latest);
+      if (latest.status === CLOSING && latest.idx > this.handledIdx && !this.held) this.prefetchContext();
       this.armPreemptive(latest);
     }
   }
@@ -268,7 +366,7 @@ export class SessionAgent {
   private newRun(turn: TurnRow, held: boolean): ReplyRun {
     const a = this.agent;
     const deps: ReplyDeps = {
-      transport: a.deps.transport,
+      transport: this.transport(),
       llm: a.deps.llm,
       router: a.router,
       system: a.system,

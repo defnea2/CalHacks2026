@@ -230,6 +230,7 @@ export class ReplyRun {
       for (let round = 0; ; round++) {
         const chunker = new SentenceChunker();
         let text = '';
+        let raw: unknown;
         const calls: ToolResult['call'][] = [];
         const results: Promise<ToolResult>[] = [];
         // Last allowed round: offer no tools, so the model has to speak (it otherwise tends to
@@ -255,6 +256,8 @@ export class ReplyRun {
                 for (const s of chunker.flushComplete()) this.enqueueSentence(s);
                 calls.push(ev.call);
                 results.push(this.enqueueTool(ev.call));
+              } else if (ev.type === 'done') {
+                raw = ev.raw;
               }
             }
             break;
@@ -272,7 +275,7 @@ export class ReplyRun {
         if (text.trim()) spoken = true;
         this.history = [
           ...this.history,
-          { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}) },
+          { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}), ...(raw !== undefined ? { raw } : {}) },
           ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
         ];
         if (!calls.length) break;
