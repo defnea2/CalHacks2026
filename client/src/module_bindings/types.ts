@@ -206,6 +206,7 @@ export const Session = __t.object("Session", {
   currentUtteranceId: __t.u64(),
   startedAt: __t.timestamp(),
   endedAt: __t.option(__t.timestamp()),
+  voice: __t.bool(),
 });
 export type Session = __Infer<typeof Session>;
 
@@ -277,6 +278,23 @@ export const Task = __t.object("Task", {
 });
 export type Task = __Infer<typeof Task>;
 
+export const TextPlayJob = __t.object("TextPlayJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  sessionId: __t.u64(),
+  sentenceId: __t.u64(),
+  utteranceId: __t.u64(),
+  idx: __t.u32(),
+});
+export type TextPlayJob = __Infer<typeof TextPlayJob>;
+
+export const TextPlayback = __t.object("TextPlayback", {
+  sessionId: __t.u64(),
+  utteranceId: __t.u64(),
+  endsAtMicros: __t.u64(),
+});
+export type TextPlayback = __Infer<typeof TextPlayback>;
+
 export const TtsJob = __t.object("TtsJob", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
@@ -300,6 +318,8 @@ export const Turn = __t.object("Turn", {
   interrupted: __t.bool(),
   createdAt: __t.timestamp(),
   closedAt: __t.option(__t.timestamp()),
+  source: __t.string(),
+  intent: __t.string(),
 });
 export type Turn = __Infer<typeof Turn>;
 
