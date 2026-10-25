@@ -20,6 +20,8 @@ import { normalizePrompt, plannerSystem, plannerUserMessage, recentCheckPrompts 
 import type { ModelRequest } from '@tutor/teaching/server/planning';
 import type { PlanningProgress } from '@tutor/teaching/teaching/streaming';
 import { validatorMessage } from '@tutor/teaching/teaching/lessonFlow';
+import { choiceProblem, homeworkRepeat } from '@tutor/teaching/teaching/checkGuards';
+import type { TeachingCheck } from '@tutor/teaching/teaching/contracts';
 import type { Transport } from './transport';
 
 export const RECAP_NARRATION = 'Look at the whole picture once more.';
@@ -419,7 +421,7 @@ export class LessonRun {
             metaChecked = true;
             // A repeated check is rejected by the module anyway: stop now instead of after moment 1
             // streamed, and let the module validate the meta (phase policy) while moment 1 streams.
-            const repeated = repeatedCheck(request, parser.lessonMeta.check?.prompt);
+            const repeated = repeatedCheck(request, parser.lessonMeta.check);
             if (repeated) {
               this.reject('meta', repeated);
               break;
@@ -499,11 +501,14 @@ export class LessonRun {
 }
 
 /** The validator message for a check that repeats an asked question (same rule as the module's beginLesson). */
-export function repeatedCheck(request: ModelRequest, prompt: string | undefined): string | null {
+export function repeatedCheck(request: ModelRequest, check: TeachingCheck | null | undefined): string | null {
+  const prompt = check?.prompt;
   if (!prompt) return null;
   const original = request.context.session.originalQuestion;
   if (request.context.session.arc && original && normalizePrompt(prompt).includes(normalizePrompt(original)))
     return `The check asks the learner's own homework ("${original}"). Ask a similar task with different numbers; the homework is handed back at the end.`;
+  const issue = (request.context.session.arc ? homeworkRepeat(check, original) : null) ?? choiceProblem(check);
+  if (issue) return issue;
   return recentCheckPrompts(request).some(p => normalizePrompt(p) === normalizePrompt(prompt))
     ? `The check repeats a question the learner was already asked ("${prompt}"). Ask a new question with different words or numbers.`
     : null;
