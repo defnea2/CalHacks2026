@@ -472,11 +472,26 @@ export const setImpersonation = spacetimedb.reducer({ classSessionId: t.u64(), l
   classroom.setImpersonation(ctx, classSessionId, learnerId)
 );
 
-/** Refresh button: one Haiku call -> class_summary + student_cluster. Returns JSON
- *  {ok, skipped?, error?, repaired?, repairs?, clusters?}. Skipped while impersonating. */
-export const refreshDashboard = spacetimedb.procedure({ classSessionId: t.u64() }, t.string(), (ctx, { classSessionId }) =>
-  JSON.stringify(classroom.refreshDashboard(ctx, classSessionId, false))
-);
+/** Typed result of refreshDashboard ('' / false / 0 = not set). */
+const RefreshDashboardResult = t.object('RefreshDashboardResult', {
+  ok: t.bool(),
+  /** Why nothing ran ('impersonating', 'already running', 'class session ended', ...). */
+  skipped: t.string(),
+  /** Provider error of a failed LLM call. */
+  error: t.string(),
+  /** The cluster answer had to be repaired (size rule, unknown ids). */
+  repaired: t.bool(),
+  repairs: t.array(t.string()),
+  clusters: t.u32(),
+});
+
+/** Refresh button: one Haiku call -> class_summary + student_cluster. Skipped while impersonating.
+ *  Error convention (ARCHITECTURE §3): a skip or a provider failure is a result ({ok: false}), not a
+ *  SenderError, because the button shows it as a note. */
+export const refreshDashboard = spacetimedb.procedure({ classSessionId: t.u64() }, RefreshDashboardResult, (ctx, { classSessionId }) => {
+  const r = classroom.refreshDashboard(ctx, classSessionId, false);
+  return { ok: r.ok, skipped: r.skipped ?? '', error: r.error ?? '', repaired: r.repaired ?? false, repairs: r.repairs ?? [], clusters: r.clusters ?? 0 };
+});
 
 /** Teacher dashboard student profile (long-term memory, mastery, past sessions). Returns JSON
  *  LearnerInsightsResult (shared/src/insights.ts). Gated by an existing teacher id and, when

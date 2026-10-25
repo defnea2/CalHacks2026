@@ -448,7 +448,7 @@ describe('dashboard', () => {
   it('refresh writes summary + valid clusters and books the next run in 30 s', () => {
     const { h, env, cls, ids } = classWithSims(6);
     let req: Req | undefined;
-    const out = JSON.parse(
+    const out = (
       (mod.refreshDashboard as any)(
         proc(h, env.client, r => {
           req = r;
@@ -566,8 +566,8 @@ describe('dashboard', () => {
     expect(runDashboardJobs(h)).toBe(1); // no responder: no HTTP call while observing
     expect([...h.db.dashboardJob.iter()]).toHaveLength(0);
     expect(h.db.classSummary.classSessionId.find(cls.id)).toBeFalsy();
-    const button = JSON.parse((mod.refreshDashboard as any)(proc(h, env.client), { classSessionId: cls.id }));
-    expect(button).toEqual({ ok: false, skipped: 'impersonating' });
+    const button = ((mod.refreshDashboard as any)(proc(h, env.client), { classSessionId: cls.id }));
+    expect(button).toEqual({ ok: false, skipped: 'impersonating', error: '', repaired: false, repairs: [], clusters: 0 });
     expect(() => call(h, env.client, mod.setImpersonation, { classSessionId: cls.id, learnerId: 777n })).toThrow(/not in class session/);
 
     call(h, env.client, mod.setImpersonation, { classSessionId: cls.id, learnerId: 0n });
@@ -623,7 +623,7 @@ describe('dashboard', () => {
   it('no students: summary without an LLM call, clusters cleared', () => {
     const env = setup(ANTHROPIC);
     const cls = startClass(env, teacher(env).id);
-    const out = JSON.parse((mod.refreshDashboard as any)(proc(env.h, env.client), { classSessionId: cls.id }));
+    const out = ((mod.refreshDashboard as any)(proc(env.h, env.client), { classSessionId: cls.id }));
     expect(out.ok).toBe(true);
     expect(env.h.db.classSummary.classSessionId.find(cls.id)!.summary).toMatch(/No students/);
   });

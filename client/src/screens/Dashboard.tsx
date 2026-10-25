@@ -39,6 +39,12 @@ function useNow(ms = 1000) {
   return now;
 }
 
+/** refreshDashboard returns a typed object; a module published before that returned a JSON string. */
+export function refreshResult(out: unknown): { ok: boolean; skipped: string; error: string } {
+  const r = (typeof out === 'string' ? JSON.parse(out || '{}') : (out ?? {})) as { ok?: boolean; skipped?: string; error?: string };
+  return { ok: !!r.ok, skipped: r.skipped ?? '', error: r.error ?? '' };
+}
+
 export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classSessionId: bigint }) {
   const [error, setError] = useState('');
   const cid = classSessionId.toString();
@@ -156,7 +162,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
     eventLog.log('procedure.call', { name: 'refreshDashboard' });
     try {
       const out = await conn.procedures.refreshDashboard({ classSessionId });
-      const r = JSON.parse(out || '{}') as { ok?: boolean; skipped?: string; error?: string };
+      const r = refreshResult(out);
       eventLog.log('procedure.ok', { name: 'refreshDashboard', result: out });
       if (!r.ok) setRefreshNote(r.skipped ? `Skipped (${r.skipped.replace(/_/g, ' ')})` : `Update failed${r.error ? `: ${r.error}` : ''}`);
     } catch (err) {

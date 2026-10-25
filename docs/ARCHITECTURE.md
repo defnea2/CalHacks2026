@@ -256,9 +256,28 @@ checks the caller's identity in the private `role` table.
 | `resetSimulatedStudents(count)` | client | `classroom.ts` | Simulation users 1..count (0 = all 20) back to their seed state; refused while one is in a running class |
 | `endClassSession` | client | `classroom.ts` | Ends linked sessions; real students back to `waiting` |
 | `setImpersonation(classSessionId, learnerId)` | client | `classroom.ts` | Teacher observes a student (0 = stop; an overdue refresh then runs at once) |
-| `refreshDashboard(classSessionId) → string` | client (procedure) | `classroom.ts` | Refresh button: one Haiku call → summary + clusters |
+| `refreshDashboard(classSessionId) → RefreshDashboardResult` | client (procedure) | `classroom.ts` | Refresh button: one Haiku call → summary + clusters. Typed product `{ok, skipped, error, repaired, repairs, clusters}` ('' / false / 0 = not set) |
 | `learnerInsights(learnerId, teacherId, key) → string` | client (procedure) | `insights.ts` | Teacher's student profile: memory notes, mastery, last 5 summaries (JSON `LearnerInsightsResult`, `shared/src/insights.ts`) |
 | `dashboardTick`, `simStudentTurn` | scheduled | `classroom.ts` | 30 s dashboard cadence; next simulated student message |
+
+**Error convention.** A reducer or procedure that refuses its input throws `SenderError` (unknown
+ids, ended session, wrong caller, validation of client and agent arguments, LLM output a reducer
+rejects, e.g. `addBeat` / `beginLesson`; the worker's repair round reads the message). A result
+`{ok: false, ...}` is used only where the caller needs a structured outcome rather than a failure:
+the agent procedures the LLM tool loop feeds back to the model (`setTopic`, `buildLessonRequest`,
+`prefetchTopic`: `{ok:false, error}` becomes the tool result), `learnerInsights` (error codes the
+profile panel maps to text) and `refreshDashboard` (a skip or a provider failure is a note on the
+button). Scheduled reducers / procedures log and retry; they throw only for "scheduler only".
+
+**Return types.** `refreshDashboard` returns a typed product (`t.object`); the client accepts the
+older JSON string too, so a client deployed before a module update keeps working. The other
+procedures still return JSON strings on purpose: `learnerInsights` has a nested contract
+(`shared/src/insights.ts`, ids as decimal strings, times as Unix ms) that the client validates with
+`parseInsights` and also loads from fixtures; mirroring it as SpacetimeDB product types would put a
+second definition next to the shared one, and a module republish would break every deployed client
+until it is rebuilt. The agent procedures' JSON goes straight into LLM prompts. Changing a
+procedure's return type is accepted by `spacetime publish` without `--clear` (verified locally), but
+it is a breaking change for clients built from older bindings.
 
 ## 4. Voice turn, end to end
 

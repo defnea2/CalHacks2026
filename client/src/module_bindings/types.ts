@@ -302,6 +302,16 @@ export const Presence = __t.object("Presence", {
 });
 export type Presence = __Infer<typeof Presence>;
 
+export const RefreshDashboardResult = __t.object("RefreshDashboardResult", {
+  ok: __t.bool(),
+  skipped: __t.string(),
+  error: __t.string(),
+  repaired: __t.bool(),
+  repairs: __t.array(__t.string()),
+  clusters: __t.u32(),
+});
+export type RefreshDashboardResult = __Infer<typeof RefreshDashboardResult>;
+
 export const ReplySentence = __t.object("ReplySentence", {
   id: __t.u64(),
   sessionId: __t.u64(),
