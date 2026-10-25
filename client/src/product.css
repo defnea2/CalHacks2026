@@ -183,6 +183,7 @@ body:has(.pr-app) { background: var(--pr-bg); }
   .db-card:hover, .db-card:focus-within { transform: none; }
 }
 .db-cluster-head h3.db-ungrouped-title { color: var(--pr-muted); font-weight: 600; }
+.db-row > .db-cluster-ungrouped:only-child .db-cluster-head { min-height: 0; }
 .db-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--pr-rule); font-size: 11px; color: var(--pr-faint); }
 /* all sessions table */
 .db-table { width: 100%; border-collapse: collapse; background: var(--pr-paper); border: 1px solid var(--pr-rule); font-size: 12px; }
