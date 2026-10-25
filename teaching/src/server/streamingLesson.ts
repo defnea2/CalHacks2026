@@ -32,7 +32,8 @@ export function declarative(m: Meta, x: Moment): Moment {
 export function hoistFlags(value: unknown): unknown {
   const v = value as { visual?: Record<string, unknown> } | null;
   if (!v || typeof v !== "object" || !v.visual || typeof v.visual !== "object") return value;
-  const { interactive, showEquation, ...visual } = v.visual;
+  // Code owns id, title and focus of a new picture (compact commands omit them); models copy them from the canvas.
+  const { interactive, showEquation, id: _id, title: _title, focus: _focus, ...visual } = v.visual;
   return { ...(interactive === undefined ? {} : { interactive }), ...(showEquation === undefined ? {} : { showEquation }), ...v, visual };
 }
 // Meaning-preserving repairs of common model slips, applied before a visual is compiled.

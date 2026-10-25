@@ -37,11 +37,15 @@ export function recentCheckPrompts(request: ModelRequest): string[] {
 }
 export const normalizePrompt = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
+const asked = (prompt: string) => `[ALREADY ASKED, never reuse] ${prompt}`;
+
 /** The untrusted lesson data sent as the user message (compacted context). */
 export function plannerData(request: ModelRequest): string {
   const context = { ...request.context,
-    currentStep: request.context.currentStep && { id: request.context.currentStep.id, phase: request.context.currentStep.phase, learningGoal: request.context.currentStep.learningGoal, check: request.context.currentStep.check, exampleProblem: request.context.currentStep.exampleProblem },
+    currentStep: request.context.currentStep && { id: request.context.currentStep.id, phase: request.context.currentStep.phase, learningGoal: request.context.currentStep.learningGoal, check: request.context.currentStep.check && { ...request.context.currentStep.check, prompt: asked(request.context.currentStep.check.prompt) }, exampleProblem: request.context.currentStep.exampleProblem },
     recentSteps: request.context.recentSteps.map(({ id, phase, learningGoal, exampleProblem }) => ({ id, phase, learningGoal, exampleProblem })),
+    // Marked as already asked: the model otherwise copies the old question verbatim into its new check.
+    evidence: request.context.evidence.map(e => ({ ...e, prompt: e.prompt && asked(e.prompt) })),
     canvas: { ...request.context.canvas, math: request.context.canvas.math && { ...request.context.canvas.math, appliedEventIds: [] } },
   };
   // Narration already heard (latest steps), so a continuation adds something new instead of repeating itself.

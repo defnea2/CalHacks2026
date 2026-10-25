@@ -10,6 +10,7 @@ import { LessonStreamParser } from '@tutor/teaching/server/streamingLesson';
 import type { ModelRequest } from '@tutor/teaching/server/planning';
 import { acceptStep, buildModelRequest, newLessonRecord, presented, recordUtterance, respond, validatorMessage, type LessonRecord } from '@tutor/teaching/teaching/lessonFlow';
 import { AnthropicProvider } from './anthropic';
+import { normalizePrompt, recentCheckPrompts } from '@tutor/teaching/server/plannerPrompt';
 import { loadConfig } from './env';
 
 const cfg = loadConfig();
@@ -27,7 +28,7 @@ const QUESTIONS = [
 ];
 const ANSWERS = ['Because the pieces get smaller but the same amount is shaded.', 'twelve', 'I am not sure', 'show me another way'];
 
-interface Result { effort: string; label: string; ok: boolean; error?: string; repaired: boolean; firstTokenMs: number; firstBeatMs: number | null; totalMs: number; beats: number }
+interface Result { repeatedCheck?: boolean; effort: string; label: string; ok: boolean; error?: string; repaired: boolean; firstTokenMs: number; firstBeatMs: number | null; totalMs: number; beats: number }
 
 async function lesson(llm: AnthropicProvider, request: ModelRequest, effort: string, label: string): Promise<{ result: Result; step?: ReturnType<LessonStreamParser['finish']> }> {
   const t0 = Date.now();
@@ -50,7 +51,8 @@ async function lesson(llm: AnthropicProvider, request: ModelRequest, effort: str
       }
       if (reason !== 'end_turn') throw new Error(`stop ${reason}`);
       const step = parser.finish();
-      return { result: { effort, label, ok: true, repaired: attempt > 0, firstTokenMs: firstToken, firstBeatMs: firstBeat, totalMs: Date.now() - t0, beats: step.beats.length }, step };
+      const repeatedCheck = !!step.check && recentCheckPrompts(request).some(p => normalizePrompt(p) === normalizePrompt(step.check!.prompt));
+      return { result: { repeatedCheck, effort, label, ok: true, repaired: attempt > 0, firstTokenMs: firstToken, firstBeatMs: firstBeat, totalMs: Date.now() - t0, beats: step.beats.length }, step };
     } catch (e) {
       const error = validatorMessage(e);
       if (process.env.SMOKE_DUMP) console.log(`  [${label}] output (${output.length} chars): ${output.slice(0, 4000)}`);
@@ -92,7 +94,7 @@ async function main() {
     const p = (xs: number[], q: number) => (xs.length ? xs.sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(q * xs.length))]! : NaN);
     const fb = r.map(x => x.firstBeatMs).filter((x): x is number => x !== null);
     console.log(
-      `effort ${effort}: ${r.length} lessons, valid ${r.filter(x => x.ok).length}, repaired ${r.filter(x => x.repaired).length}, failed ${r.filter(x => !x.ok).length}; ` +
+      `effort ${effort}: ${r.length} lessons, repeated check ${r.filter(x => x.repeatedCheck).length}, valid ${r.filter(x => x.ok).length}, repaired ${r.filter(x => x.repaired).length}, failed ${r.filter(x => !x.ok).length}; ` +
         `first token p50 ${p(r.map(x => x.firstTokenMs), 0.5)} ms; first beat p50 ${p(fb, 0.5)} / p90 ${p(fb, 0.9)} ms; total p50 ${p(r.map(x => x.totalMs), 0.5)} ms; beats avg ${(r.reduce((a, x) => a + x.beats, 0) / Math.max(1, r.length)).toFixed(1)}`
     );
     for (const x of r.filter(y => !y.ok || y.repaired)) console.log(`  ${x.ok ? 'repaired' : 'FAILED'} ${x.label}: ${x.error ?? ''}`.slice(0, 300));

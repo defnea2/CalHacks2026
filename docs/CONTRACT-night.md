@@ -23,6 +23,22 @@ Schema location: put new tables in your own file (`spacetimedb/src/schema_<area>
 | table `agent_status` (public) | `id u32 pk (0), model string, provider string, busySessions u32, lastSeen timestamp` — worker heartbeat (replaces `/api/teaching/status`) |
 | `tutor_request` / `tutor_result` | Replace `/api/teaching/shear-feedback`: request row (client) → worker → result row. |
 
+### 1a. Implemented details and additions (night/pipeline)
+
+| Item | Definition |
+|---|---|
+| reducer `beginLesson(sessionId: u64, utteranceId: u64, meta: string)` (addition, agent) | The streamed lesson meta (team `StreamLessonSchema.meta`, planned first). Validated with the team schema + `fixAssessment` + the phase policy (`allowedPhases` / `phaseOptionsAfterAssessment`) and "no repeated check" BEFORE any beat. Repair rounds may call it again while no beat was accepted. |
+| `addBeat` `visual` argument | A bare compact command (`{kind,...}`) or a moment without narration `{visual, interactive?, showEquation?, final?}`. `final: true` = last moment: compiled with interaction allowed, then the whole step is validated (`validateModelStep`, check prompt appended to the final narration once) and accepted into the lesson record. |
+| `beat.visual` | The compiled team `VisualBeat` without narration: `{id, cues:[{id, atMs, commands}]}`. One `reply_sentence` per grammatical sentence of the narration (not one per beat: first audio sooner); `beat.sentenceIdx` = the first of them. |
+| procedure `buildLessonRequest(sessionId: u64, requestId: string) -> string` (addition, agent) | JSON `{ok, request}`: the team `ModelRequest` for the current lesson state (learner profile + memory as one `session.context` item). |
+| `lesson_state.stage` | `needs_plan \| presenting \| awaiting_response \| completed` (TeachingPlanner status; `presenting` while a lesson streams). `notes` = `{stepId, phase, learningGoal, approach, beatCount, check (public view: no answer key), steps:[...]}`. |
+| Lesson over the utterance | All sentences played (voice: started; text: read) after the tutor turn -> presented (`awaiting_response` with a check). Barge-in / typed turn / superseding reply -> interrupted (`needs_plan`) and `canvas_state` rolls back to the scene after the last beat the learner saw. |
+| Student turns | While `awaiting_response`: assessed with the team `assessResponse` (a spoken answer naming one option of a choice check counts as that choice). Intents `another_way`/`smaller_step`/`demonstrate` -> help evidence (`another_way`/`simpler`/`explain`); `continue` records nothing; other speech -> unscored context (`recordUtterance`). |
+| `submitInteraction` kinds | `math_action` (team `MathAction`), `activity_action` (team `LearnerAction`), `submit` (`{}` -> response `interaction`), `choice` (`{optionId}`). Only while `awaiting_response`. Rejected ones are recorded (`accepted=false`, `evidence={error}`) instead of throwing. `submit`/`choice` record evidence and append a student turn (source `text`) so the worker plans the next step. |
+| reducers `agentHeartbeat(model, provider, busySessions: u32)`, `requestTutor(sessionId, kind, payload)`, `submitTutorResult(requestId: u64, ok: bool, result: string)` (additions) | `agent_status` row 0 every 5 s; `tutor_request.status` `pending -> done \| error`, kind `shear_feedback` (payload = the team `ShearTutorRequest`), `tutor_result.result` = the team `ShearTutorReply` JSON or the error. |
+| private tables | `lesson_record` (authoritative TeachingPlanner record), `lesson_plan` (lesson streaming for an utterance), `text_play_job`, `text_playback`. |
+| Worker `REPLY_MODE` | `lesson` (default): the team streaming planner (`worker/src/lesson.ts`). `tools`: the previous tool loop (`show_board_item(math_canvas)`, `ask_learner`, ...), kept as a switchable fallback. `LESSON_EFFORT` default `low`. |
+
 ## 2. Classroom (owner: `night/classroom-core`)
 
 | Item | Definition |
