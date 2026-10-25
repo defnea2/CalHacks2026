@@ -10,6 +10,7 @@ import type { VadEvent } from './vadMachine';
 import type { NoiseState } from './noise';
 import { callReducer } from '../stdb/connection';
 import { eventLog } from '../lib/debug';
+import type { SentenceTiming } from '../board/reveal';
 
 export interface VoiceUiState {
   listening: boolean;
@@ -27,7 +28,7 @@ export interface VoiceSessionOptions {
   settings: AppSettings;
   firstPhraseId: number;
   onUi: (s: Partial<VoiceUiState>) => void;
-  onSentenceStart: (utteranceId: bigint, idx: number) => void;
+  onSentenceStart: (utteranceId: bigint, idx: number, timing: SentenceTiming) => void;
   onTurnEnd?: (wallMs: number) => void;
 }
 
@@ -41,7 +42,14 @@ export class VoiceSession {
   private stopped = false;
   private readonly onAudio = (_c: unknown, row: AudioOut) => {
     if (row.sessionId !== this.o.sessionId) return;
-    this.playback.push({ utteranceId: row.utteranceId, idx: row.idx, pcm: row.pcm, sampleRate: row.sampleRate });
+    this.playback.push({
+      utteranceId: row.utteranceId,
+      idx: row.idx,
+      pcm: row.pcm,
+      sampleRate: row.sampleRate,
+      wordStartsMs: row.wordStartsMs,
+      wordEndsMs: row.wordEndsMs,
+    });
   };
   private readonly onFlush = (_c: unknown, row: PlaybackFlush) => {
     if (row.sessionId !== this.o.sessionId) return;
@@ -54,8 +62,8 @@ export class VoiceSession {
     void this.ctx.resume();
     eventLog.log('audio.context', { sampleRate: this.ctx.sampleRate, state: this.ctx.state });
     this.playback = new PlaybackQueue(this.ctx, o.settings.playback, o.settings.client, {
-      onSentenceStart: (u, idx) => {
-        o.onSentenceStart(u, idx);
+      onSentenceStart: (u, idx, timing) => {
+        o.onSentenceStart(u, idx, timing);
         const args = { sessionId: o.sessionId, utteranceId: u, idx };
         void callReducer('markPlayed', args, () => o.conn.reducers.markPlayed(args));
       },

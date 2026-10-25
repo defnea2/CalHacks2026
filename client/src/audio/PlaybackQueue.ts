@@ -5,17 +5,22 @@ import type { PlaybackSettings, ClientSettings } from '../config';
 import { applyFades, SentenceOrderer, trimRange, type SentenceBlock } from './playbackLogic';
 import { int16ToFloat, pcm16ToInt16 } from './pcm';
 import { eventLog } from '../lib/debug';
+import type { SentenceTiming } from '../board/reveal';
 
 export interface AudioBlockIn {
   utteranceId: bigint;
   idx: number;
   pcm: Uint8Array;
   sampleRate: number;
+  /** TTS word timestamps (ms from the start of `pcm`), if any. */
+  wordStartsMs?: number[];
+  wordEndsMs?: number[];
 }
 
 export interface PlaybackCallbacks {
-  /** A sentence starts playing now (drives markPlayed, captions and board reveal). */
-  onSentenceStart?: (utteranceId: bigint, idx: number) => void;
+  /** A sentence starts playing now (drives markPlayed, captions and board reveal). `timing`
+   *  places its words on the performance.now() clock (inline board markers). */
+  onSentenceStart?: (utteranceId: bigint, idx: number, timing: SentenceTiming) => void;
   /** Playing state changed (true while audio is scheduled ahead). */
   onPlayingChange?: (playing: boolean) => void;
 }
@@ -111,7 +116,7 @@ export class PlaybackQueue {
     const [s, e] = trimRange(ints, this.cfg.TRIM_SILENCE_LEVEL);
     if (e <= s) {
       eventLog.log('audio.empty', { utteranceId: b.utteranceId.toString(), idx: b.idx });
-      this.fireStart(b.utteranceId, b.idx, 0);
+      this.fireStart(b.utteranceId, b.idx, 0, { startMs: performance.now(), durationMs: 0, trimStartMs: 0, wordStartsMs: [], wordEndsMs: [] });
       return;
     }
     const samples = applyFades(int16ToFloat(ints.subarray(s, e)), sampleRate, this.cfg.FADE_MS);
@@ -126,7 +131,15 @@ export class PlaybackQueue {
     const endAt = startAt + buffer.duration;
     this.nextStart = endAt + this.cfg.SENTENCE_PAUSE_MS / 1000;
     source.start(startAt);
-    const timer = this.fireStart(b.utteranceId, b.idx, Math.max(0, (startAt - now) * 1000));
+    const inMs = Math.max(0, (startAt - now) * 1000);
+    const timing: SentenceTiming = {
+      startMs: performance.now() + inMs,
+      durationMs: buffer.duration * 1000,
+      trimStartMs: (s / (sampleRate || this.cfg.TTS_SAMPLE_RATE)) * 1000,
+      wordStartsMs: b.data.wordStartsMs ?? [],
+      wordEndsMs: b.data.wordEndsMs ?? [],
+    };
+    const timer = this.fireStart(b.utteranceId, b.idx, inMs, timing);
     const item: Scheduled = { utteranceId: b.utteranceId, idx: b.idx, source, startAt, endAt, timer };
     source.onended = () => {
       this.scheduled = this.scheduled.filter(x => x !== item);
@@ -145,11 +158,16 @@ export class PlaybackQueue {
     this.updatePlaying(true);
   }
 
-  private fireStart(utteranceId: bigint, idx: number, delayMs: number): ReturnType<typeof setTimeout> {
+  private fireStart(utteranceId: bigint, idx: number, delayMs: number, timing: SentenceTiming): ReturnType<typeof setTimeout> {
     // Flushing clears these timers, so a timer that fires belongs to audio that really plays.
     return setTimeout(() => {
-      eventLog.log('audio.play_start', { utteranceId: utteranceId.toString(), idx });
-      this.cb.onSentenceStart?.(utteranceId, idx);
+      eventLog.log('audio.play_start', {
+        utteranceId: utteranceId.toString(),
+        idx,
+        durationMs: Math.round(timing.durationMs),
+        words: timing.wordStartsMs.length,
+      });
+      this.cb.onSentenceStart?.(utteranceId, idx, timing);
     }, delayMs);
   }
 

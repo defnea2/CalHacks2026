@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { pack } from '@tutor/shared';
 import { getRenderer, parseContent, renderers } from '../src/board/registry';
-import { revealState, utteranceProgress } from '../src/board/reveal';
+import { markerOffsetMs, revealState, utteranceProgress, type SentenceTiming } from '../src/board/reveal';
 import type { RendererProps } from '../src/board/types';
 
 const props = (content: Record<string, unknown>, progress = Infinity): RendererProps => ({
@@ -87,5 +87,57 @@ describe('reveal sync', () => {
     const p = utteranceProgress(s, new Map([['7', 1]]), over, ['played', 'dropped'], ['played', 'dropped']);
     expect(p.get('7')).toEqual({ maxStarted: 1, over: false });
     expect(p.get('8')).toEqual({ maxStarted: 0, over: true });
+  });
+});
+
+describe('inline marker reveal', () => {
+  const speech = 'Here are two thirds, and here are eight twelfths.';
+  const timing = (over: Partial<SentenceTiming> = {}): SentenceTiming => ({
+    startMs: 1000,
+    durationMs: 3000,
+    trimStartMs: 100,
+    wordStartsMs: [118, 360, 520, 600, 1480, 1560, 1880, 2040, 2200],
+    wordEndsMs: [280, 440, 600, 1320, 1560, 1800, 1960, 2200, 2760],
+    ...over,
+  });
+
+  it('maps the marker to the TTS timestamp of the word at/after it (minus trimmed silence)', () => {
+    const t = timing();
+    expect(markerOffsetMs(speech, speech.indexOf('two'), t)).toBe(520 - 100);
+    // marker right after "thirds" (offset of the comma) -> next word "and"
+    expect(markerOffsetMs(speech, speech.indexOf(', and'), t)).toBe(1480 - 100);
+    expect(markerOffsetMs(speech, 0, t)).toBe(18);
+    // at the end -> end of the last word, clamped to the duration
+    expect(markerOffsetMs(speech, speech.length, t)).toBe(2660);
+    expect(markerOffsetMs(speech, speech.length, timing({ durationMs: 2000 }))).toBe(2000);
+  });
+
+  it('word counts that differ map proportionally', () => {
+    const t = timing({ wordStartsMs: [0, 1000, 2000], wordEndsMs: [900, 1900, 2900], trimStartMs: 0 });
+    // token 4 of 9 ("and") -> word round(4 * 3 / 9) = 1
+    expect(markerOffsetMs(speech, speech.indexOf('and'), t)).toBe(1000);
+  });
+
+  it('without timestamps: estimate from the share of the sentence', () => {
+    const t = timing({ wordStartsMs: [], wordEndsMs: [] });
+    const pos = speech.indexOf('eight');
+    expect(markerOffsetMs(speech, pos, t)).toBeCloseTo((3000 * pos) / speech.length, 6);
+    expect(markerOffsetMs(speech, speech.length, t)).toBe(3000);
+  });
+
+  it('item with a marker waits for its word in the playing sentence, not for later ones', () => {
+    const item = { utteranceId: 7n, sentenceIdx: 1, markerPos: 10 };
+    const playing = { maxStarted: 1, over: false };
+    expect(revealState(item, { maxStarted: 0, over: false }, { now: 5000, markerAt: 4000 }).revealed).toBe(false);
+    expect(revealState(item, playing, { now: 1000, markerAt: 1500 })).toEqual({ revealed: false, progress: 0, revealAt: 1500 });
+    expect(revealState(item, playing, { now: 1500, markerAt: 1500 })).toEqual({ revealed: true, progress: 1 });
+    // item arrived after its word was already said -> immediately
+    expect(revealState(item, playing, { now: 9000, markerAt: 1500 }).revealed).toBe(true);
+    // a later sentence started, utterance over, or no local timing (observer/reload) -> shown
+    expect(revealState(item, { maxStarted: 2, over: false }, { now: 0, markerAt: 1500 }).revealed).toBe(true);
+    expect(revealState(item, { maxStarted: 1, over: true }, { now: 0, markerAt: 1500 }).revealed).toBe(true);
+    expect(revealState(item, playing, { now: 0 }).revealed).toBe(true);
+    // no marker: sentence start as before
+    expect(revealState({ ...item, markerPos: -1 }, playing, { now: 0, markerAt: 1500 }).revealed).toBe(true);
   });
 });
