@@ -56,6 +56,8 @@ import RegisterAgentReducer from "./register_agent_reducer";
 import RememberReducer from "./remember_reducer";
 import ReportNoiseReducer from "./report_noise_reducer";
 import RequestTutorReducer from "./request_tutor_reducer";
+import ResetSimulatedStudentsReducer from "./reset_simulated_students_reducer";
+import SeedMemoryReducer from "./seed_memory_reducer";
 import SetImpersonationReducer from "./set_impersonation_reducer";
 import SetPhaseReducer from "./set_phase_reducer";
 import SetPresenceReducer from "./set_presence_reducer";
@@ -63,6 +65,7 @@ import SetSessionVoiceReducer from "./set_session_voice_reducer";
 import SetTurnStateReducer from "./set_turn_state_reducer";
 import ShowBoardItemReducer from "./show_board_item_reducer";
 import StartClassSessionReducer from "./start_class_session_reducer";
+import StartClassSessionWithReducer from "./start_class_session_with_reducer";
 import StartConversationReducer from "./start_conversation_reducer";
 import StartSessionReducer from "./start_session_reducer";
 import SubmitGapAnswerReducer from "./submit_gap_answer_reducer";
@@ -526,6 +529,8 @@ const reducersSchema = __reducers(
   __reducerSchema("remember", RememberReducer),
   __reducerSchema("report_noise", ReportNoiseReducer),
   __reducerSchema("request_tutor", RequestTutorReducer),
+  __reducerSchema("reset_simulated_students", ResetSimulatedStudentsReducer),
+  __reducerSchema("seed_memory", SeedMemoryReducer),
   __reducerSchema("set_impersonation", SetImpersonationReducer),
   __reducerSchema("set_phase", SetPhaseReducer),
   __reducerSchema("set_presence", SetPresenceReducer),
@@ -533,6 +538,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_turn_state", SetTurnStateReducer),
   __reducerSchema("show_board_item", ShowBoardItemReducer),
   __reducerSchema("start_class_session", StartClassSessionReducer),
+  __reducerSchema("start_class_session_with", StartClassSessionWithReducer),
   __reducerSchema("start_conversation", StartConversationReducer),
   __reducerSchema("start_session", StartSessionReducer),
   __reducerSchema("submit_gap_answer", SubmitGapAnswerReducer),

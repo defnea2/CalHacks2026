@@ -106,6 +106,9 @@ export function ClassSetup({ conn, teacherId }: { conn: DbConnection; teacherId:
   const [doc, setDoc] = useState<ClassDocument>(NO_DOCUMENT);
   const [docBusy, setDocBusy] = useState(false);
   const [simulated, setSimulated] = useState(8);
+  const [resetSim, setResetSim] = useState(true);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetState, setResetState] = useState<'' | 'busy' | 'done'>('');
   const [busy, setBusy] = useState(false);
   const [startedAfter, setStartedAfter] = useState<bigint | null>(null);
 
@@ -153,15 +156,27 @@ export function ClassSetup({ conn, teacherId }: { conn: DbConnection; teacherId:
       documentText: doc.text,
       documentData: doc.data,
       simulatedCount: Math.max(0, Math.min(MAX_SIMULATED, simulated)),
+      resetSimulated: resetSim,
     };
     setStartedAfter(classes.reduce((m, c) => (c.id > m ? c.id : m), 0n));
-    eventLog.log('ui.start_class', { simulated: args.simulatedCount, document: doc.mime });
-    const r = await callReducer('startClassSession', args, () => conn.reducers.startClassSession(args));
+    eventLog.log('ui.start_class', { simulated: args.simulatedCount, reset: resetSim, document: doc.mime });
+    const r = await callReducer('startClassSessionWith', args, () => conn.reducers.startClassSessionWith(args));
     if (!r.ok) {
       setStartedAfter(null);
       setBusy(false);
       setError(r.error ?? 'failed');
     }
+  };
+
+  /** All 20 simulated students back to their seed memories (refused while a class is running). */
+  const resetAll = async () => {
+    setConfirmReset(false);
+    setResetState('busy');
+    setError('');
+    const args = { count: 0 };
+    const r = await callReducer('resetSimulatedStudents', args, () => conn.reducers.resetSimulatedStudents(args));
+    setResetState(r.ok ? 'done' : '');
+    if (!r.ok) setError(r.error ?? 'failed');
   };
 
   return (
@@ -219,6 +234,23 @@ export function ClassSetup({ conn, teacherId }: { conn: DbConnection; teacherId:
               AI students with their own personalities and memories, typing to the tutor. The dashboard groups students in twos or fours, so an even number works best.
               {simulated % 2 === 1 && <strong data-testid="sim-odd"> With an odd number one group has three.</strong>}
             </p>
+            <label className="pr-check" style={{ marginTop: 10 }}>
+              <input data-testid="sim-reset" type="checkbox" checked={resetSim} onChange={e => setResetSim(e.target.checked)} />
+              Reset simulated students (fresh memories)
+            </label>
+            <div className="pr-note" style={{ margin: '8px 0 0' }}>
+              {confirmReset ? (
+                <span data-testid="sim-reset-ask">
+                  Reset all {MAX_SIMULATED} to fresh memories?{' '}
+                  <button type="button" className="pr-secondary" data-testid="sim-reset-confirm" onClick={() => void resetAll()}>Yes, reset</button>{' '}
+                  <button type="button" className="pr-secondary" data-testid="sim-reset-cancel" onClick={() => setConfirmReset(false)}>Cancel</button>
+                </span>
+              ) : (
+                <button type="button" className="pr-secondary" data-testid="sim-reset-button" disabled={resetState === 'busy'} onClick={() => { setResetState(''); setConfirmReset(true); }}>
+                  {resetState === 'busy' ? 'Resetting…' : resetState === 'done' ? 'Simulated students reset ✓' : 'Reset simulated students'}
+                </button>
+              )}
+            </div>
           </div>
           <button className="pr-primary" data-testid="start-class" disabled={busy || docBusy}>
             <span>{busy ? 'Starting…' : 'Start class session'}</span>

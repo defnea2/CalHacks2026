@@ -122,6 +122,9 @@ export interface StartClassArgs {
   documentText: string;
   documentData: Uint8Array;
   simulatedCount: number;
+  /** true (default): simulation users 1..n are reset to their seed (fresh memory); false: they
+   *  keep memory and history from earlier runs and just join (a missing one is created). */
+  resetSimulated?: boolean;
 }
 
 function validateDocument(a: StartClassArgs): void {
@@ -170,12 +173,13 @@ export function startClassSession(ctx: Ctx, a: StartClassArgs): ClassRow {
     writePresence(ctx, l.id, IN_SESSION);
   }
 
-  // Simulation users: 1..n are reset and join in text mode; the others leave.
+  // Simulation users: 1..n are reset (unless resetSimulated is false) and join in text mode; the others leave.
   for (const l of [...ctx.db.learner.iter()]) {
     if (l.isSimulated && (l.simRank < 1 || l.simRank > a.simulatedCount)) retireSimUser(ctx, l);
   }
+  const reset = a.resetSimulated ?? true;
   for (let rank = 1; rank <= a.simulatedCount; rank++) {
-    const l = resetSimUser(ctx, rank);
+    const l = (!reset && simUser(ctx, rank)) || resetSimUser(ctx, rank);
     const s = linkedSession(ctx, cls, l.id, false);
     writePresence(ctx, l.id, IN_SESSION, '');
     startConversation(ctx, s.id); // the tutor speaks first; the student answers it
@@ -264,6 +268,27 @@ export function resetSimUser(ctx: Ctx, rank: number): LearnerRow {
     });
   }
   return learner;
+}
+
+/** The existing simulation user of seed rank `rank` (lowest id), if any. */
+export function simUser(ctx: Ctx, rank: number): LearnerRow | undefined {
+  return [...ctx.db.learner.iter()].filter(l => l.isSimulated && l.simRank === rank).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+}
+
+/** resetSimulatedStudents: simulation users 1..count (0 = all) back to their seed state (learner
+ *  recreated; sessions, turns, memory notes, concept states and summaries deleted; seed notes
+ *  re-inserted), in seed order. Refused while one of them is in a running class session. */
+export function resetSimulatedStudents(ctx: Ctx, count: number): number {
+  if (count > SIM_STUDENTS.length) throw new SenderError(`count must be at most ${SIM_STUDENTS.length} (0 = all)`);
+  const n = count === 0 ? SIM_STUDENTS.length : count;
+  for (let rank = 1; rank <= n; rank++) {
+    const l = simUser(ctx, rank);
+    if (!l) continue;
+    const live = [...ctx.db.session.learnerId.filter(l.id)].find(s => s.active && s.classSessionId && ctx.db.classSession.id.find(s.classSessionId)?.active);
+    if (live) throw new SenderError(`${l.name} is in the running class session ${live.classSessionId}; end it first`);
+  }
+  for (let rank = 1; rank <= n; rank++) resetSimUser(ctx, rank);
+  return n;
 }
 
 /** A simulation user not part of this run: session ended, offline. */
