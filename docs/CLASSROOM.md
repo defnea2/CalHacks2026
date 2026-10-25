@@ -38,6 +38,7 @@ startClassSession(teacherId: u64, goals: string, content: string, delivery: stri
 endClassSession(classSessionId: u64)
 setImpersonation(classSessionId: u64, learnerId: u64)                       // 0 = stop observing
 procedure refreshDashboard(classSessionId: u64) -> string                    // JSON {ok, skipped?, error?, repaired?, repairs?, clusters?}
+procedure learnerInsights(learnerId: u64, teacherId: u64, key: string) -> string // JSON LearnerInsightsResult (shared/src/insights.ts)
 // scheduled (internal): dashboardTick (dashboard_job), simStudentTurn (sim_turn_job)
 ```
 
@@ -71,6 +72,14 @@ procedure refreshDashboard(classSessionId: u64) -> string                    // 
   Markdown document (first 12 000 chars). An image document reaches the worker's first call through
   `getSessionImage` (falls back to the class document when the session has no own photo; `hasImage`
   is set on linked sessions), exactly like a task photo.
+
+- **Student profile (learnerInsights).** Opened from the teacher dashboard; long-term information
+  only (no live state): what the tutor has learned about the student (memory notes with evidence;
+  `seeded` marks simulation seed notes), concept mastery with titles, the last 5 session summaries.
+  Gate: the teacher id must exist; if the module env `INSIGHTS_KEY` is set, `key` must match
+  (otherwise `{ok:false, error:'locked'}`; pass `''` when unset). Client call:
+  `JSON.parse(await conn.procedures.learnerInsights({ learnerId, teacherId, key }))`. Privacy
+  trade-off: see `docs/ARCHITECTURE.md` §8.
 
 ## Simulation
 
