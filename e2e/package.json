@@ -5,6 +5,7 @@
   "scripts": {
     "gen-speech": "tsx gen-speech.ts",
     "smoke:pipeline": "tsx smoke-pipeline.ts",
+    "smoke:generation": "tsx smoke-generation.ts",
     "typecheck": "tsc -p .",
     "test:e2e": "tsx run.ts",
     "stack": "tsx stack.ts"

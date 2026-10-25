@@ -71,7 +71,7 @@ export function loadConfig(): WorkerConfig {
     llmProvider: (env.LLM_PROVIDER || (env.ANTHROPIC_API_KEY ? 'anthropic' : 'openrouter')) === 'openrouter' ? 'openrouter' : 'anthropic',
     anthropicApiKey: env.ANTHROPIC_API_KEY ?? '',
     anthropicModel: env.ANTHROPIC_MODEL || 'claude-haiku-5-5',
-    anthropicEffort: (env.ANTHROPIC_EFFORT as WorkerConfig['anthropicEffort']) || 'low',
+    anthropicEffort: (env.ANTHROPIC_EFFORT as WorkerConfig['anthropicEffort']) || 'medium',
     // Thinking off measured 0.3-0.5 s faster to first token on Haiku 5.5 at effort low; tool calls still work.
     anthropicThinking: env.ANTHROPIC_THINKING === 'adaptive' ? 'adaptive' : 'disabled',
     openrouterApiKey: env.OPENROUTER_API_KEY ?? '',
