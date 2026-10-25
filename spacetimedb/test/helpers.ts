@@ -132,4 +132,37 @@ export function chatResponse(content: unknown) {
   return { status: 200, body: JSON.stringify({ choices: [{ message: { role: 'assistant', content: JSON.stringify(content) } }] }) };
 }
 
+/** Anthropic Messages API response; leading thinking block like adaptive thinking produces. */
+export function anthropicResponse(content: unknown, over: { stopReason?: string; text?: string; stopDetails?: unknown } = {}) {
+  return {
+    status: 200,
+    body: JSON.stringify({
+      id: 'msg_test',
+      type: 'message',
+      role: 'assistant',
+      model: 'claude-haiku-5-5',
+      content: [
+        { type: 'thinking', thinking: '', signature: 'sig' },
+        { type: 'text', text: over.text ?? JSON.stringify(content) },
+      ],
+      stop_reason: over.stopReason ?? 'end_turn',
+      stop_details: over.stopDetails ?? null,
+      usage: { input_tokens: 100, output_tokens: 50 },
+    }),
+  };
+}
+
+export type Provider = 'openrouter' | 'anthropic';
+export const PROVIDER_ENV: Record<Provider, Record<string, string>> = {
+  openrouter: {},
+  anthropic: { ANTHROPIC_API_KEY: 'anthropic-test' }, // MEMORY_PROVIDER unset: key present -> anthropic
+};
+/** Successful JSON answer in the given provider's wire format. */
+export const llmOk = (p: Provider, content: unknown) => (p === 'anthropic' ? anthropicResponse(content) : chatResponse(content));
+/** The user prompt of an LLM request in either wire format. */
+export function userPrompt(p: Provider, req: Req): string {
+  const body = JSON.parse(req.text);
+  return p === 'anthropic' ? body.messages[0].content : body.messages[1].content;
+}
+
 export { mod };
