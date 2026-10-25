@@ -3,6 +3,7 @@ import { CompactLessonSchema, COMPACT_INSTRUCTIONS, compactBeat, lessonStep } fr
 import { validateModelStep, type ModelRequest } from "./planning";
 import { blueprintOf, type PlanningProgressHandler } from "../teaching/streaming";
 import type { TeachingStep } from "../teaching/contracts";
+import { speakablePrompt, visibleAnswer } from "../teaching/checkGuards";
 import type { CanvasState, VisualBeat } from "../presentation/contracts";
 
 export const moment = z.object({
@@ -56,7 +57,9 @@ export function sanitizeVisual(visual: Moment["visual"]): Moment["visual"] {
 export const FILLERS = ["Take one more careful look at the picture.", "Notice what changed and what stayed the same."];
 // The assessment is only legal for the latest unassessed explanation answer, and is required then. The model slips on both,
 // after which the whole lesson would be rejected; drop an illegal one and default a missing one to the cautious "unclear".
-export function fixAssessment(request: ModelRequest, m: Meta): Meta {
+export function fixAssessment(request: ModelRequest, input: Meta): Meta {
+  // Voice lesson: the task is spoken and answered by voice, so never "Type the top number."
+  const m = input.check && speakablePrompt(input.check.prompt) !== input.check.prompt ? { ...input, check: { ...input.check, prompt: speakablePrompt(input.check.prompt) } } : input;
   const ctx = request.context;
   const latest = ctx.evidence.filter(e => e.stepId === ctx.currentStep?.id).at(-1);
   const legal = Boolean(latest && latest.source === "unassessed" && latest.response.kind === "answer" && ctx.currentStep?.check?.kind === "explanation");
@@ -121,6 +124,10 @@ export class LessonStreamParser {
           const m = { ...parsed, visual: sanitizeVisual(parsed.visual) };
           // Compile against the canvas planned so far. Only the final moment may be interactive, and it is never released early.
           const r = compactBeat(this.meta!, m, this.moments.length, false, this.planned);
+          // Under an arc the task's answer may not be drawn in the first moment (nothing spoken yet: the repair round fixes it).
+          // Later moments are not truncated for it: a cut lesson (recap + fillers) was worse in the rehearsal runs.
+          const visible = this.request.context.session.arc && this.moments.length === 0 ? visibleAnswer(this.meta!.check, r.planned) : null;
+          if (visible) throw new Error(visible);
           this.moments.push(m); this.beats.push(r.beat); this.planned = r.planned;
           this.stage = "separator";
         } catch (error) {

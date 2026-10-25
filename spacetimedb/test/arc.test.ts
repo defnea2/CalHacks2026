@@ -63,6 +63,11 @@ describe('demo2min arc', () => {
     // The task may not be the homework itself (it is handed back at the end).
     const homework = { ...demoMeta, check: { kind: 'number', prompt: `${TASK} What is the new top number?`, rule: { operation: 'value', value: 8 } } };
     expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(homework) })).toThrow(/own homework/);
+    // ... not in other words either (same numbers), and a choice task has exactly one correct option.
+    const paraphrase = { ...demoMeta, check: { kind: 'choice', prompt: 'Which fraction is the same amount as two thirds?', options: [{ id: 'a', label: '8/12' }, { id: 'b', label: '3/4' }], correctOptionId: 'a' } };
+    expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(paraphrase) })).toThrow(/same numbers as the learner's homework/);
+    const noneCorrect = { ...demoMeta, check: { kind: 'choice', prompt: 'Which fraction is the same as one half?', options: [{ id: 'a', label: '2/3' }, { id: 'b', label: '3/4' }], correctOptionId: 'a' } };
+    expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(noneCorrect) })).toThrow(/no correct option/);
     call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(demoMeta) });
     demoMoments.slice(0, 3).forEach((m, i) => addBeat(e, 100n, i, m, false));
     const formal = JSON.parse(beats(e, 100n)[2]!.visual);
@@ -86,10 +91,21 @@ describe('demo2min arc', () => {
     say(e, "I don't know");
     expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ outcome: 'unclear' });
     expect(request(e).request.context.allowedPhases).toEqual(['repair']);
+    // The repair task's answer may not be on the first picture (2 of 4 drawn: "one half is how many quarters?").
+    call(e.h, e.agent, mod.beginUtterance, { sessionId: e.s.id, utteranceId: 150n, replyToIdx: turns(e.h, e.s.id).filter(t => t.role === 'student').at(-1)!.idx, preemptive: false });
+    call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 150n, meta: JSON.stringify({ ...demoRepairMeta, check: { kind: 'number', prompt: 'One half is how many quarters?', rule: { operation: 'value', value: 2 } } }) });
+    expect(() => addBeat(e, 150n, 0, { visual: { kind: 'bars', bars: [{ id: 'pizza', label: 'Pizza', parts: 4, shaded: 2 }] }, narration: 'Two of four slices.' }, false)).toThrow(/already on the picture/);
+    // The worker's repair round after that rejection may ask to accept it (a mild giveaway beats the fallback line).
+    addBeat(e, 150n, 0, { visual: { kind: 'bars', bars: [{ id: 'pizza', label: 'Pizza', parts: 4, shaded: 2 }] }, acceptVisible: true, narration: 'Two of four slices.' }, false);
+    expect(beats(e, 150n)).toHaveLength(1);
+    call(e.h, e.agent, mod.appendTutorTurn, { sessionId: e.s.id, utteranceId: 150n, text: 'lesson', interrupted: true });
     step(e, 200n, demoRepairMeta, demoRepairMoments);
     say(e, 'five');
     expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ outcome: 'incorrect' });
     expect(request(e).request.context.allowedPhases).toEqual(['return_to_problem']);
+    // A wrong answer is named kindly at once (authored), and the planner is told it was said.
+    expect(request(e).say).toEqual(['You said five. Not quite.']);
+    expect(JSON.stringify(request(e).request.context.session.context)).toContain('The tutor already said');
     step(e, 300n, demoHandBackMeta, demoHandBackMoments);
     expect(lesson(e).stage).toBe('completed');
   });
@@ -101,6 +117,53 @@ describe('demo2min arc', () => {
     say(e, 'two quarters, 2/4');
     expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ outcome: 'correct' });
     expect(request(e).request.context.allowedPhases).toEqual(['return_to_problem']);
+  });
+});
+
+describe('push back, then let the learner decide', () => {
+  it('asking for the answer: authored push-back (no step), yes -> hand back with the answer, no -> the task again', () => {
+    const e = demo();
+    say(e, 'Hmm.');
+    step(e, 100n, demoMeta, demoMoments);
+    say(e, 'Just tell me the answer.');
+    const push = request(e);
+    expect(push).toMatchObject({ ok: true, sayOnly: true });
+    expect(push.say[0]).toMatch(/Are you sure I should just tell you the answer/);
+    expect(push.request).toBeUndefined();
+    expect(lesson(e).stage).toBe('awaiting_response');
+    expect(JSON.parse(lesson(e).notes).pending).toMatchObject({ kind: 'ask_answer' });
+    say(e, 'yes, please tell me');
+    const yes = request(e);
+    expect(yes.say).toEqual(["Okay, I'll tell you."]);
+    expect(yes.request.context.allowedPhases).toEqual(['return_to_problem']);
+    expect(yes.request.context.session.decision).toBe('give_answer');
+    step(e, 300n, demoHandBackMeta, demoHandBackMoments);
+    expect(lesson(e).stage).toBe('completed');
+    expect(JSON.parse(lesson(e).notes).decision).toBeNull();
+  });
+
+  it('no -> the open task is asked again (authored), the evidence is untouched; "yes" without a question is an answer', () => {
+    const e = demo();
+    say(e, 'Hmm.');
+    step(e, 100n, demoMeta, demoMoments);
+    say(e, 'Just tell me the answer.');
+    say(e, "ok, let's figure it out");
+    const no = request(e);
+    expect(no.sayOnly).toBe(true);
+    expect(no.say).toEqual(["Great, let's figure it out together.", demoMeta.check.prompt]);
+    expect(lesson(e).stage).toBe('awaiting_response');
+    expect(JSON.parse(lesson(e).evidence)).toHaveLength(0);
+    say(e, 'yes');
+    expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ response: { kind: 'answer', text: 'yes' } });
+  });
+
+  it('small request: "say it again slower" is a help request (no confirmation)', () => {
+    const e = demo();
+    say(e, 'Hmm.');
+    step(e, 100n, demoMeta, demoMoments);
+    say(e, 'say it again slower');
+    expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ response: { kind: 'help', request: 'repeat' } });
+    expect(request(e).say).toEqual(['Sure, here it is again, slowly.']); // authored acknowledgement, the step follows
   });
 });
 

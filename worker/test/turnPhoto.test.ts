@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { emptyCanvas } from '@tutor/teaching/presentation/contracts';
 import { buildModelRequest, newLessonRecord } from '@tutor/teaching/teaching/lessonFlow';
 import { miniLessonText, miniSession } from '../../teaching/test/fixtures';
-import { done, FakeLlm, makeAgent, session, turn, waitFor } from './fakes';
+import { done, FakeLlm, makeAgent, phrase, session, turn, waitFor } from './fakes';
 
 const A = 1n;
 const PHOTO = 'data:image/jpeg;base64,/9j/AAAA';
@@ -32,5 +32,24 @@ describe('turn photo', () => {
     await waitFor(() => llm.calls.length === 2, 3000);
     expect(typeof llm.calls[1]!.messages[1]!.content).toBe('string');
     expect(asked).toEqual([0]);
+  });
+
+  // Latency guard: without a photo, the lesson run prepared before the turn closed is the one
+  // that speaks (one planner call), and no getTurnImage round trip is made.
+  it('keeps the preemptive lesson run and skips getTurnImage when no photo is pending', async () => {
+    const llm = new FakeLlm([[{ type: 'text', delta: miniLessonText() }, done], [{ type: 'text', delta: miniLessonText() }, done]]);
+    const { agent, transport } = makeAgent(llm, undefined, { replyMode: 'lesson', preemptive: true, preemptiveSilenceMs: 5 });
+    transport.lessonRequest = buildModelRequest(newLessonRecord(miniSession), emptyCanvas(), 'req');
+    const asked: number[] = [];
+    Object.assign(transport, { getTurnImage: async (a: { sessionId: bigint; turnIdx: number }) => (asked.push(a.turnIdx), '') });
+    agent.onSession(session(A));
+    agent.onPhrase(phrase(A, 1, 0, 'done', 'Is it one half?'));
+    agent.onTurn(turn(A, 0, 'Is it one half?', 'open'));
+    await waitFor(() => llm.calls.length === 1, 3000);
+    agent.onTurn({ ...turn(A, 0, 'Is it one half?', 'ready'), hasPhoto: false });
+    await waitFor(() => transport.of('appendTutorTurn').length === 1, 3000);
+    expect(llm.calls).toHaveLength(1);
+    expect(transport.of('beginUtterance')[0]).toMatchObject({ preemptive: true, replyToIdx: 0 });
+    expect(asked).toEqual([]);
   });
 });

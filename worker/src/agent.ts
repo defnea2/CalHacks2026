@@ -9,6 +9,7 @@ import { buildSystemPrompt } from './prompt';
 import { openingLines, ReplyRun, type ReplyDeps } from './reply';
 import { prefetchTopic } from './topic';
 import { LessonRun, type LessonDeadlines } from './lesson';
+import { flowSensitive } from '@tutor/teaching/teaching/intent';
 import { ToolRouter } from './router';
 import { createToolDefs } from './tools/index';
 import type { ToolDef } from './tools/types';
@@ -80,6 +81,12 @@ export class Agent {
   /** Lesson planner library index (system prompt, cache-stable); undefined = library off. */
   readonly libraryIndex?: string;
   private lastUtteranceId = 0n;
+  /** Sessions seen ending (cleared by closeAll: ids restart after `--clear`). */
+  private readonly ended = new Set<bigint>();
+  /** Set by the connection: is this session in the client cache's active sessions? The SDK
+   *  updates the cache for a whole transaction before any callback runs, so a turn inserted
+   *  with its session is found. Unset (tests): every unknown, not-ended session counts. */
+  isActiveSession?: (id: bigint) => boolean;
   readonly log: (msg: string) => void;
   readonly now: () => number;
 
@@ -117,6 +124,7 @@ export class Agent {
 
   onSession(row: SessionRow): void {
     if (!row.active) return this.onSessionGone(row.id);
+    this.ended.delete(row.id);
     // Same id, different session (ids restart at 1 after `--clear` / a republished database).
     const prev = this.sessions.get(row.id)?.row?.startedAt?.microsSinceUnixEpoch;
     if (prev !== undefined && row.startedAt && prev !== row.startedAt.microsSinceUnixEpoch) this.onSessionGone(row.id);
@@ -124,6 +132,7 @@ export class Agent {
   }
 
   onSessionGone(id: bigint): void {
+    this.ended.add(id);
     const s = this.sessions.get(id);
     if (!s) return;
     s.close();
@@ -131,15 +140,25 @@ export class Agent {
   }
 
   onTurn(row: TurnRow): void {
-    this.session(row.sessionId).setTurn(row);
+    this.live(row.sessionId)?.setTurn(row);
   }
 
   onPhrase(row: PhraseRow): void {
-    this.session(row.sessionId).setPhrase(row);
+    this.live(row.sessionId)?.setPhrase(row);
   }
 
   onSentence(row: SentenceRow): void {
-    this.session(row.sessionId).setSentence(row);
+    this.live(row.sessionId)?.setSentence(row);
+  }
+
+  /** Guard for the table-wide turn/phrase/reply_sentence subscriptions: rows of a session that
+   *  ended (or that the active-session cache does not hold) never create a SessionAgent. */
+  private live(id: bigint): SessionAgent | undefined {
+    const s = this.sessions.get(id);
+    if (s) return s;
+    if (this.ended.has(id)) return undefined;
+    if (this.isActiveSession && !this.isActiveSession(id)) return undefined;
+    return this.session(id);
   }
 
   /** A pushAudio chunk arrived. phraseId lets the agent tell a phrase's final chunk (the
@@ -165,6 +184,7 @@ export class Agent {
   /** Abort everything (shutdown, and on every (re)connect: the subscription re-delivers all rows). */
   closeAll(): void {
     for (const id of [...this.sessions.keys()]) this.onSessionGone(id);
+    this.ended.clear();
   }
 }
 
@@ -453,6 +473,9 @@ export class SessionAgent {
       !this.held &&
       !this.live?.llmActive &&
       turn.text.trim() !== '' &&
+      // A request that may change the lesson flow (push-back, confirm/decline) waits for the
+      // module's decision at turn end instead of planning a lesson ahead (teaching/intent.ts).
+      !flowSensitive(turn.text) &&
       ![...this.phrases.values()].some(p => p.turnIdx === turn.idx && BUSY_PHRASES.includes(p.status as PhraseStatus));
     if (!ok()) return this.clearPreemptTimer();
     const wait = Math.max(0, o.preemptiveSilenceMs - (this.agent.now() - this.lastSpeechAt));

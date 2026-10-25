@@ -39,7 +39,7 @@ export const demoMoments: Array<{ visual: Record<string, unknown>; narration: st
 ];
 export const demoRepairMeta = {
   phase: "repair", title: "Smaller pizza", goal: "Double top and bottom", approach: "simplify", reason: "The task was missed", assessment: null,
-  check: { kind: "number", prompt: "One half is how many quarters?", rule: { operation: "value", value: 2 } },
+  check: { kind: "number", prompt: "One half is how many sixths?", rule: { operation: "value", value: 3 } },
 } as const;
 export const demoRepairMoments = [
   { visual: { kind: "bars", bars: [{ id: "pizza", label: "Pizza", parts: 2, shaded: 1 }] }, narration: "Let us take a pizza with two slices. One slice is yours." },

@@ -4,7 +4,7 @@ import { containerIds, objectIds } from "../shared/contracts";
 import type { Evidence, LearnerResponse, TeachingCheck } from "./contracts";
 import { NumericRuleSchema } from "./contracts";
 import type { z } from "zod";
-import { parseSpokenNumber } from "./numbers";
+import { numbersIn, parseSpokenNumber, spokenValue } from "./numbers";
 
 export function numericValue(rule: z.infer<typeof NumericRuleSchema>): number {
   switch (rule.operation) {
@@ -113,6 +113,8 @@ const unclear = (observation: string): Observation => ({
   source: "unassessed",
   observation,
 });
+const HEDGED = /\b(maybe|perhaps|not sure|i guess|no idea)\b/i;
+
 const numberEqual = (a: number, b: number) =>
   Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 export function assessResponse(
@@ -136,15 +138,33 @@ export function assessResponse(
   if (check.kind === "number") {
     if (response.kind !== "answer")
       return unclear("This check needs a numeric answer.");
+    const expected = numericValue(check.rule);
     const parsed = parseSpokenNumber(response.text);
-    if (parsed === null)
-      return unclear(
-        "Response is not an unambiguous number; clarify rather than mark it wrong.",
-      );
-    observedValue = parsed;
-    if (!Number.isFinite(observedValue))
-      return unclear("The number could not be read.");
-    correct = numberEqual(observedValue, numericValue(check.rule));
+    // A hedged guess ("I think maybe six?") stays unclear: the tutor asks, it doesn't grade.
+    if (parsed === null && HEDGED.test(response.text))
+      return unclear("Response is a hedged guess; clarify rather than grade it.");
+    // Beyond a bare number: one number or fraction inside the answer ("it's nine", "nine twelfths").
+    const said = parsed === null ? spokenValue(response.text) : { kind: "num" as const, value: parsed };
+    if (said?.kind === "frac") {
+      // A fraction answer is right when it has the expected value (3/4 for 0.75), or when the task
+      // names its bottom number and asks for the top one ("... bottom number is 12": 9/12 for 9).
+      observedValue = `${said.num}/${said.den}`;
+      if (numberEqual(said.num / said.den, expected)) correct = true;
+      else if (Number.isInteger(expected) && numbersIn(check.prompt).includes(said.den)) correct = said.num === expected;
+      else
+        return unclear(
+          "Response names a fraction the rule does not cover; clarify rather than mark it wrong.",
+        );
+    } else {
+      if (!said)
+        return unclear(
+          "Response is not an unambiguous number; clarify rather than mark it wrong.",
+        );
+      observedValue = said.value;
+      if (!Number.isFinite(observedValue))
+        return unclear("The number could not be read.");
+      correct = numberEqual(observedValue, expected);
+    }
   } else if (check.kind === "choice") {
     if (
       response.kind !== "choice" ||
