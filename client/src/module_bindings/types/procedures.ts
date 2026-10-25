@@ -7,11 +7,14 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
 import * as BuildContextProcedure from "../build_context_procedure";
+import * as BuildLessonRequestProcedure from "../build_lesson_request_procedure";
 import * as GetSessionImageProcedure from "../get_session_image_procedure";
 import * as SetTopicProcedure from "../set_topic_procedure";
 
 export type BuildContextArgs = __Infer<typeof BuildContextProcedure.params>;
 export type BuildContextResult = __Infer<typeof BuildContextProcedure.returnType>;
+export type BuildLessonRequestArgs = __Infer<typeof BuildLessonRequestProcedure.params>;
+export type BuildLessonRequestResult = __Infer<typeof BuildLessonRequestProcedure.returnType>;
 export type GetSessionImageArgs = __Infer<typeof GetSessionImageProcedure.params>;
 export type GetSessionImageResult = __Infer<typeof GetSessionImageProcedure.returnType>;
 export type SetTopicArgs = __Infer<typeof SetTopicProcedure.params>;

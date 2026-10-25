@@ -11,6 +11,7 @@
 //   recordUtterance()  -> recordUtterance
 // Differences: no crypto/ids generated here (the caller passes ids), and a help request is accepted
 // in any state with a step (the module already interrupted the presentation when the turn arrived).
+import { z } from "zod";
 import { SessionConfigSchema, type Evidence, type LearnerResponse, type SessionConfig, type TeachingStep } from "./contracts";
 import { assessResponse } from "./checks";
 import { validateTeachingStep } from "./validateStep";
@@ -155,6 +156,12 @@ export function publicCheck(check: TeachingStep["check"]): Record<string, unknow
     case "order": return { kind: check.kind, prompt: check.prompt, sceneId: check.sceneId };
     default: return { kind: check.kind, prompt: check.prompt };
   }
+}
+
+/** Validator message for the model's repair round (the team's formatting of zod issues). */
+export function validatorMessage(error: unknown): string {
+  if (error instanceof z.ZodError) return error.issues.slice(0, 8).map(i => `${i.path.join(".")}: ${i.message}`).join("; ").slice(0, 2500);
+  return error instanceof Error ? error.message : String(error);
 }
 
 export type { Meta as LessonMeta, Moment as LessonMoment };

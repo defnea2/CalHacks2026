@@ -19,6 +19,7 @@ import {
 } from './ctx';
 import { onTurnAppended } from './memory';
 import { queueTextSentence } from './text_mode';
+import { onUtteranceEnd } from './pipeline';
 import { ProviderError, synthesize, ttsRequest } from './providers';
 
 const PENDING: SentenceStatus = 'pending';
@@ -53,7 +54,9 @@ export function beginUtterance(
   if (m.utteranceId !== 0n && m.utteranceId !== args.utteranceId && session.currentUtteranceId === m.utteranceId) {
     throw new SenderError(`turn ${args.replyToIdx} is already being answered by utterance ${m.utteranceId}`);
   }
-  updateSession(ctx, session, { currentUtteranceId: args.utteranceId });
+  // A reply still marked current is superseded: its lesson (if any) ends as interrupted.
+  if (session.currentUtteranceId !== 0n && session.currentUtteranceId !== args.utteranceId) onUtteranceEnd(ctx, session.id, session.currentUtteranceId, 'interrupted');
+  updateSession(ctx, ctx.db.session.id.find(session.id)!, { currentUtteranceId: args.utteranceId });
   ctx.db.turnMetrics.id.update({ ...m, utteranceId: args.utteranceId, preemptive: args.preemptive });
 }
 
@@ -182,6 +185,8 @@ export function maybeFinishSpeaking(ctx: Ctx, sessionId: bigint, utteranceId: bi
 }
 
 function finishUtterance(ctx: Ctx, session: SessionRow): void {
+  onUtteranceEnd(ctx, session.id, session.currentUtteranceId, 'finished');
+  session = ctx.db.session.id.find(session.id)!;
   const turnState = session.turnState === SPEAKING || session.turnState === THINKING || session.turnState === INTERRUPTED ? LISTENING : session.turnState;
   updateSession(ctx, session, { currentUtteranceId: 0n, turnState });
 }
@@ -198,6 +203,8 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
   const session = getActiveSession(ctx, sessionId);
   const utteranceId = session.currentUtteranceId;
   if (utteranceId === 0n && session.turnState === LISTENING) return; // nothing to interrupt
+  // Before unplayed sentences are dropped: the lesson keeps what the learner already saw.
+  onUtteranceEnd(ctx, sessionId, utteranceId, 'interrupted');
   if (utteranceId !== 0n) {
     const sentences = utteranceSentences(ctx, sessionId, utteranceId);
     for (const s of sentences) {
