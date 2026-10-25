@@ -160,6 +160,7 @@ The team's lesson methodology runs as the worker's default reply mode (`REPLY_MO
 - Rejections follow the team contract: one repair round with the validator message before anything was spoken, otherwise truncate and close with a recap beat that carries the check. Deadlines: first token 9 s (retried once), 45 s total, 15 s stall after the first beat. A ready turn without an utterance after 12 s is answered again once.
 - `session.voice = false` (`setSessionVoice`) is text mode: no STT/TTS, sentences count as played after 280 ms per word.
 - Smoke tests: `pnpm --filter worker smoke:lesson` (planner only, `--effort low,medium`), `SPACETIME_DB=<own db> pnpm --filter worker smoke:session [--voice]` (scripted session against a running worker).
+- Two-minute demo arc (`LESSON_ARC=demo2min`, default; `adaptive` = previous policy) and the lesson opening (`LESSON_OPENING=lesson`, default; `script` = authored opening only): the tutor leads straight into a keyframed picture explanation, a formalization (equation revealed on the sentence that reads it) and one task. Measured with `smoke:session` (worst case, learner says "I don't know" twice): voice explanation 10.5 s, formalization 28 s, task 49 s after the start click, whole arc incl. repair and hand-back 90 s. Details: `docs/CONTRACT-night.md` section 1b.
 - Measured (E2E, real Haiku + Cartesia): turn end -> first audio p50 4.3 s with the tool loop vs 2.5 s with the lesson planner (opening 0.47 s, authored). Details: `docs/CONTRACT-night.md` section 1a.
 
 ## Voice runtime
