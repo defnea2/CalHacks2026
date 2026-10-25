@@ -40,6 +40,7 @@ import {
   type LessonRecord,
 } from '../../teaching/src/teaching/lessonFlow';
 import { arcMoment, LessonArcSchema, type LessonArc } from '../../teaching/src/teaching/arc';
+import { choiceProblem, homeworkRepeat, visibleAnswer } from '../../teaching/src/teaching/checkGuards';
 import { splitKeyframes } from '../../teaching/src/teaching/keyframes';
 import { ADAPTIVE_ARC, conceptMaterial, DEFAULT_ARC, guessTopic, pack } from '../../shared/src/lesson/index';
 import { type Ctx, type SessionRow, type TurnRow, getActiveSession, requireAgent, sessionTurns, truncate, updateSession, utteranceSentences } from './ctx';
@@ -247,6 +248,9 @@ export function beginLesson(ctx: Ctx, args: { sessionId: bigint; utteranceId: bi
   const original = request.context.session.originalQuestion;
   if (request.context.session.arc && meta.check && original && normalizePrompt(meta.check.prompt).includes(normalizePrompt(original)))
     throw new SenderError(`The check asks the learner's own homework ("${original}"). Ask a similar task with different numbers; the homework is handed back at the end.`);
+  // Same homework in other words (same numbers), and a choice task without exactly one correct option.
+  const checkIssue = (request.context.session.arc ? homeworkRepeat(meta.check, original) : null) ?? choiceProblem(meta.check);
+  if (checkIssue) throw new SenderError(checkIssue);
   if (!allowed.includes(meta.phase)) throw new SenderError(`Phase is not supported by the current learner evidence: ${meta.phase}. Allowed: ${allowed.join(', ') || 'none'}.`);
   ctx.db.lessonPlan.insert({
     utteranceId: args.utteranceId,
@@ -299,6 +303,9 @@ export function addBeat(ctx: Ctx, args: { sessionId: bigint; utteranceId: bigint
     // The arc owns the shape: the formalization slot shows the equation, the moment cap holds.
     const moment = { ...input.moment, ...arcMoment(request.context.session.arc, meta.phase, args.idx, final, input.moment) };
     compiled = compileMoment(meta, moment, args.idx, final, sceneOf(canvas));
+    // Under an arc the first moment may not draw the task's answer (before speech: the worker repairs it; later moments are not truncated).
+    const visible = request.context.session.arc && args.idx === 0 ? visibleAnswer(meta.check, compiled.planned) : null;
+    if (visible) throw new SenderError(visible);
     // Keyframes on point: the equation reveal moves to the sentence that reads it out.
     compiled = { ...compiled, beat: splitKeyframes(compiled.beat, narrationSentences(compiled.beat.narration)) };
     if (final) {

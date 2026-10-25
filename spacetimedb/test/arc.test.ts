@@ -63,6 +63,11 @@ describe('demo2min arc', () => {
     // The task may not be the homework itself (it is handed back at the end).
     const homework = { ...demoMeta, check: { kind: 'number', prompt: `${TASK} What is the new top number?`, rule: { operation: 'value', value: 8 } } };
     expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(homework) })).toThrow(/own homework/);
+    // ... not in other words either (same numbers), and a choice task has exactly one correct option.
+    const paraphrase = { ...demoMeta, check: { kind: 'choice', prompt: 'Which fraction is the same amount as two thirds?', options: [{ id: 'a', label: '8/12' }, { id: 'b', label: '3/4' }], correctOptionId: 'a' } };
+    expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(paraphrase) })).toThrow(/same numbers as the learner's homework/);
+    const noneCorrect = { ...demoMeta, check: { kind: 'choice', prompt: 'Which fraction is the same as one half?', options: [{ id: 'a', label: '2/3' }, { id: 'b', label: '3/4' }], correctOptionId: 'a' } };
+    expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(noneCorrect) })).toThrow(/no correct option/);
     call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(demoMeta) });
     demoMoments.slice(0, 3).forEach((m, i) => addBeat(e, 100n, i, m, false));
     const formal = JSON.parse(beats(e, 100n)[2]!.visual);
@@ -86,6 +91,11 @@ describe('demo2min arc', () => {
     say(e, "I don't know");
     expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ outcome: 'unclear' });
     expect(request(e).request.context.allowedPhases).toEqual(['repair']);
+    // The repair task's answer may not be on the first picture (2 of 4 drawn: "one half is how many quarters?").
+    call(e.h, e.agent, mod.beginUtterance, { sessionId: e.s.id, utteranceId: 150n, replyToIdx: turns(e.h, e.s.id).filter(t => t.role === 'student').at(-1)!.idx, preemptive: false });
+    call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 150n, meta: JSON.stringify({ ...demoRepairMeta, check: { kind: 'number', prompt: 'One half is how many quarters?', rule: { operation: 'value', value: 2 } } }) });
+    expect(() => addBeat(e, 150n, 0, { visual: { kind: 'bars', bars: [{ id: 'pizza', label: 'Pizza', parts: 4, shaded: 2 }] }, narration: 'Two of four slices.' }, false)).toThrow(/already on the picture/);
+    call(e.h, e.agent, mod.appendTutorTurn, { sessionId: e.s.id, utteranceId: 150n, text: 'lesson', interrupted: true });
     step(e, 200n, demoRepairMeta, demoRepairMoments);
     say(e, 'five');
     expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ outcome: 'incorrect' });

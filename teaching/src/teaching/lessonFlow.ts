@@ -14,6 +14,7 @@
 import { z } from "zod";
 import { SessionConfigSchema, type Evidence, type LearnerResponse, type SessionConfig, type TeachingStep } from "./contracts";
 import { assessResponse } from "./checks";
+import { spokenValue } from "./numbers";
 import { validateTeachingStep } from "./validateStep";
 import { parseModelRequest, validateModelStep, type ModelRequest } from "../server/planning";
 import { compactBeat, lessonStep } from "../server/compactLesson";
@@ -89,6 +90,16 @@ export function answerResponse(check: TeachingStep["check"], text: string): Lear
     return { kind: "choice", optionId: longest[0]!.id };
   const byId = check.options.filter(o => said.trim() === o.id.toLowerCase() || said.includes(` option ${o.id.toLowerCase()} `));
   if (byId.length === 1) return { kind: "choice", optionId: byId[0]!.id };
+  // By value: "nine twelfths" / "9/12" names the option written "9/12", else the one option of equal value ("3/4").
+  const v = spokenValue(text);
+  if (v) {
+    const options = check.options.map(o => ({ o, x: spokenValue(o.label) }));
+    const exact = options.filter(({ x }) => x && x.kind === v.kind && (x.kind === "num" ? x.value === (v as { value: number }).value : x.num === (v as { num: number }).num && x.den === (v as { den: number }).den));
+    if (exact.length === 1) return { kind: "choice", optionId: exact[0]!.o.id };
+    const value = (x: NonNullable<typeof v>) => (x.kind === "num" ? x.value : x.num / x.den);
+    const equal = options.filter(({ x }) => x && Math.abs(value(x) - value(v)) < 1e-9);
+    if (!exact.length && equal.length === 1) return { kind: "choice", optionId: equal[0]!.o.id };
+  }
   return { kind: "answer", text };
 }
 

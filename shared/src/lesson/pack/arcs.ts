@@ -20,7 +20,7 @@ const demo2min = {
   wordsPerSecond: 2.6,
   start: ['intuition'],
   fallback: ['return_to_problem'],
-  guide: `You own this lesson: lead, do not wait for the learner to steer. Never open with a question or a diagnosis; the original question and anything the learner said are your diagnosis. Each moment makes ONE visible change and its narration talks about exactly that change, so the picture moves while the child hears about it. Short concrete sentences for an 8 to 12 year old. Prefer the library material when it is given: its picture, numbers, steps and common mistake are checked.`,
+  guide: `You own this lesson: lead, do not wait for the learner to steer. Never open with a question or a diagnosis; the original question and anything the learner said are your diagnosis. Each moment makes ONE visible change and its narration talks about exactly that change, so the picture moves while the child hears about it. Short concrete sentences for an 8 to 12 year old. Prefer the library material when it is given: its picture, numbers, steps and common mistake are checked. Every task (check): its answer is never drawn on the board when it is asked (ask about a fraction no bar shows), it never reuses the homework's numbers, a choice task has exactly one correct option, and it is answered by voice ("Say...", "What is...", never "type", "click" or "tap").`,
   stages: [
     {
       id: 'explain',
@@ -44,7 +44,7 @@ const demo2min = {
       check: true,
       checkKinds: ['choice', 'number'],
       next: { correct: ['return_to_problem'], other: ['return_to_problem'], help: ['intuition'] },
-      guide: `The learner missed the task or was unsure. No blame. Moment 1: back to the picture with smaller numbers. Moment 2: show the one step they missed. Final moment: one easier task (choice preferred) with a new question.`,
+      guide: `The learner missed the task or was unsure. No blame. Moment 1: if their answer was wrong, first name what they said and say kindly it is not quite right ("You said four sixths. Not quite."), then back to the picture with smaller numbers. Moment 2: show the one step they missed. Final moment: one easier task (choice preferred) with a new question whose answer is not on the picture (shown one half = three sixths: ask one third = how many sixths).`,
     },
     {
       id: 'hand_back',
