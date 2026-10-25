@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BeatCanvasPlayer, latestUtteranceBeats, orderBeats, parseScene, readingMs, revealCount, type OrderedBeat } from '../src/lesson/beatPlayer';
+import { BeatCanvasPlayer, latestUtteranceBeats, orderBeats, parseScene, playbackOver, readingMs, revealCount, type OrderedBeat } from '../src/lesson/beatPlayer';
+import { utteranceProgress } from '../src/board/reveal';
 import { agentStatusView, AGENT_STALE_MS } from '../src/session/useAgentStatus';
 import { typedTurnText } from '../src/components/session';
 
@@ -26,6 +27,16 @@ describe('revealCount', () => {
     expect(revealCount({ beats, started: new Map([['5', [0, 2]]]), over, mode: 'voice', textShown: 0 })).toBe(2);
     expect(revealCount({ beats, started: new Map([['5', [0, 1]]]), over, mode: 'voice', textShown: 0 })).toBe(3);
     expect(revealCount({ beats, started: new Map(), over: () => true, mode: 'voice', textShown: 0 })).toBe(4);
+  });
+  it('voice: a generated (turn written) but still playing utterance reveals only its started beats', () => {
+    const sentence = (idx: number, status: string) => ({ utteranceId: 5n, idx, status });
+    const serverOver = () => true; // tutor turn already written: generation is done
+    const playing = utteranceProgress([0, 1, 2].map(i => sentence(i, i === 0 ? 'played' : 'ready')) as never, new Map(), serverOver, ['played'], ['played', 'dropped']);
+    expect(revealCount({ beats, started: new Map([['5', [0]]]), over: playbackOver(playing, serverOver), mode: 'voice', textShown: 0 })).toBe(2);
+    const done = utteranceProgress([0, 1, 2].map(i => sentence(i, 'played')) as never, new Map(), serverOver, ['played'], ['played', 'dropped']);
+    expect(revealCount({ beats, started: new Map([['5', [0, 1, 2]]]), over: playbackOver(done, serverOver), mode: 'voice', textShown: 0 })).toBe(4);
+    // No sentence rows for an utterance: the server's view decides.
+    expect(playbackOver(new Map(), () => true)(3n)).toBe(true);
   });
   it('text: earlier utterances fully, the latest up to the local cursor', () => {
     expect(revealCount({ beats, started: new Map(), over: () => false, mode: 'typed', textShown: 2 })).toBe(3);

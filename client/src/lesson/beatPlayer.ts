@@ -90,6 +90,17 @@ export function revealCount({ beats, started, over, mode, textShown }: RevealInp
   return n;
 }
 
+/**
+ * Voice: "the utterance is over" for the canvas. The worker writes the tutor turn when generation
+ * ends, which is long before the audio does (a two-minute lesson is generated in ~4 s), so a
+ * finished turn alone would put the whole lesson on the canvas during the lead-in. Once an
+ * utterance has sentence rows, it counts as over only when none is still unplayed
+ * (`utteranceProgress(...).over`); without rows it falls back to `serverOver`.
+ */
+export function playbackOver(progress: ReadonlyMap<string, { over: boolean }>, serverOver: (u: bigint) => boolean): (u: bigint) => boolean {
+  return u => progress.get(u.toString())?.over ?? serverOver(u);
+}
+
 /** Beats of the latest utterance (text-mode playback works on these: one step per beat, its
  *  keyframe parts show together by idx). */
 export function latestUtteranceBeats(beats: readonly OrderedBeat[]): OrderedBeat[] {
