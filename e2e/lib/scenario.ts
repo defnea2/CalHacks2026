@@ -345,7 +345,14 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
         else notes.push(`#${b.id} late arrival, immediate`);
       } else if (reveal.t < start.t - TOL_MS || reveal.t > end.t + TOL_MS) {
         issues.push(`#${b.id}: revealed ${inMs} ms after its sentence started (sentence ${dur} ms)`);
-      } else notes.push(`#${b.id} at ${inMs}/${dur} ms (pos ${b.markerPos})`);
+      } else {
+        // The tab's own marker-word time (TTS word timestamps or estimate), when it knew it.
+        const at = typeof reveal.markerAt === 'number' ? reveal.markerAt : null;
+        const wordMs = at === null ? null : Math.round(at - start.t);
+        const arrivedAfterWord = at !== null && !!seen && seen.t > at;
+        if (at !== null && !arrivedAfterWord && Math.abs(reveal.t - at) > TOL_MS) issues.push(`#${b.id}: revealed at ${inMs} ms, its word plays at ${wordMs} ms`);
+        else notes.push(`#${b.id} at ${inMs}/${dur} ms (word ${wordMs ?? '?'} ms${arrivedAfterWord ? ', arrived after it' : ''}, pos ${b.markerPos})`);
+      }
     }
     add('board-markers', issues.length ? 'fail' : 'pass', `${marked.length} marked item(s): ${[...issues, ...notes].join('; ')}`);
   }
