@@ -144,6 +144,8 @@ opening), so keep it as concrete fractions/decimals like above.
 - [ ] stt-proxy only if you use the PHP/public proxy (`curl https://<host>/stt-proxy.php/health`).
 - [ ] Seeded users present (see "Before the demo"): the student picker shows Ava Chen, Sam Rivera,
       Priya Patel; the teacher picker Ms. Park, Mr. Alvarez. Missing? `node scripts/seed-demo.mjs`.
+      (Their names are outside the 20 simulated seed students — avoid Mia/Leo etc. for new students,
+      the dashboard summary would mix them up with the simulated Mia Hoffmann / Leo Schneider.)
 - [ ] Warm-up: one short voice turn in a throwaway session (first procedure runs after a publish are
       slower; Smart Turn loads after the mic starts). Use a throwaway student (add "Test Kid" in the
       picker), not Ava/Sam/Priya: a real session gives them a newer summary than the seeded one and
@@ -167,7 +169,9 @@ opening), so keep it as concrete fractions/decimals like above.
 
 1. `/` → **I'm a student** → pick **Ava Chen** → **On my own · Learn by myself**.
 2. Task: `Why is 1/4 + 2/4 not 3/8?` (optionally attach a photo of the task) → **Start my lesson**.
-3. **Start talking**. The tutor greets her and names the task (authored opening, ~0.5 s).
+3. **Start talking** (the big button in the middle of the canvas). The tutor greets her and names
+   the task (authored lead-in; first audio ~1.7 s after the click in the rehearsal). The canvas stays
+   on "Your picture will appear here" during the lead-in; the first picture comes ~11 s after the click.
 4. Say: *"I added the tops and the bottoms and got three eighths."*
 5. While it answers, point at:
    - the avatar thinking (dots) while Claude plans, then speaking with the audio;
@@ -229,5 +233,5 @@ opening), so keep it as concrete fractions/decimals like above.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) sections 1 (data path), 4 (voice turn diagram), 9 (classroom),
   11 (why SpacetimeDB-idiomatic).
-- Debug panel in the session (hide with `?debug=0`): per-turn latency table from `turn_metrics`.
+- Debug panel in the session (off by default, open with `?debug=1`): per-turn latency table from `turn_metrics`.
 - `spacetime logs --server local voice-tutor` for live procedure logs (LLM latency and tokens per call).

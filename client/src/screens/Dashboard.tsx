@@ -275,7 +275,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
       )}
 
       <footer className="db-footer">
-        <span>Groups always have two or four students. The summary updates every 30 s and pauses while you observe a student.</span>
+        <span>Groups have two or four students (one group of three when the class is odd). The summary updates every 30 s and pauses while you observe a student.</span>
         {state?.lastError ? <span data-testid="dashboard-error">Last update failed: {state.lastError}</span> : null}
       </footer>
 
