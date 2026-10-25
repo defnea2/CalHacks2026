@@ -45,6 +45,15 @@ procedure refreshDashboard(classSessionId: u64) -> string                    // 
   `'in_session'` when it starts its own session. `clientDisconnected` sets every learner whose
   presence was written from that connection to `offline` (simulated learners excepted). Online =
   `waiting` or `in_session`.
+- **Late joiners.** While a class session is active, a real student whose `setPresence(id,
+  'waiting')` arrives later (waiting room opened after the start, or "wait for my teacher" from an
+  ad-hoc session) is linked into the active class at once, by the same path as the start (new
+  linked session, previous session ended, voice/text mode kept, presence `in_session`); the waiting
+  room jumps to it as usual. Several active classes (several teachers): the newest. A student
+  already in a session of an active class is not moved (re-asserting `waiting` is idempotent).
+  Decision: an explicit ad-hoc session started during a class (`in_session`, "learn by myself")
+  stays ad-hoc: the student chose to learn alone; only `waiting` joins. Module-written `waiting`
+  (after `endClassSession`) does not re-link; the client's next `setPresence('waiting')` does.
 - **startClassSession.** Ends the teacher's previous active class session, inserts the class
   session (+ `class_document` for an image), then moves EVERY online real student (`waiting` or
   `in_session`, ad-hoc or another class) into a new session linked to it; their previous session
