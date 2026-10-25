@@ -114,6 +114,53 @@ describe('demo2min arc', () => {
   });
 });
 
+describe('push back, then let the learner decide', () => {
+  it('asking for the answer: authored push-back (no step), yes -> hand back with the answer, no -> the task again', () => {
+    const e = demo();
+    say(e, 'Hmm.');
+    step(e, 100n, demoMeta, demoMoments);
+    say(e, 'Just tell me the answer.');
+    const push = request(e);
+    expect(push).toMatchObject({ ok: true, sayOnly: true });
+    expect(push.say[0]).toMatch(/Are you sure I should just tell you the answer/);
+    expect(push.request).toBeUndefined();
+    expect(lesson(e).stage).toBe('awaiting_response');
+    expect(JSON.parse(lesson(e).notes).pending).toMatchObject({ kind: 'ask_answer' });
+    say(e, 'yes, please tell me');
+    const yes = request(e);
+    expect(yes.say).toEqual(["Okay, I'll tell you."]);
+    expect(yes.request.context.allowedPhases).toEqual(['return_to_problem']);
+    expect(yes.request.context.session.decision).toBe('give_answer');
+    step(e, 300n, demoHandBackMeta, demoHandBackMoments);
+    expect(lesson(e).stage).toBe('completed');
+    expect(JSON.parse(lesson(e).notes).decision).toBeNull();
+  });
+
+  it('no -> the open task is asked again (authored), the evidence is untouched; "yes" without a question is an answer', () => {
+    const e = demo();
+    say(e, 'Hmm.');
+    step(e, 100n, demoMeta, demoMoments);
+    say(e, 'Just tell me the answer.');
+    say(e, "ok, let's figure it out");
+    const no = request(e);
+    expect(no.sayOnly).toBe(true);
+    expect(no.say).toEqual(["Great, let's figure it out together.", demoMeta.check.prompt]);
+    expect(lesson(e).stage).toBe('awaiting_response');
+    expect(JSON.parse(lesson(e).evidence)).toHaveLength(0);
+    say(e, 'yes');
+    expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ response: { kind: 'answer', text: 'yes' } });
+  });
+
+  it('small request: "say it again slower" is a help request (no confirmation)', () => {
+    const e = demo();
+    say(e, 'Hmm.');
+    step(e, 100n, demoMeta, demoMoments);
+    say(e, 'say it again slower');
+    expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ response: { kind: 'help', request: 'repeat' } });
+    expect(request(e).say).toBeUndefined();
+  });
+});
+
 describe('prefetchTopic', () => {
   it('keyword cues set the concept once; unknown text is left to the worker classifier', () => {
     const e = demo();

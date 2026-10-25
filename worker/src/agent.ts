@@ -9,6 +9,7 @@ import { buildSystemPrompt } from './prompt';
 import { openingLines, ReplyRun, type ReplyDeps } from './reply';
 import { prefetchTopic } from './topic';
 import { LessonRun, type LessonDeadlines } from './lesson';
+import { flowSensitive } from '@tutor/teaching/teaching/intent';
 import { ToolRouter } from './router';
 import { createToolDefs } from './tools/index';
 import type { ToolDef } from './tools/types';
@@ -438,6 +439,9 @@ export class SessionAgent {
       !this.held &&
       !this.live?.llmActive &&
       turn.text.trim() !== '' &&
+      // A request that may change the lesson flow (push-back, confirm/decline) waits for the
+      // module's decision at turn end instead of planning a lesson ahead (teaching/intent.ts).
+      !flowSensitive(turn.text) &&
       ![...this.phrases.values()].some(p => p.turnIdx === turn.idx && BUSY_PHRASES.includes(p.status as PhraseStatus));
     if (!ok()) return this.clearPreemptTimer();
     const wait = Math.max(0, o.preemptiveSilenceMs - (this.agent.now() - this.lastSpeechAt));

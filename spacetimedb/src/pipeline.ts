@@ -40,6 +40,7 @@ import {
   type LessonRecord,
 } from '../../teaching/src/teaching/lessonFlow';
 import { arcMoment, LessonArcSchema, type LessonArc } from '../../teaching/src/teaching/arc';
+import { decideTurn } from '../../teaching/src/teaching/intent';
 import { choiceProblem, homeworkRepeat, visibleAnswer } from '../../teaching/src/teaching/checkGuards';
 import { splitKeyframes } from '../../teaching/src/teaching/keyframes';
 import { ADAPTIVE_ARC, conceptMaterial, DEFAULT_ARC, guessTopic, pack } from '../../shared/src/lesson/index';
@@ -142,6 +143,9 @@ function publishState(ctx: Ctx, sessionId: bigint, r: LessonRecord): void {
       approach: step?.approach ?? null,
       beatCount: step?.beats.length ?? 0,
       check: publicCheck(step?.check ?? null),
+      // Push-back state (teaching/intent.ts): an open confirmation, the decision the next step plans for.
+      pending: r.pending ? { kind: r.pending.kind, question: r.pending.question } : null,
+      decision: r.config.decision ?? null,
       steps: r.history.map(s => ({ id: s.id, phase: s.phase, learningGoal: s.learningGoal, exampleProblem: s.exampleProblem ?? null })),
     }),
     updatedAt: ctx.timestamp,
@@ -208,8 +212,14 @@ export function buildLessonRequest(ctx: Ctx, sessionId: bigint, requestId: strin
       prefetchTopic(ctx, sessionId);
       session = getActiveSession(ctx, sessionId);
     }
-    const request = buildModelRequest(withProfile(ctx, session, plannable(loadRecord(ctx, session))), sceneOf(canvasRow(ctx, sessionId)), requestId);
-    return JSON.stringify({ ok: true, request, topic: { category: session.category, concept: session.concept }, library: libraryFor(session) });
+    const record = loadRecord(ctx, session);
+    // Authored lines for the latest learner turn (push-back / steer back): spoken first; sayOnly = no step.
+    const latest = sessionTurns(ctx, session.id).filter(t => t.role === 'student').at(-1);
+    const say = record.reply && latest && record.reply.turnId === `turn-${latest.id}` ? record.reply : null;
+    const topic = { category: session.category, concept: session.concept };
+    if (say?.sayOnly) return JSON.stringify({ ok: true, say: say.lines, sayOnly: true, topic });
+    const request = buildModelRequest(withProfile(ctx, session, plannable(record)), sceneOf(canvasRow(ctx, sessionId)), requestId);
+    return JSON.stringify({ ok: true, request, topic, library: libraryFor(session), ...(say ? { say: say.lines } : {}) });
   } catch (e) {
     return JSON.stringify({ ok: false, error: validatorMessage(e) });
   }
@@ -392,8 +402,15 @@ export function onStudentTurnReady(ctx: Ctx, turn: TurnRow, opts: { assessed?: b
   if (!session) return;
   let record = loadRecord(ctx, session);
   const eventId = `turn-${turn.id}`;
-  const help = HELP[turn.intent];
+  let help: 'another_way' | 'simpler' | 'explain' | 'repeat' | undefined = HELP[turn.intent];
   try {
+    // Push back on significant changes, let the learner decide on the next turn (arc lessons, spoken/typed turns).
+    if (record.config.arc && !turn.intent) {
+      const d = decideTurn(record, truncate(turn.text, 2000), eventId);
+      record = d.record;
+      if (d.handled) return saveRecord(ctx, session.id, record);
+      if (d.help && record.step) help = d.help;
+    }
     if (record.step && help) record = respond(record, eventId, { kind: 'help', request: help }, sceneOf(canvasRow(ctx, session.id))).record;
     else if (turn.intent === 'continue') return;
     else if (record.step && record.status === 'awaiting_response') record = respond(record, eventId, answerResponse(record.step.check, truncate(turn.text, 2000)), sceneOf(canvasRow(ctx, session.id))).record;

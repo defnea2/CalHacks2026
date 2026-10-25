@@ -15,7 +15,7 @@ const ev = (outcome: Evidence["outcome"], kind: "answer" | "help" = "answer") =>
 
 describe("demo2min arc", () => {
   it("parses with the schema; every phase it names is a team phase", () => {
-    expect(arc.stages.map(s => s.id)).toEqual(["explain", "repair", "hand_back"]);
+    expect(arc.stages.map(s => s.id)).toEqual(["explain", "repair", "task", "hand_back"]);
   });
 
   it("policy: explanation first (no diagnosis), a missed task gets one repair, then hand back", () => {

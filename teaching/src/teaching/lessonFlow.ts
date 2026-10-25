@@ -14,6 +14,7 @@
 import { z } from "zod";
 import { SessionConfigSchema, type Evidence, type LearnerResponse, type SessionConfig, type TeachingStep } from "./contracts";
 import { assessResponse } from "./checks";
+import type { AuthoredReply, PendingConfirmation } from "./intent";
 import { spokenValue } from "./numbers";
 import { validateTeachingStep } from "./validateStep";
 import { parseModelRequest, validateModelStep, type ModelRequest } from "../server/planning";
@@ -29,6 +30,10 @@ export interface LessonRecord {
   history: TeachingStep[];
   evidence: Evidence[];
   revision: number;
+  /** A significant request the tutor asked the learner to confirm (intent.ts). */
+  pending?: PendingConfirmation;
+  /** Authored tutor lines for the latest learner turn (push-back, steer back), spoken instead of / before a step. */
+  reply?: AuthoredReply;
 }
 
 export function newLessonRecord(config: unknown): LessonRecord {
@@ -111,7 +116,9 @@ export function recordUtterance(r: LessonRecord, id: string, text: string): Less
 }
 
 export function acceptStep(r: LessonRecord, step: TeachingStep, evidence: Evidence[]): LessonRecord {
-  return bump(r, { step, evidence, history: [...r.history, step].slice(-80), status: "presenting" });
+  // A learner decision (intent.ts) shapes exactly one step.
+  const config = r.config.decision ? { ...r.config, decision: undefined } : r.config;
+  return bump(r, { config, step, evidence, history: [...r.history, step].slice(-80), status: "presenting" });
 }
 
 /** The whole step was presented (its last narration played). */

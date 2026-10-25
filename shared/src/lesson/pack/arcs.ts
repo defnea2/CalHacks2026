@@ -20,7 +20,9 @@ const demo2min = {
   wordsPerSecond: 2.6,
   start: ['intuition'],
   fallback: ['return_to_problem'],
-  guide: `You own this lesson: lead, do not wait for the learner to steer. Never open with a question or a diagnosis; the original question and anything the learner said are your diagnosis. Each moment makes ONE visible change and its narration talks about exactly that change, so the picture moves while the child hears about it. Short concrete sentences for an 8 to 12 year old. Prefer the library material when it is given: its picture, numbers, steps and common mistake are checked. Every task (check): its answer is never drawn on the board when it is asked (ask about a fraction no bar shows), it never reuses the homework's numbers, a choice task has exactly one correct option, and it is answered by voice ("Say...", "What is...", never "type", "click" or "tap").`,
+  guide: `You own this lesson: lead, do not wait for the learner to steer. Never open with a question or a diagnosis; the original question and anything the learner said are your diagnosis. Each moment makes ONE visible change and its narration talks about exactly that change, so the picture moves while the child hears about it. Short concrete sentences for an 8 to 12 year old. Prefer the library material when it is given: its picture, numbers, steps and common mistake are checked. Every task (check): its answer is never drawn on the board when it is asked (ask about a fraction no bar shows), it never reuses the homework's numbers, a choice task has exactly one correct option, and it is answered by voice ("Say...", "What is...", never "type", "click" or "tap"). session.decision, when present, is what the learner chose after you double-checked a big change: plan exactly that (the stage guide says how), start from what they asked and keep the picture on the board. resume = they said no and want to go on: continue right where you stopped with the next idea, no recap.`,
+  // After the tutor double-checked (teaching/intent.ts) and the learner confirmed.
+  decisions: { give_answer: ['return_to_problem'], task_now: ['solo'], hand_back: ['return_to_problem'] },
   stages: [
     {
       id: 'explain',
@@ -47,6 +49,18 @@ const demo2min = {
       guide: `The learner missed the task or was unsure. No blame. Moment 1: if their answer was wrong, first name what they said and say kindly it is not quite right ("You said four sixths. Not quite."), then back to the picture with smaller numbers. Moment 2: show the one step they missed. Final moment: one easier task (choice preferred) with a new question whose answer is not on the picture (shown one half = three sixths: ask one third = how many sixths).`,
     },
     {
+      id: 'task',
+      phases: ['solo'],
+      minMoments: 3,
+      maxMoments: 3,
+      maxWords: 40,
+      formalizeAt: -1,
+      check: true,
+      checkKinds: ['choice', 'number'],
+      next: { correct: ['return_to_problem'], other: ['repair'], help: ['intuition', 'repair'] },
+      guide: `Only when session.decision is task_now: the learner wants a task right away. Moment 1: show (or keep) the picture of a similar example in one sentence. Moment 2: one quick change on it. Final moment: one fresh task with DIFFERENT numbers than the homework, its answer not visible, no equation shown.`,
+    },
+    {
       id: 'hand_back',
       phases: ['return_to_problem'],
       minMoments: 1,
@@ -56,7 +70,7 @@ const demo2min = {
       check: false,
       checkKinds: [],
       next: { correct: [], other: [], help: [] },
-      guide: `Praise how they worked, then hand back the original question in one or two short sentences: they now have everything they need. Never solve it or give its answer.`,
+      guide: `Praise how they worked, then hand back the original question in one or two short sentences: they now have everything they need. Never solve it or give its answer. Exception, session.decision give_answer (the learner asked twice for the answer): one moment, kindly say the homework's answer with a one-line reason in kid words, then offer "Want to see why it works?". session.decision hand_back: they chose to skip the rest; no praise for work they skipped, just hand the question back warmly.`,
     },
   ],
 };

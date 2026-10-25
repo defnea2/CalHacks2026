@@ -300,7 +300,18 @@ export class LessonRun {
         this.p.wantImage ? this.deps.transport.getSessionImage({ sessionId: this.sessionId }).catch(() => '') : Promise.resolve(''),
       ]);
       if (this.aborted) return;
-      const built = JSON.parse(raw) as { ok: boolean; request?: ModelRequest; error?: string; library?: unknown; topic?: { category: string; concept: string } };
+      const built = JSON.parse(raw) as { ok: boolean; request?: ModelRequest; error?: string; library?: unknown; topic?: { category: string; concept: string }; say?: string[]; sayOnly?: boolean };
+      // Authored lines from the module (push-back / steer back): spoken at once, before any step.
+      if (built.ok && built.say?.length) {
+        this.speakPrelude(built.say);
+        if (built.sayOnly) {
+          this.log(`authored reply: ${built.say.join(' ').slice(0, 120)}`);
+          this.llmActive = false;
+          await this.chain;
+          if (!this.aborted) await this.close(false);
+          return;
+        }
+      }
       if (!built.ok || !built.request) throw new Error(`no lesson request: ${built.error ?? 'unknown'}`);
       this.imageIncluded = !!image;
       this.library = this.deps.libraryIndex && built.library ? built.library : null;
