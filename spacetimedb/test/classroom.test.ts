@@ -527,14 +527,30 @@ describe('dashboard', () => {
     expect(cl.flatMap(c => c.ids).sort()).toEqual([...ids].sort());
   });
 
-  it('odd class: exactly one cluster of 3', () => {
+  it('odd class: never a cluster of 3; exactly one student is left ungrouped', () => {
     const { h, cls, ids } = classWithSims(7);
     advance(h, C.DASHBOARD_INTERVAL_S);
     runDashboardJobs(h, dashboardAnswer('x', [{ name: 'All', ids }]));
-    const sizes = clustersOf(h, cls.id).map(c => c.ids.length).sort();
-    expect(sizes.filter(s => s === 3)).toHaveLength(1);
-    expect(sizes.every(s => s === 2 || s === 3 || s === 4)).toBe(true);
-    expect(sizes.reduce((a, b) => a + b, 0)).toBe(7);
+    const cl = clustersOf(h, cls.id);
+    const sizes = cl.map(c => c.ids.length).sort();
+    expect(sizes.every(s => s === 2 || s === 4)).toBe(true);
+    expect(sizes.reduce((a, b) => a + b, 0)).toBe(6);
+    expect(ids.filter(id => !cl.some(c => c.ids.includes(id)))).toHaveLength(1);
+  });
+
+  it('odd class: an LLM cluster of 3 is cut to 2 and the result names the ungrouped student', () => {
+    const { h, env, cls, ids } = classWithSims(5);
+    const out = JSON.parse(
+      (mod.refreshDashboard as any)(proc(h, env.client, dashboardAnswer('x', [{ name: 'A', ids: ids.slice(0, 3) }, { name: 'B', ids: ids.slice(3) }])), { classSessionId: cls.id })
+    );
+    expect(out).toMatchObject({ ok: true, repaired: true, clusters: 2, ungrouped: [ids[2]] });
+    expect(clustersOf(h, cls.id).map(c => c.ids)).toEqual([ids.slice(0, 2), ids.slice(3)]);
+  });
+
+  it('odd class: a valid answer that leaves one student out is kept unchanged', () => {
+    const { h, env, cls, ids } = classWithSims(3);
+    const out = JSON.parse((mod.refreshDashboard as any)(proc(h, env.client, dashboardAnswer('x', [{ name: 'A', ids: ids.slice(0, 2) }])), { classSessionId: cls.id }));
+    expect(out).toMatchObject({ ok: true, repaired: false, ungrouped: [ids[2]] });
   });
 
   it('second refresh replaces clusters atomically and bumps the version', () => {

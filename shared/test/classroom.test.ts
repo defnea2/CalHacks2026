@@ -60,12 +60,12 @@ describe('cluster rules', () => {
     expect(r.clusters.map(x => x.learnerIds)).toEqual([['1', '2', '3', '4'], ['5', '6']]);
   });
 
-  it('size partitions', () => {
+  it('size partitions (an odd class groups n - 1)', () => {
     expect(sizePartitions(6)).toEqual([[4, 2], [2, 2, 2]]);
-    expect(sizePartitions(7)).toEqual([[4, 3], [3, 2, 2]]);
+    expect(sizePartitions(7)).toEqual([[4, 2], [2, 2, 2]]);
     expect(sizePartitions(8)).toEqual([[4, 4], [4, 2, 2], [2, 2, 2, 2]]);
-    expect(sizePartitions(3)).toEqual([[3]]);
-    expect(sizePartitions(1)).toEqual([[1]]);
+    expect(sizePartitions(3)).toEqual([[2]]);
+    expect(sizePartitions(1)).toEqual([]);
   });
 
   it('merged leftovers carry both cluster names', () => {
@@ -74,29 +74,35 @@ describe('cluster rules', () => {
     expect(r.clusters.find(x => x.learnerIds.includes('1'))!.name).toMatch(/A · B|B · A/);
   });
 
-  it('size rule text', () => {
+  it('size rule text: never 3, odd class leaves one student out', () => {
     expect(sizeRuleText(6)).toMatch(/exactly 2 or 4/);
-    expect(sizeRuleText(7)).toMatch(/exactly one cluster has 3/);
-    expect(sizeRuleText(3)).toMatch(/one cluster of 3/);
-    expect(sizeRuleText(1)).toMatch(/1 student/);
+    expect(sizeRuleText(7)).toMatch(/leave exactly one student out/);
+    expect(sizeRuleText(7)).toMatch(/never 1 or 3/);
+    expect(sizeRuleText(3)).toMatch(/leave exactly one student out/);
+    expect(sizeRuleText(1)).toMatch(/no clusters/);
   });
 
-  it('violations: sizes, duplicates, unknown, missing, two threes', () => {
-    const v = clusterViolations([c('A', ['1', '2', '3']), c('B', ['3', '4', '99'])], ids(students(5)));
+  it('violations: sizes, duplicates, unknown, missing; a 3 is never allowed', () => {
+    const v = clusterViolations([c('A', ['1', '2', '3']), c('B', ['3', '4', '99'])], ids(students(6)));
     expect(v.join('\n')).toMatch(/unknown student 99/);
     expect(v.join('\n')).toMatch(/student 3 is in 2 clusters/);
     expect(v.join('\n')).toMatch(/student 5 is in no cluster/);
-    expect(v.join('\n')).toMatch(/2 clusters of 3/);
-    expect(clusterViolations([c('A', ['1', '2', '3'])], ids(students(4))).join()).toMatch(/has 3 students/);
+    expect(v.join('\n')).toMatch(/cluster 0 has 3 students/);
+    expect(clusterViolations([c('A', ['1', '2', '3'])], ids(students(3))).join()).toMatch(/has 3 students/);
+    // odd class: exactly one student stays out
+    expect(clusterViolations([c('A', ['1', '2', '3', '4'])], ids(students(5)))).toEqual([]);
+    expect(clusterViolations([c('A', ['1', '2'])], ids(students(5))).join()).toMatch(/student 3 is in no cluster/);
+    expect(clusterViolations([], ids(students(1)))).toEqual([]);
   });
 
-  it('one big cluster is cut into 4s and 2s (even) or 4s/2s plus one 3 (odd)', () => {
-    for (const n of [2, 4, 6, 8, 10, 5, 7, 9, 11]) {
+  it('one big cluster is cut into 4s and 2s; an odd class leaves exactly one ungrouped', () => {
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) {
       const s = students(n);
       const r = repairClusters([c('All', ids(s))], s);
       expect(clusterViolations(r.clusters, ids(s)), `n=${n}`).toEqual([]);
-      const threes = r.clusters.filter(x => x.learnerIds.length === 3).length;
-      expect(threes).toBe(n % 2);
+      expect(r.clusters.every(x => x.learnerIds.length === 2 || x.learnerIds.length === 4), `n=${n}`).toBe(true);
+      expect(r.ungrouped, `n=${n}`).toHaveLength(n % 2);
+      expect(new Set([...r.clusters.flatMap(x => x.learnerIds), ...r.ungrouped]).size).toBe(n);
     }
   });
 
@@ -111,18 +117,28 @@ describe('cluster rules', () => {
     expect(r.clusters.map(x => x.learnerIds.sort())).toEqual([['1', '3'], ['2', '4']]);
   });
 
-  it('odd count with only pairs/fours gets exactly one 3', () => {
+  it('odd class: a valid 4 with one student missing is kept as is (the missing one is ungrouped)', () => {
     const s = students(5);
-    const r = repairClusters([c('A', ['1', '2', '3', '4'])], s); // 5 is missing
-    expect(clusterViolations(r.clusters, ids(s))).toEqual([]);
-    expect(r.clusters.map(x => x.learnerIds.length).sort()).toEqual([2, 3]);
+    const r = repairClusters([c('A', ['1', '2', '3', '4'])], s);
+    expect(r.valid).toBe(true);
+    expect(r.ungrouped).toEqual(['5']);
   });
 
-  it('single student: one cluster of 1; empty LLM output is filled', () => {
-    expect(clusterViolations(repairClusters([], students(1)).clusters, ['1'])).toEqual([]);
+  it('odd class: an LLM cluster of 3 gives one student up instead of staying a 3', () => {
+    const s = students(7);
+    const r = repairClusters([c('A', ['1', '2', '3']), c('B', ['4', '5', '6', '7'])], s);
+    expect(r.valid).toBe(false);
+    expect(r.clusters.map(x => x.learnerIds.length)).toEqual([2, 4]);
+    expect(r.ungrouped).toEqual(['3']);
+  });
+
+  it('single student: no cluster, ungrouped; empty LLM output is filled', () => {
+    expect(repairClusters([], students(1))).toMatchObject({ clusters: [], ungrouped: ['1'] });
     for (const n of [2, 3, 6, 7]) {
       const s = students(n);
-      expect(clusterViolations(repairClusters([], s).clusters, ids(s)), `n=${n}`).toEqual([]);
+      const r = repairClusters([], s);
+      expect(clusterViolations(r.clusters, ids(s)), `n=${n}`).toEqual([]);
+      expect(r.ungrouped).toHaveLength(n % 2);
     }
   });
 
@@ -137,6 +153,8 @@ describe('cluster rules', () => {
       );
       const r = repairClusters(raw, s);
       expect(clusterViolations(r.clusters, ids(s)), JSON.stringify({ n, raw })).toEqual([]);
+      expect(r.clusters.some(x => x.learnerIds.length === 3 || x.learnerIds.length === 1)).toBe(false);
+      expect(r.ungrouped).toHaveLength(n % 2);
       expect(repairClusters(raw, s)).toEqual(r);
     }
   });

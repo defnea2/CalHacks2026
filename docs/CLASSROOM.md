@@ -140,14 +140,15 @@ procedure learnerInsights(learnerId: u64, teacherId: u64, key: string) -> string
   Post-check (`shared/src/classroom/dashboardText.ts` `stripLearnerIds`) on summary, cluster names
   and descriptions: removes `Jonas (16)`, `Jonas (id 16)`, `Mia [#7]`, `Jonas #16` after known
   names and turns `student 16` into the first name; maths like `8/8 (= 1)` or `f(3)` is kept.
-- **Validation + repair (in code).** Every active student in exactly one cluster; every cluster
-  exactly 2 or 4 students. Exceptions forced by arithmetic: an odd class has exactly one cluster
-  of 3 (the only 3); a class of one student has one cluster of 1. Violations are repaired
-  deterministically (`repairClusters`): unknown ids dropped, duplicates keep their first cluster,
-  2s/4s kept, larger clusters cut into 4s (+2 or the one 3), extra 3s give one student up,
-  leftovers sorted by similarity (phase, topic, LLM cluster) and paired; an odd leftover joins the
-  most similar pair. Merged groups carry both LLM names (`A · B`). Summary + clusters + state are
-  written in one transaction.
+- **Validation + repair (in code).** Every cluster has exactly 2 or 4 students, never 1 or 3. In
+  an even class every active student is in exactly one cluster; in an odd class exactly one
+  student is in no cluster (the dashboard shows them in a "Not grouped yet" slot at the end); a
+  class of one has no cluster. Violations are repaired deterministically (`repairClusters`):
+  unknown ids dropped, duplicates keep their first cluster, 2s/4s kept, larger clusters cut into
+  4s (+2), a 3 or 5 gives one student up, leftovers sorted by similarity (phase, topic, LLM
+  cluster) and paired; the odd leftover stays ungrouped (`RepairResult.ungrouped`, also in the
+  `refreshDashboard` result). Merged groups carry both LLM names (`A · B`). Summary + clusters +
+  state are written in one transaction.
 
 ## Run it (own DB)
 
