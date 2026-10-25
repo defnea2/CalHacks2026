@@ -1,4 +1,5 @@
 // VadMachine + Smart Turn decisions with synthetic model probabilities.
+import { VOICE_DEFAULTS } from '@tutor/shared';
 import { describe, expect, it } from 'vitest';
 import { VadMachine, type VadEvent } from '../src/audio/vadMachine';
 import { loadSettings } from '../src/config';
@@ -99,12 +100,20 @@ describe('VadMachine + Smart Turn', () => {
     expect(ends[0]!.e.silenceMs).toBeGreaterThanOrEqual(480);
   });
 
-  it('defaults: a "complete" verdict at the phrase end ends the turn at 600 ms of silence', () => {
+  it('defaults: a "complete" verdict ends the turn once SMART_TURN_MIN_SILENCE_MS of silence has passed', () => {
     const d = new Driver(new VadMachine(cfg('?vad_turn_ms=900')), (r, dd) => dd.answer(r.requestId, 0.9));
     d.silence(1000).speech(800).silence(1500);
     const end = d.of('turn_end')[0]!.e;
     expect(end.reason).toBe('smart_turn');
-    expect(end.silenceMs).toBe(608); // 19 frames
+    expect(end.silenceMs).toBeGreaterThanOrEqual(VOICE_DEFAULTS.SMART_TURN_MIN_SILENCE_MS);
+    expect(end.silenceMs).toBeLessThan(VOICE_DEFAULTS.SMART_TURN_MIN_SILENCE_MS + FRAME_MS);
+    expect(end.silenceMs).toBeLessThan(VOICE_DEFAULTS.VAD_TURN_MS);
+  });
+
+  it('a 590 ms pause plus speech-start detection lag (~670 ms seen as silence) stays in the turn', () => {
+    const d = new Driver(new VadMachine(cfg('?vad_turn_ms=900')), (r, dd) => dd.answer(r.requestId, 0.93));
+    d.silence(1000).speech(1500).silence(672).speech(1500).silence(1500);
+    expect(d.of('turn_end')).toHaveLength(1);
   });
 
   it('a 590 ms thinking pause after a "complete" sentence stays in the turn (defaults)', () => {

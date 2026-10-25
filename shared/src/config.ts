@@ -33,9 +33,9 @@ export const VOICE_DEFAULTS = {
   /** P(turn complete) at or above this ends the turn early (model's own cut-off: 0.5). */
   SMART_TURN_THRESHOLD: 0.5,
   /** A "complete" verdict ends the turn once this much silence has passed (else VAD_TURN_MS).
-   *  Above children's ~500-600 ms thinking pauses after a complete-sounding sentence; the verdict
-   *  itself only lands ~270 ms after the phrase end (≈ 590 ms of silence) anyway. */
-  SMART_TURN_MIN_SILENCE_MS: 600,
+   *  Must exceed a ~600 ms thinking pause PLUS the speech-start detection lag (~60-130 ms):
+   *  at 600 ms a 590 ms pause ended the turn 70 ms before speech_start fired (E2E par-um-pauses). */
+  SMART_TURN_MIN_SILENCE_MS: 750,
 } as const;
 
 export const PLAYBACK_DEFAULTS = {
