@@ -28,15 +28,17 @@ matched by name: a new name is added, an existing one is never changed (the scri
 difference). To apply changes to an existing user: `node scripts/publish.mjs --clear`, then
 `node scripts/seed-demo.mjs`. `SPACETIME_DB=<name>` seeds another local database.
 
-**Seed memory.** Each student's `memory` in `demo-seed.json` (notes, mastery, one earlier session
-summary + next focus) is written on every run by the agent-only reducer
+**Seed memory.** Each student's `memory` in `demo-seed.json` (notes with quotes, mastery, a
+`history` of earlier sessions with summary, next focus, task, topic and date) is written on every run by the agent-only reducer
 `seedMemory(learnerId, memoryJson)`; the script registers the CLI identity as agent with
 `AGENT_SECRET` from `.env.local` (never printed). Re-running **replaces** the seeded notes and the
-seed summary of that student; notes the tutor wrote in real sessions stay, mastery is overwritten
+seeded sessions of that student; notes the tutor wrote in real sessions stay, mastery is overwritten
 per listed concept. So after a rehearsal `node scripts/seed-demo.mjs` puts the seeded memory back
 (it does not delete the rehearsal's own notes or sessions; for a fully clean state use
-`publish.mjs --clear` + seed). Seeded rows are marked by a pseudo session id (2^62 + learner id) on
-their evidence and summary; check them as owner with
+`publish.mjs --clear` + seed). Seeded rows are marked by pseudo session ids (2^62 + index·2^40 + learner id) on
+their evidence, summaries and `seed_session` rows (task + topic; they count as sessions in the
+Student profile). The 20 simulated students get the same kind of seeded past from
+`shared/src/classroom/simStudents.ts` on every reset; check them as owner with
 `spacetime sql --no-config --server local voice-tutor "SELECT * FROM memory_note"`.
 
 ### Seeded users

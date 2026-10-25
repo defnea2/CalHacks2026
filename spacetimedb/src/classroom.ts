@@ -2,7 +2,7 @@
 // teachers, presence, class sessions, the simulation of students and the teacher dashboard.
 import { SenderError } from 'spacetimedb/server';
 import { CLASSROOM_DEFAULTS as C } from '../../shared/src/config';
-import { SIM_STUDENTS, type SimMemoryNote } from '../../shared/src/classroom/simStudents';
+import { SIM_STUDENTS, type SimStudent } from '../../shared/src/classroom/simStudents';
 import { repairClusters, sizeRuleText, type Cluster, type ClusterStudent } from '../../shared/src/classroom/clusters';
 import { stripLearnerIds } from '../../shared/src/classroom/dashboardText';
 import { pack } from '../../shared/src/lesson/index';
@@ -17,6 +17,7 @@ import { describeBoard } from './lesson';
 import { startConversation } from './opening';
 import { ProviderError } from './providers';
 import { endSession, startSession } from './sessions';
+import { type SeedMemory, validateSeed, writeSeed } from './seed';
 
 export const PRESENCE = ['offline', 'waiting', 'in_session'] as const;
 export type PresenceStatus = (typeof PRESENCE)[number];
@@ -232,12 +233,19 @@ export function linkedSessions(ctx: Ctx, classSessionId: bigint): SessionRow[] {
 
 // ================================================================ simulation users
 
-function profileNotes(rank: number): SimMemoryNote[] {
-  return SIM_STUDENTS.find(s => s.rank === rank)?.memory ?? [];
+/** A simulated student's seeded past in the seedMemory format (seed.ts). */
+export function simSeed(p: SimStudent): SeedMemory {
+  return {
+    daysAgo: Math.min(...p.history.map(h => h.daysAgo)),
+    notes: p.memory.map(n => ({ kind: n.kind, category: n.category, concept: n.concept, text: n.text, outcome: n.outcome, quote: n.quote, session: n.session })),
+    mastery: p.mastery,
+    history: p.history.map(h => ({ summary: h.summary, nextFocus: h.nextFocus, daysAgo: h.daysAgo, task: h.task, concept: h.concept })),
+  };
 }
 
 /** Deletes a simulation user's learner row and everything that hangs off it, then recreates
- *  the learner from the seed with its seed memory notes. */
+ *  the learner from the seed with its seeded past (notes + evidence, mastery, earlier sessions)
+ *  through seed.ts writeSeed, the same code path as the seedMemory reducer. */
 export function resetSimUser(ctx: Ctx, rank: number): LearnerRow {
   const p = ctx.db.simProfile.rank.find(rank);
   if (!p) throw new SenderError(`no simulation profile ${rank}`);
@@ -252,20 +260,11 @@ export function resetSimUser(ctx: Ctx, rank: number): LearnerRow {
     isSimulated: true,
     simRank: rank,
   });
-  for (const n of profileNotes(rank)) {
-    ctx.db.memoryNote.insert({
-      id: 0n,
-      learnerId: learner.id,
-      kind: n.kind,
-      category: n.category,
-      concept: n.concept,
-      text: n.text,
-      outcome: n.outcome,
-      confidence: 0.9,
-      reinforced: 0,
-      createdAt: ctx.timestamp,
-      updatedAt: ctx.timestamp,
-    });
+  const student = SIM_STUDENTS.find(s => s.rank === rank);
+  if (student) {
+    const { errors, seed } = validateSeed(simSeed(student));
+    if (errors.length) throw new SenderError(`simulation profile ${rank}: ${errors.join('; ')}`);
+    writeSeed(ctx, learner.id, seed);
   }
   return learner;
 }
@@ -350,6 +349,7 @@ function deleteLearner(ctx: Ctx, learnerId: bigint): void {
   }
   for (const c of [...db.conceptState.learnerId.filter(learnerId)]) db.conceptState.id.delete(c.id);
   for (const s of [...db.sessionSummary.learnerId.filter(learnerId)]) db.sessionSummary.sessionId.delete(s.sessionId);
+  for (const s of [...db.seedSession.learnerId.filter(learnerId)]) db.seedSession.sessionId.delete(s.sessionId);
   if (db.presence.learnerId.find(learnerId)) db.presence.learnerId.delete(learnerId);
   db.learner.id.delete(learnerId);
 }

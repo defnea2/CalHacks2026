@@ -18,14 +18,16 @@ import {
 import { MEMORY_OUTCOMES, type MemoryKind, type MemoryOutcome } from '../../shared/src/types';
 import { type Ctx, type PCtx, truncate } from './ctx';
 import { readEnv } from './env';
-import { SEED_SESSION_BASE } from './seed';
+import { pack } from '../../shared/src/lesson/index';
+import { SEED_SESSION_BASE, seedSessionIndex } from './seed';
 
 const ms = (t: Timestamp): number => Number(t.microsSinceUnixEpoch / 1000n);
 /** Newest first. */
 const desc = (a: Timestamp, b: Timestamp): number => Number(b.microsSinceUnixEpoch - a.microsSinceUnixEpoch > 0n) - Number(b.microsSinceUnixEpoch - a.microsSinceUnixEpoch < 0n);
 
-/** Session id as shown to the client: '' for the reserved seed pseudo sessions (seed.ts). */
-const sessionRef = (id: bigint): string => (id >= SEED_SESSION_BASE ? '' : String(id));
+/** Session id as shown to the client: 'seed-<n>' for the reserved seed pseudo sessions
+ *  (seed.ts; n = 1, 2, ... per learner, never the raw pseudo id), else the decimal id. */
+const sessionRef = (id: bigint): string => (id >= SEED_SESSION_BASE ? `seed-${seedSessionIndex(id) + 1}` : String(id));
 
 function kindRank(kind: string): number {
   const i = INSIGHT_KIND_ORDER.indexOf(kind as MemoryKind);
@@ -40,8 +42,10 @@ export function readInsights(tx: Ctx, args: { learnerId: bigint; teacherId: bigi
   const l = tx.db.learner.id.find(args.learnerId);
   if (!l) return { ok: false, error: 'unknown_learner' };
 
-  const conceptTitle = (key: string) => (key ? tx.db.concept.key.find(key)?.title ?? '' : '');
-  const categoryTitle = (key: string) => (key ? tx.db.category.key.find(key)?.title ?? '' : '');
+  // Content-library title, else the pack taxonomy's (concepts without library content, e.g. regrouping).
+  const conceptTitle = (key: string) =>
+    key ? tx.db.concept.key.find(key)?.title || pack.taxonomy.flatMap(c => c.concepts).find(k => k.key === key)?.title || '' : '';
+  const categoryTitle = (key: string) => (key ? tx.db.category.key.find(key)?.title || pack.taxonomy.find(c => c.key === key)?.title || '' : '');
 
   const notes: InsightNote[] = [...tx.db.memoryNote.learnerId.filter(l.id)]
     .sort((a, b) => kindRank(a.kind) - kindRank(b.kind) || desc(a.updatedAt, b.updatedAt) || (b.id > a.id ? 1 : -1))
@@ -60,7 +64,7 @@ export function readInsights(tx: Ctx, args: { learnerId: bigint; teacherId: bigi
         reinforced: n.reinforced,
         createdMs: ms(n.createdAt),
         updatedMs: ms(n.updatedAt),
-        // Seeded: simulation seed notes have no evidence; seedMemory notes only pseudo-session evidence.
+        // Seeded (demo seed or simulation profile): only pseudo-session evidence.
         seeded: ev.every(e => e.sessionId >= SEED_SESSION_BASE),
         evidence: ev.slice(0, INSIGHT_EVIDENCE_PER_NOTE).map(e => ({
           sessionId: sessionRef(e.sessionId),
@@ -74,7 +78,7 @@ export function readInsights(tx: Ctx, args: { learnerId: bigint; teacherId: bigi
   const mastery = [...tx.db.conceptState.learnerId.filter(l.id)]
     .sort((a, b) => desc(a.updatedAt, b.updatedAt))
     .map(c => {
-      const category = c.category || tx.db.concept.key.find(c.concept)?.category || '';
+      const category = c.category || tx.db.concept.key.find(c.concept)?.category || pack.taxonomy.find(t => t.concepts.some(k => k.key === c.concept))?.key || '';
       return {
         concept: c.concept,
         title: conceptTitle(c.concept) || c.concept,
@@ -85,19 +89,19 @@ export function readInsights(tx: Ctx, args: { learnerId: bigint; teacherId: bigi
       };
     });
 
+  // Seeded earlier sessions count like real ones (dated in the past, no session row).
   const sessions = [...tx.db.session.learnerId.filter(l.id)];
-  let first = ms(l.createdAt);
-  let last = first;
-  if (sessions.length) {
-    first = Math.min(...sessions.map(s => ms(s.startedAt)));
-    last = Math.max(...sessions.map(s => ms(s.endedAt ?? s.startedAt)));
-  }
+  const seeded = [...tx.db.seedSession.learnerId.filter(l.id)];
+  const starts = [...sessions.map(s => ms(s.startedAt)), ...seeded.map(s => ms(s.startedAt))];
+  const ends = [...sessions.map(s => ms(s.endedAt ?? s.startedAt)), ...seeded.map(s => ms(s.startedAt))];
+  const first = starts.length ? Math.min(...starts) : ms(l.createdAt);
+  const last = ends.length ? Math.max(...ends) : ms(l.createdAt);
 
   const summaries = [...tx.db.sessionSummary.learnerId.filter(l.id)]
     .sort((a, b) => desc(a.createdAt, b.createdAt))
     .slice(0, INSIGHT_MAX_SUMMARIES)
     .map(r => {
-      const s = tx.db.session.id.find(r.sessionId);
+      const s = tx.db.session.id.find(r.sessionId) ?? tx.db.seedSession.sessionId.find(r.sessionId);
       const topic = s?.concept ?? '';
       return {
         sessionId: sessionRef(r.sessionId),
@@ -122,7 +126,7 @@ export function readInsights(tx: Ctx, args: { learnerId: bigint; teacherId: bigi
       style: l.style,
       isSimulated: l.isSimulated,
       persona,
-      sessionCount: sessions.length,
+      sessionCount: sessions.length + seeded.length,
       firstSeenMs: first,
       lastSeenMs: last,
     },

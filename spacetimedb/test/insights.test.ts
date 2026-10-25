@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import { TestAuth } from 'spacetimedb/server/test-utils';
 import { pack } from '../../shared/src/lesson/index';
 import { SIM_STUDENTS } from '../../shared/src/classroom/simStudents';
@@ -149,11 +151,11 @@ describe('learnerInsights content', () => {
     const json = raw(env, l.id, t.id);
     const r = ok(JSON.parse(json));
     expect(r.notes.map(n => [n.kind, n.seeded])).toEqual([['misconception', true], ['strategy', false]]);
-    expect(r.notes[0]!.evidence).toEqual([{ sessionId: '', fromTurn: 0, toTurn: 0, quote: '' }]);
-    expect(r.notes[1]!.evidence.map(e => e.sessionId)).toEqual([String(s.id), '']);
+    expect(r.notes[0]!.evidence).toEqual([{ sessionId: 'seed-1', fromTurn: 0, toTurn: 0, quote: '' }]);
+    expect(r.notes[1]!.evidence.map(e => e.sessionId)).toEqual([String(s.id), 'seed-1']);
     expect(r.notes[1]!.evidence[1]!.quote).toBe('oh, four times more slices');
     expect(r.summaries).toEqual([
-      { sessionId: '', summary: seed.summary.summary, nextFocus: seed.summary.nextFocus, createdMs: expect.any(Number), taskText: '', topic: '', topicTitle: '' },
+      { sessionId: 'seed-1', summary: seed.summary.summary, nextFocus: seed.summary.nextFocus, createdMs: expect.any(Number), taskText: '', topic: '', topicTitle: '' },
     ]);
     expect(r.mastery.map(m => [m.concept, m.mastery])).toEqual([['fractions-expand', 35]]);
     expect(json).not.toContain(String((1n << 62n) + l.id));
@@ -170,6 +172,102 @@ describe('learnerInsights content', () => {
     expect(r.learner.persona).not.toBe('');
     expect(r.notes).toHaveLength(seed.memory.length);
     expect(r.notes.length).toBeGreaterThan(0);
-    for (const n of r.notes) expect(n).toMatchObject({ seeded: true, evidence: [] });
+    for (const n of r.notes) expect(n).toMatchObject({ seeded: true, evidence: [expect.objectContaining({ sessionId: expect.stringMatching(/^seed-\d$/) })] });
+  });
+});
+
+describe('learnerInsights of simulated students (seeded past via writeSeed)', () => {
+  const DAY = 86_400_000;
+  const titleOf = (env: Env, key: string) => env.h.db.concept.key.find(key)?.title ?? pack.taxonomy.flatMap(c => c.concepts).find(k => k.key === key)!.title;
+  function check(env: Env, t: { id: bigint }, rank: number) {
+    const p = SIM_STUDENTS[rank - 1]!;
+    const l = [...env.h.db.learner.iter()].find(x => x.isSimulated && x.simRank === rank)!;
+    const now = Number(env.h.clock.now().microsSinceUnixEpoch / 1000n);
+    const r = ok(read(env, l.id, t.id));
+    // past sessions: one per history entry, newest first, with summary, next focus, task and topic
+    expect(r.summaries.map(s => s.summary)).toEqual([...p.history].sort((a, b) => a.daysAgo - b.daysAgo).map(h => h.summary));
+    for (let i = 1; i < r.summaries.length; i++) expect(r.summaries[i - 1]!.createdMs).toBeGreaterThan(r.summaries[i]!.createdMs);
+    for (const s of r.summaries) {
+      const h = p.history.find(x => x.summary === s.summary)!;
+      expect(s).toMatchObject({ nextFocus: h.nextFocus, taskText: h.task, topic: h.concept, sessionId: expect.stringMatching(/^seed-\d$/) });
+      expect(s.topicTitle).toBe(titleOf(env, h.concept));
+      expect(s.createdMs).toBe(now - h.daysAgo * DAY);
+    }
+    expect(new Set(r.summaries.map(s => s.sessionId)).size).toBe(r.summaries.length);
+    // header: seeded sessions count, first/last seen are their dates
+    expect(r.learner.sessionCount).toBe(p.history.length);
+    expect(r.learner.firstSeenMs).toBe(now - Math.max(...p.history.map(h => h.daysAgo)) * DAY);
+    expect(r.learner.lastSeenMs).toBe(now - Math.min(...p.history.map(h => h.daysAgo)) * DAY);
+    // notes: seeded, evidence on one of the seeded sessions, quotes kept
+    expect(r.notes.map(n => n.text).sort()).toEqual(p.memory.map(m => m.text).sort());
+    const ids = new Set(r.summaries.map(s => s.sessionId));
+    for (const n of r.notes) {
+      const m = p.memory.find(x => x.text === n.text)!;
+      expect(n.seeded).toBe(true);
+      expect(n.evidence).toHaveLength(1);
+      expect(ids.has(n.evidence[0]!.sessionId)).toBe(true);
+      expect(n.evidence[0]!.quote).toBe(m.quote ?? '');
+      const sess = r.summaries.find(s => s.sessionId === n.evidence[0]!.sessionId)!;
+      expect(Math.abs(sess.createdMs - n.createdMs)).toBeLessThanOrEqual(1); // dated with its session (staggered by µs)
+      if (n.concept) expect(n.conceptTitle).not.toBe('');
+    }
+    expect(r.notes.filter(n => n.evidence[0]!.quote).length).toBeGreaterThan(0);
+    // mastery with titles, dated with a seeded session
+    expect(r.mastery.map(m => [m.concept, m.mastery]).sort()).toEqual(p.mastery.map(m => [m.concept, m.mastery]).sort());
+    for (const m of r.mastery) {
+      expect(m.title).toBe(titleOf(env, m.concept));
+      expect(m.categoryTitle).not.toBe('');
+      expect(r.summaries.map(s => s.createdMs)).toContain(m.updatedMs);
+    }
+    expect(JSON.stringify(r)).not.toContain(String(1n << 62n).slice(0, 12)); // raw pseudo ids stay hidden
+    return r;
+  }
+
+  it('resetSimulatedStudents(0): every persona has notes with evidence, mastery and its history newest first', () => {
+    const env = setup();
+    const t = teacher(env);
+    call(env.h, env.client, mod.resetSimulatedStudents, { count: 0 });
+    for (const p of SIM_STUDENTS) check(env, t, p.rank);
+    const leo = check(env, t, 4);
+    expect(leo.learner.name).toBe('Leo Schneider');
+    expect(leo.summaries).toHaveLength(2);
+  });
+
+  it('demo seed (scripts/demo-seed.json, seedMemory): every profile field is filled', () => {
+    const env = setup();
+    const t = teacher(env);
+    const file = JSON.parse(fs.readFileSync(path.join(__dirname, '../../scripts/demo-seed.json'), 'utf8'));
+    for (const st of file.students) {
+      const l = makeLearner(env.h, env.client, st.name);
+      call(env.h, env.agent, mod.seedMemory, { learnerId: l.id, memory: JSON.stringify(st.memory) });
+      const r = ok(read(env, l.id, t.id));
+      expect(r.learner.sessionCount).toBe(2);
+      expect(r.learner.firstSeenMs).toBeLessThan(r.learner.lastSeenMs);
+      expect(r.summaries.map(s => s.sessionId)).toEqual(['seed-1', 'seed-2']);
+      for (const s of r.summaries) expect(s.summary && s.nextFocus && s.taskText && s.topic && s.topicTitle, st.name).toBeTruthy();
+      expect(r.mastery.every(m => m.title !== m.concept && m.categoryTitle && m.updatedMs < r.generatedMs)).toBe(true);
+      const quoted = r.notes.filter(n => n.evidence[0]?.quote);
+      expect(quoted.length).toBeGreaterThan(1);
+      expect(new Set(quoted.map(n => n.evidence[0]!.sessionId))).toEqual(new Set(['seed-1', 'seed-2']));
+    }
+  });
+
+  it('class start with reset gives the same seeded history; a real session adds to it', () => {
+    const env = setup();
+    const t = teacher(env);
+    call(env.h, env.client, mod.startClassSessionWith, {
+      teacherId: t.id, goals: 'g', content: 'Adding fractions', delivery: '', documentName: '', documentMime: '', documentText: '',
+      documentData: new Uint8Array(), simulatedCount: 2, resetSimulated: true,
+    });
+    for (const rank of [1, 2]) {
+      const l = [...env.h.db.learner.iter()].find(x => x.isSimulated && x.simRank === rank)!;
+      const r = ok(read(env, l.id, t.id));
+      const p = SIM_STUDENTS[rank - 1]!;
+      const live = [...env.h.db.session.learnerId.filter(l.id)].length;
+      expect(r.learner.sessionCount).toBe(p.history.length + live);
+      expect(r.summaries.map(s => s.taskText)).toEqual([...p.history].sort((a, b) => a.daysAgo - b.daysAgo).map(h => h.task));
+      expect(r.notes.every(n => n.seeded && n.evidence.length === 1)).toBe(true);
+      expect(r.mastery.length).toBe(p.mastery.length);
+    }
   });
 });

@@ -320,6 +320,16 @@ export const Role = __t.object("Role", {
 });
 export type Role = __Infer<typeof Role>;
 
+export const SeedSession = __t.object("SeedSession", {
+  sessionId: __t.u64(),
+  learnerId: __t.u64(),
+  taskText: __t.string(),
+  category: __t.string(),
+  concept: __t.string(),
+  startedAt: __t.timestamp(),
+});
+export type SeedSession = __Infer<typeof SeedSession>;
+
 export const Session = __t.object("Session", {
   id: __t.u64(),
   learnerId: __t.u64(),

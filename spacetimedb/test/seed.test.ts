@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { SEED_SESSION_BASE } from '../src/seed';
+import fs from 'node:fs';
+import path from 'node:path';
+import { SIM_STUDENTS } from '../../shared/src/classroom/simStudents';
+import { simSeed } from '../src/classroom';
+import { SEED_SESSION_BASE, isSeedSessionOf, seedSessionId, seedSessionIndex, validateSeed } from '../src/seed';
 import { call, makeLearner, makeSession, mod, proc, setup, type H } from './helpers';
 
 const SEED = {
@@ -107,5 +111,111 @@ describe('seedMemory', () => {
     expect(text).toContain('- mastery fractions-expand: 35/100');
     expect(text).not.toContain('Knows 0.5 is one half.'); // other category
     expect(text.indexOf('Multiplied only')).toBeLessThan(text.indexOf('Cutting each pizza')); // file order kept
+  });
+});
+
+const HISTORY = {
+  daysAgo: 2,
+  notes: [
+    { kind: 'misconception', category: 'fractions', concept: 'fractions-expand', text: 'Multiplied only the bottom.', quote: 'just the bottom' },
+    { kind: 'understood', category: 'fractions', concept: 'fractions-unit', text: 'Knows what the bottom number means.', session: 1, quote: 'how many pieces' },
+  ],
+  mastery: [{ concept: 'fractions-expand', mastery: 35 }, { concept: 'fractions-unit', mastery: 80 }, { concept: 'place-value', mastery: 70 }],
+  history: [
+    { daysAgo: 2, concept: 'fractions-expand', task: 'Expand 2/3 to sixths.', summary: 'Expanded 2/3 with a pizza.', nextFocus: 'Twelfths.' },
+    { daysAgo: 6, concept: 'fractions-unit', task: 'What is one slice of 8?', summary: 'Named 1/8 and 3/8.', nextFocus: 'Expanding.' },
+  ],
+};
+
+describe('seed history (several earlier sessions)', () => {
+  it('pseudo session ids: index 0 is the old scheme, unique per learner and index, all >= SEED_SESSION_BASE', () => {
+    expect(seedSessionId(7n)).toBe(SEED_SESSION_BASE + 7n);
+    const ids = [1n, 2n, 1n << 39n].flatMap(l => [0, 1, 2, 4].map(i => ({ l, i, id: seedSessionId(l, i) })));
+    expect(new Set(ids.map(x => x.id)).size).toBe(ids.length);
+    for (const { l, i, id } of ids) {
+      expect(id >= SEED_SESSION_BASE && id < 1n << 63n).toBe(true);
+      expect(isSeedSessionOf(id, l)).toBe(true);
+      expect(isSeedSessionOf(id, l + 1n)).toBe(false);
+      expect(seedSessionIndex(id)).toBe(i);
+    }
+    expect(isSeedSessionOf(5n, 5n)).toBe(false);
+  });
+
+  it('writes one seed_session + summary per history entry, notes and mastery dated with their session', () => {
+    const env = setup();
+    const { h } = env;
+    const l = makeLearner(h, env.client, 'Ava Chen');
+    seedIt(env, l.id, HISTORY);
+    const now = h.clock.now().microsSinceUnixEpoch;
+    const day = 86_400_000_000n;
+    const seeded = [...h.db.seedSession.learnerId.filter(l.id)].sort((a, b) => (a.sessionId < b.sessionId ? -1 : 1));
+    expect(seeded.map(s => [s.sessionId, s.taskText, s.category, s.concept, s.startedAt.microsSinceUnixEpoch])).toEqual([
+      [seedSessionId(l.id, 0), 'Expand 2/3 to sixths.', 'fractions', 'fractions-expand', now - 2n * day],
+      [seedSessionId(l.id, 1), 'What is one slice of 8?', 'fractions', 'fractions-unit', now - 6n * day],
+    ]);
+    const sums = [...h.db.sessionSummary.learnerId.filter(l.id)];
+    expect(sums.map(s => [s.sessionId, s.summary]).sort()).toEqual([[seedSessionId(l.id, 0), 'Expanded 2/3 with a pizza.'], [seedSessionId(l.id, 1), 'Named 1/8 and 3/8.']].sort());
+    const notes = notesOf(h, l.id);
+    const ev = (text: string) => [...h.db.noteEvidence.noteId.filter(notes.find(n => n.text === text)!.id)][0]!;
+    expect(ev('Multiplied only the bottom.')).toMatchObject({ sessionId: seedSessionId(l.id, 0), quote: 'just the bottom' });
+    expect(ev('Knows what the bottom number means.')).toMatchObject({ sessionId: seedSessionId(l.id, 1), quote: 'how many pieces' });
+    expect(notes.find(n => n.kind === 'understood')!.createdAt.microsSinceUnixEpoch).toBe(now - 6n * day - 1n);
+    const cs = Object.fromEntries([...h.db.conceptState.learnerId.filter(l.id)].map(c => [c.concept, c.updatedAt.microsSinceUnixEpoch]));
+    expect(cs).toEqual({ 'fractions-expand': now - 2n * day, 'fractions-unit': now - 6n * day, 'place-value': now - 2n * day });
+    // re-seeding with one session removes the other seed_session and summary
+    seedIt(env, l.id, { ...HISTORY, notes: [], history: HISTORY.history.slice(0, 1) });
+    expect([...h.db.seedSession.learnerId.filter(l.id)]).toHaveLength(1);
+    expect([...h.db.sessionSummary.learnerId.filter(l.id)]).toHaveLength(1);
+    seedIt(env, l.id, {});
+    expect([...h.db.seedSession.learnerId.filter(l.id)]).toHaveLength(0);
+  });
+
+  it('validates history: distinct dates, known topic, note session in range', () => {
+    const env = setup();
+    const l = makeLearner(env.h, env.client, 'Ava Chen');
+    const s = (o: object) => ({ summary: 'x', ...o });
+    expect(() => seedIt(env, l.id, { history: [s({ daysAgo: 3 }), s({ daysAgo: 3 })] })).toThrow(/different daysAgo/);
+    expect(() => seedIt(env, l.id, { summary: { summary: 'x' }, history: [s({})] })).toThrow(/different daysAgo/); // both default to daysAgo 2
+    expect(() => seedIt(env, l.id, { history: [s({ concept: 'cooking' })] })).toThrow(/history\[0\]\.concept: unknown concept/);
+    expect(() => seedIt(env, l.id, { history: [s({ daysAgo: 400 })] })).toThrow(/history\[0\]\.daysAgo/);
+    expect(() => seedIt(env, l.id, { history: [s({ summary: '' })] })).toThrow(/history\[0\]\.summary/);
+    expect(() => seedIt(env, l.id, { notes: [{ kind: 'strategy', category: 'fractions', text: 'x', session: 1 }], history: [s({})] })).toThrow(/session 1 does not exist/);
+    expect(() => seedIt(env, l.id, { history: [1, 2, 3, 4, 5, 6].map(d => s({ daysAgo: d })) })).toThrow(/at most 5/);
+    expect(notesOf(env.h, l.id)).toHaveLength(0);
+  });
+
+  it('every simulated persona passes the seed validator (taxonomy, kinds, limits) with 1-2 dated sessions', () => {
+    for (const p of SIM_STUDENTS) {
+      const { errors, seed } = validateSeed(simSeed(p));
+      expect(errors, p.name).toEqual([]);
+      expect(seed.sessions.length, p.name).toBeGreaterThanOrEqual(1);
+      expect(seed.sessions.length, p.name).toBeLessThanOrEqual(2);
+      expect(p.mastery.length, p.name).toBeGreaterThanOrEqual(2);
+      expect(p.mastery.length, p.name).toBeLessThanOrEqual(3);
+      for (const s of seed.sessions) expect(s.task && s.concept && s.category && s.nextFocus, p.name).toBeTruthy();
+      expect(p.memory.some(n => n.quote), p.name).toBe(true);
+      // newest first, as documented
+      expect(p.history.map(h => h.daysAgo), p.name).toEqual([...p.history.map(h => h.daysAgo)].sort((a, b) => a - b));
+    }
+  });
+
+  it('scripts/demo-seed.json passes the seed validator with 2 sessions per student', () => {
+    const file = JSON.parse(fs.readFileSync(path.join(__dirname, '../../scripts/demo-seed.json'), 'utf8'));
+    for (const s of file.students) {
+      const { errors, seed } = validateSeed(s.memory);
+      expect(errors, s.name).toEqual([]);
+      expect(seed.sessions, s.name).toHaveLength(2);
+      for (const x of seed.sessions) expect(x.task && x.concept, s.name).toBeTruthy();
+    }
+  });
+
+  it('the seedMemory reducer still refuses simulated learners', () => {
+    const env = setup();
+    call(env.h, env.client, mod.resetSimulatedStudents, { count: 1 });
+    const sim = [...env.h.db.learner.iter()].find(l => l.isSimulated)!;
+    const before = [...env.h.db.seedSession.learnerId.filter(sim.id)].length;
+    expect(before).toBe(SIM_STUDENTS[0]!.history.length);
+    expect(() => seedIt(env, sim.id, HISTORY)).toThrow(/simulated/);
+    expect([...env.h.db.seedSession.learnerId.filter(sim.id)]).toHaveLength(before);
   });
 });

@@ -109,7 +109,7 @@ try {
       call('seed_memory', l ? String(l.id) : '<new id>', JSON.stringify(JSON.stringify(m)));
       if (!dryRun) {
         const kinds = (m.notes ?? []).map(n => n.kind).join(', ');
-        console.log(`  ~ memory "${name}": ${(m.notes ?? []).length} notes (${kinds}), mastery ${(m.mastery ?? []).map(x => `${x.concept} ${x.mastery}`).join(', ') || '-'}${m.summary ? ', past session summary' : ''}`);
+        console.log(`  ~ memory "${name}": ${(m.notes ?? []).length} notes (${kinds}), mastery ${(m.mastery ?? []).map(x => `${x.concept} ${x.mastery}`).join(', ') || '-'}${(m.summary ? 1 : 0) + (m.history?.length ?? 0) ? `, ${(m.summary ? 1 : 0) + (m.history?.length ?? 0)} past session(s)` : ''}`);
       }
     }
   }
