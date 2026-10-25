@@ -10,6 +10,10 @@ export interface SessionRow {
   active: boolean;
   hasImage: boolean;
   currentUtteranceId: bigint;
+  /** Read for context-prefetch invalidation (topic, learner). */
+  category?: string;
+  concept?: string;
+  learnerId?: bigint;
 }
 
 export interface TurnRow {

@@ -35,7 +35,13 @@ export const PLAYBACK_DEFAULTS = {
 
 export const WORKER_DEFAULTS = {
   PREEMPTIVE_LLM: true,
-  PREEMPTIVE_SILENCE_MS: 400,
+  /** Silence after the END OF SPEECH before the worker starts the LLM preemptively (output is
+   *  held until the turn is ready; aborted and thrown away if the student goes on or the
+   *  transcript changes). The worker learns of the speech end from the phrase's final chunk,
+   *  which arrives VAD_PHRASE_MS after it, so it waits max(0, this - VAD_PHRASE_MS) from there,
+   *  and only once every phrase of the turn is transcribed. Short on purpose: wasted LLM calls
+   *  are accepted for latency. */
+  PREEMPTIVE_SILENCE_MS: 200,
   MAX_TOOL_ROUNDS: 2,
   /** OpenRouter reasoning effort; `none` measured fastest first token (First check #5). */
   LLM_REASONING_EFFORT: 'none',
