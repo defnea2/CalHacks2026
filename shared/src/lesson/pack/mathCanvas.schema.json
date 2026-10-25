@@ -19,6 +19,11 @@
             "minimum": 0,
             "maximum": 7
           },
+          "narration": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
           "visual": {
             "oneOf": [
               {

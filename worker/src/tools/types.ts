@@ -8,6 +8,14 @@ export interface ToolContext {
   /** Index the next sentence added to this utterance will get (board reveal sync). */
   nextSentenceIdx: number;
   transport: Transport;
+  /** Publishes one audio cue per line inside the current ordered operation. One plan per reply. */
+  narrate?: (lines: string[]) => Promise<void>;
+}
+
+export interface NarratedToolOutput {
+  text: string;
+  /** This tool already delivered the reply's speech; no follow-up LLM round is needed. */
+  narrated: true;
 }
 
 /** One tool module: everything except name/description/parameters, which come from the pack
@@ -18,7 +26,7 @@ export interface ToolModule {
   kind: 'action' | 'query';
   timeoutMs?: number;
   /** Returns the tool result text. Throwing is fine: the router turns it into an error result. */
-  handler(args: Record<string, unknown>, ctx: ToolContext): Promise<string>;
+  handler(args: Record<string, unknown>, ctx: ToolContext): Promise<string | NarratedToolOutput>;
 }
 
 export interface ToolDef extends ToolModule {

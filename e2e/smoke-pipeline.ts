@@ -111,7 +111,12 @@ async function main() {
       assert.ok(player.director.getSnapshot().canvas.math, 'Generated canvas never appeared');
       for (const item of items) for (const m of item.content.moments) {
         assert.ok((cues.get(item.utteranceId) ?? []).includes(item.sentenceIdx + m.sentenceOffset), 'Canvas refers to an unspoken sentence');
+        assert.ok(m.narration, 'New generated moments must include their own narration');
+        const cue = sentences.find(s => s.idx === item.sentenceIdx + m.sentenceOffset);
+        assert.equal(cue?.display, m.narration, 'Spoken line does not match its authored visual cue');
       }
+      for (const sentence of sentences) assert.equal(sentences.filter(s => s.display === sentence.display).length, 1, 'Repeated spoken line');
+      console.log(`Canvas: ${JSON.stringify(items.map(item => item.content))}`);
       console.log(`PASS: ${sentences.length} spoken sentences, ${boards.length} valid canvas item(s), ordered cue checks. Playback acknowledgments simulated, browser playback not measured.`);
     }
   } finally {

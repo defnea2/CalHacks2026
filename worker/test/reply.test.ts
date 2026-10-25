@@ -1,12 +1,16 @@
 // One reply end to end through the Agent: sentences, metrics, tool ordering and tool rounds.
 import { describe, expect, it } from 'vitest';
 import { pack, TOOL_NAMES } from '@tutor/shared';
-import { done, FakeLlm, makeAgent, session, text, tokens, tool, turn, waitFor } from './fakes';
+import { done, FakeLlm, makeAgent, phrase, session, sleep, text, tokens, tool, turn, waitFor } from './fakes';
 
 const S = 1n;
 const kind = pack.boardKinds.find(k => k.name === 'text')!.name;
 const phaseId = pack.phases[1]!.id;
 const category = pack.taxonomy[0]!.key;
+const narratedCanvas = { title: 'Same amount, smaller pieces', moments: [
+  { sentenceOffset: 0, narration: 'Half the bar is shaded.', visual: { kind: 'bars', bars: [{ id: 'a', label: 'A', parts: 2, shaded: 1 }] } },
+  { sentenceOffset: 1, narration: 'Now each half is split in two. Did the shaded length change?', visual: { kind: 'update', changes: [{ type: 'set_bar', barId: 'a', parts: 4, shaded: 2 }] } },
+] };
 
 async function answer(llm: FakeLlm, prep?: (t: ReturnType<typeof makeAgent>['transport']) => void) {
   const m = makeAgent(llm);
@@ -18,6 +22,73 @@ async function answer(llm: FakeLlm, prep?: (t: ReturnType<typeof makeAgent>['tra
 }
 
 describe('reply', () => {
+  it('delivers paired narration once, keeps its cues intact, and skips redundant model rounds', async () => {
+    const llm = new FakeLlm([[
+      tool(TOOL_NAMES.setTopic, { category }),
+      tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }),
+      text('Half the bar is shaded. Now each half is split in two. Did the shaded length change?'), done,
+    ]]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(1);
+    expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(0);
+    expect(transport.of('addSentence').map(s => [s.idx, s.display])).toEqual(narratedCanvas.moments.map(m => [m.sentenceOffset, m.narration]));
+    expect(transport.of('appendTutorTurn')[0]!.text).toBe(narratedCanvas.moments.map(m => m.narration).join(' '));
+  });
+
+  it('preserves a preamble index but will not publish a second narrated canvas in the same reply', async () => {
+    const llm = new FakeLlm([[
+      text('Watch the shaded length. '),
+      tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }),
+      tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }), done,
+    ]]);
+    const { transport } = await answer(llm);
+    expect(transport.of('showBoardItem')).toHaveLength(1);
+    expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(1);
+    expect(transport.of('addSentence').map(s => s.idx)).toEqual([0, 1, 2]);
+    expect(llm.calls).toHaveLength(1);
+  });
+
+  it('rejects a partially narrated plan before any picture or speech, then repairs it', async () => {
+    const invalid = structuredClone(narratedCanvas);
+    invalid.moments[1]!.narration = '';
+    const llm = new FakeLlm([
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: invalid }), done],
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(2);
+    expect(transport.of('showBoardItem')).toHaveLength(1);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(narratedCanvas.moments.map(m => m.narration));
+  });
+
+  it('keeps both paired narration and visuals behind the preemptive gate', async () => {
+    const llm = new FakeLlm([[tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }), done]]);
+    const { agent, transport } = makeAgent(llm, undefined, { preemptive: true, preemptiveSilenceMs: 1 });
+    agent.onSession(session(S));
+    agent.onPhrase(phrase(S, 1, 0, 'done', 'Why two quarters?'));
+    agent.onTurn(turn(S, 0, 'Why two quarters?', 'open'));
+    await waitFor(() => llm.calls.length === 1);
+    await sleep(20);
+    expect(transport.names()).toEqual(['buildContext']);
+    agent.onTurn(turn(S, 0, 'Why two quarters?', 'ready'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('showBoardItem')).toHaveLength(1);
+    expect(transport.of('addSentence')).toHaveLength(2);
+  });
+
+  it('stops the remaining planned narration after interruption', async () => {
+    const llm = new FakeLlm([[tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }), done]]);
+    const { agent, transport } = makeAgent(llm);
+    transport.delayMs.addSentence = 50;
+    agent.onSession(session(S));
+    agent.onTurn(turn(S, 0, 'Why two quarters?'));
+    await waitFor(() => transport.of('addSentence').length === 1);
+    agent.onSession(session(S, { turnState: 'interrupted' }));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('addSentence')).toHaveLength(1);
+    expect(transport.of('appendTutorTurn')[0]!.interrupted).toBe(true);
+  });
+
   it('narrates all canvas moments after a spoken preamble and board tool call', async () => {
     const content = { title: 'Move the triangle', moments: [
       { sentenceOffset: 0, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'slant' } },

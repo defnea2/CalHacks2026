@@ -4,6 +4,7 @@ import { VoiceCanvasContentSchema } from './contracts';
 import { SpeechCanvasPlayer, type SpeechCanvasItem } from './SpeechCanvasPlayer';
 import schema from '../../../shared/src/lesson/pack/mathCanvas.schema.json';
 import { validateJson } from '../../../shared/src/lesson/api';
+import { validateVoiceCanvasContent } from './validate';
 import type { JsonSchema } from '../../../shared/src/lesson/types';
 
 const content = { title: 'Four rows of eight', moments: [
@@ -16,6 +17,14 @@ const heard = (...indices: number[]) => new Map([['7', indices]]);
 const visual = (p: SpeechCanvasPlayer) => p.director.getSnapshot().canvas.math?.visual;
 
 describe('speech canvas', () => {
+  it('requires a complete contiguous narration plan while still accepting legacy cues', () => {
+    expect(() => validateVoiceCanvasContent(content)).not.toThrow();
+    const plan = { ...content, moments: content.moments.map(m => ({ ...m, narration: 'Look at this part.' })) };
+    expect(() => validateVoiceCanvasContent(plan)).not.toThrow();
+    expect(() => validateVoiceCanvasContent({ ...plan, moments: [plan.moments[0], { ...plan.moments[1], sentenceOffset: 2 }] })).toThrow(/contiguous/);
+    expect(() => validateVoiceCanvasContent({ ...plan, moments: [plan.moments[0], content.moments[1]] })).toThrow(/narration on every/);
+  });
+
   it('waits for actual audio, changes the same picture, and deduplicates repeated subscriptions', () => {
     const p = new SpeechCanvasPlayer();
     p.sync([item], heard(), false);

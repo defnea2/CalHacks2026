@@ -5,14 +5,14 @@ import type { BoardKindDef, JsonSchema } from '../types';
 export const boardKinds: BoardKindDef[] = [
   {
     name: 'math_canvas',
-    description: 'An animated, persistent math canvas. Prefer this for explanations. Content: {title, moments:[{sentenceOffset,visual,interactive:false,showEquation:false}]}. '
-      + 'Offsets are 0-based sentences AFTER this tool call; use increasing offsets 0,1,2 and speak one short sentence per moment. Start each item with a complete visual. '
+    description: 'An animated, persistent math canvas. Prefer this for explanations. Content: {title, moments:[{sentenceOffset,narration,visual,interactive:false,showEquation:false}]}. '
+      + 'Include narration on EVERY moment: the app speaks these words automatically, exactly once, with the matching visual. Do not repeat them outside this tool. Offsets must be contiguous 0,1,2. Start each item with a complete visual. '
       + 'Visual shapes: {kind:"array",rows:4,columns:8,splitAt:null}; {kind:"bars",bars:[{id:"a",label:"One whole",parts:4,shaded:3}]}; '
       + '{kind:"geometry",shape:"rectangle",width:3,height:2}; {kind:"number_line",min:0,max:10,markers:[{id:"a",label:"A",value:3}]}. '
       + '{kind:"parallelogram",base:6,height:4,shear:2,stage:"slant"} shows a movable area proof. Later stages use {kind:"update",changes:[{type:"set_parallelogram",stage:"cut"}]} then {kind:"update",changes:[{type:"set_parallelogram",stage:"reassembled"}]}; all pieces keep their size. '
       + 'Later moments change the SAME picture with {kind:"update",changes:[{type:"set_array",splitAt:5}]} or set_geometry(width,height), set_bar(barId,parts,shaded), move_marker(markerId,value), set_focus(target), set_parallelogram(shear,stage). '
       + 'Use 1-4 moments, only final moment interactive. Array rows <=12, columns <=20; bars parts <=12; geometry dimensions 1-12 in halves. '
-      + 'Example: {"title":"Split the rectangle","moments":[{"sentenceOffset":0,"visual":{"kind":"array","rows":4,"columns":8}},{"sentenceOffset":1,"visual":{"kind":"update","changes":[{"type":"set_array","splitAt":5}]},"interactive":true}]}. '
+      + 'Example: {"title":"One rectangle, two parts","moments":[{"sentenceOffset":0,"narration":"Each of these four rows has eight squares.","visual":{"kind":"array","rows":4,"columns":8}},{"sentenceOffset":1,"narration":"Split each row into five and three; did the total change?","visual":{"kind":"update","changes":[{"type":"set_array","splitAt":5}]},"interactive":true}]}. '
       + 'Do not reveal equations before asking for a prediction. Use gap_task separately for assessed answers.',
     contentSchema: mathCanvasSchema as unknown as JsonSchema,
   },

@@ -72,6 +72,7 @@ export class ReplyRun {
   private closed = false;
   private firstTokenAt = 0;
   private firstTokenRecorded = false;
+  private narratedCanvas = false;
   private readonly startedAt: number;
   private readonly now: () => number;
 
@@ -179,6 +180,14 @@ export class ReplyRun {
 
   private enqueueSentence(display: string): void {
     void this.enqueue(async () => {
+      // A paired canvas owns its spoken explanation. Ignore free text that the
+      // model emitted after that tool instead of speaking the explanation twice.
+      if (!this.narratedCanvas) await this.publishSentence(display);
+    }, undefined);
+  }
+
+  private async publishSentence(display: string): Promise<void> {
+      if (this.aborted) return;
       const idx = this.sent.length;
       this.sent.push(display);
       if (idx === 0) this.metric('firstSentenceAt', this.now());
@@ -193,7 +202,13 @@ export class ReplyRun {
       } catch (e) {
         this.log(`addSentence ${idx} failed: ${errText(e)}`);
       }
-    }, undefined);
+  }
+
+  private async narrateCanvas(lines: string[]): Promise<void> {
+    this.narratedCanvas = true;
+    // Already inside the ordered outbox: enqueuing here would deadlock behind
+    // this very tool. Each authored line is one audio cue, even with punctuation.
+    for (const line of lines) await this.publishSentence(line);
   }
 
   private enqueueTool(call: ToolResult['call']): Promise<ToolResult> {
@@ -204,6 +219,7 @@ export class ReplyRun {
         utteranceId: this.utteranceId,
         nextSentenceIdx: this.sent.length,
         transport: this.deps.transport,
+        narrate: this.narratedCanvas ? undefined : lines => this.narrateCanvas(lines),
       });
       this.toolResults.push(r);
       return r;
@@ -282,6 +298,9 @@ export class ReplyRun {
           { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}), ...(raw !== undefined ? { raw } : {}) },
           ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
         ];
+        // The tool supplied the actual spoken lines, so another model call would
+        // add latency and commonly repeat the same explanation verbatim.
+        if (res.some(r => r.narrated)) break;
         if (!calls.length) break;
         // A rejected visual must have one bounded chance to repair its command,
         // even when topic lookup already consumed a normal tool round.

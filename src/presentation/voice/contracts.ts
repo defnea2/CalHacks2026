@@ -6,6 +6,8 @@ export const VoiceCanvasContentSchema = z.object({
   title: z.string().min(1).max(120),
   moments: z.array(z.object({
     sentenceOffset: z.number().int().min(0).max(7),
+    /** Spoken once by the worker as the audio cue for this exact visual. */
+    narration: z.string().trim().min(1).max(240).optional(),
     visual: CompactMathCommandSchema,
     interactive: z.boolean().default(false),
     showEquation: z.boolean().default(false),

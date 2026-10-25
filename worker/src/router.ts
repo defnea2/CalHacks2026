@@ -8,6 +8,7 @@ export interface ToolResult {
   kind: 'action' | 'query' | 'unknown';
   ok: boolean;
   result: string;
+  narrated?: boolean;
 }
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e));
@@ -55,7 +56,9 @@ export class ToolRouter {
           timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs} ms`)), timeoutMs);
         }),
       ]);
-      return { call, kind: tool.kind, ok: true, result };
+      return typeof result === 'string'
+        ? { call, kind: tool.kind, ok: true, result }
+        : { call, kind: 'action', ok: true, result: result.text, narrated: result.narrated };
     } catch (e) {
       return { call, kind: tool.kind, ok: false, result: `error: ${errText(e)}` };
     } finally {

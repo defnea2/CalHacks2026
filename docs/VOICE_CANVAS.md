@@ -38,24 +38,32 @@ Use the existing `show_board_item` tool with `kind: "math_canvas"`:
   "content": {
     "title": "One rectangle, two parts",
     "moments": [
-      {"sentenceOffset": 0, "visual": {"kind": "array", "rows": 4, "columns": 8}},
-      {"sentenceOffset": 1, "visual": {"kind": "update", "changes": [{"type": "set_array", "splitAt": 5}]}},
-      {"sentenceOffset": 2, "visual": {"kind": "keep"}, "showEquation": true, "interactive": true}
+      {"sentenceOffset": 0, "narration": "Each of these four rows has eight squares.", "visual": {"kind": "array", "rows": 4, "columns": 8}},
+      {"sentenceOffset": 1, "narration": "Split each row into five squares and three squares.", "visual": {"kind": "update", "changes": [{"type": "set_array", "splitAt": 5}]}},
+      {"sentenceOffset": 2, "narration": "Did splitting the rectangle change how many squares it covers?", "visual": {"kind": "keep"}, "interactive": true}
     ]
   }
 }
 ```
 
-After this tool call, say three short sentences, one per moment. The worker tags
-the item with the current `utteranceId` and the next `sentenceIdx`. Moment N runs
-when sentence `sentenceIdx + sentenceOffset` actually starts. This is sentence
-alignment, not word-level alignment. Keep sentence boundaries simple; punctuation
-and the worker's chunker determine the actual sentence indices.
-On `integration/abdul-voice`, complete short sentences are not merged and long
-sentences are not subdivided, preserving the model's sentence offsets. The board
-tool returns to the model with the required narration count. Its semantic
-validator is shared with the client; invalid commands get one bounded repair
-round before they can reach the board.
+On `integration/abdul-voice`, generate **narration inside every moment**. Do not
+repeat it as ordinary assistant text. The worker validates the complete plan,
+publishes the board, and sends each narration directly to the speech queue as
+one audio cue. Its punctuation does not change the number of cues. A completed
+plan ends the model loop, avoiding a second LLM request and duplicate narration.
+Trailing free text and a second narrated canvas in the same reply are suppressed.
+The same preemptive-output gate and interruption checks apply to planned speech.
+
+The worker tags the board with `utteranceId` and the next `sentenceIdx`. Moment N
+runs when audio for `sentenceIdx + sentenceOffset` actually starts. This is
+cue-level alignment, not word-level alignment. Use contiguous offsets starting at
+zero, one short spoken idea per moment, and at most one final question.
+
+Old items without narration still work through the legacy follow-up model round.
+Mixed narrated/unnarrated moments are rejected. The semantic validator is shared
+with the client; invalid commands get one bounded repair round before reaching
+the board. The voice-free preview continues to drive the same player with
+explicit sentence events; no speech service is needed to test the renderer.
 
 - One to four moments; strictly increasing offsets, starting at zero.
 - Start every item with a complete array, bars, geometry or number-line picture.
