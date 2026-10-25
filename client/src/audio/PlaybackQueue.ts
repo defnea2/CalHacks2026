@@ -43,6 +43,9 @@ export class PlaybackQueue {
   private scheduled: Scheduled[] = [];
   private nextStart = 0;
   private gain: GainNode;
+  /** Output level for the tutor avatar (absent on fake contexts in tests). */
+  private analyser: AnalyserNode | null = null;
+  private levelBuf: Float32Array | null = null;
   private tickTimer: ReturnType<typeof setInterval>;
   private playing = false;
 
@@ -55,6 +58,12 @@ export class PlaybackQueue {
     this.orderer = new SentenceOrderer(client.PLAYBACK_GAP_TIMEOUT_MS);
     this.gain = ctx.createGain();
     this.gain.connect(ctx.destination);
+    if (typeof ctx.createAnalyser === 'function') {
+      this.analyser = ctx.createAnalyser();
+      this.analyser.fftSize = 512;
+      this.levelBuf = new Float32Array(this.analyser.fftSize);
+      this.gain.connect(this.analyser);
+    }
     this.tickTimer = setInterval(() => {
       for (const b of this.orderer.tick(performance.now())) this.schedule(b);
       this.updatePlaying();
@@ -109,10 +118,20 @@ export class PlaybackQueue {
     return this.scheduled.some(s => s.endAt > now);
   }
 
+  /** Current output RMS, roughly 0..1 (0 when silent). Read per animation frame by the avatar. */
+  level(): number {
+    if (!this.analyser || !this.levelBuf) return 0;
+    this.analyser.getFloatTimeDomainData(this.levelBuf);
+    let sum = 0;
+    for (const v of this.levelBuf) sum += v * v;
+    return Math.min(1, Math.sqrt(sum / this.levelBuf.length) * 4);
+  }
+
   destroy(): void {
     clearInterval(this.tickTimer);
     this.flush(undefined, 'destroy');
     this.gain.disconnect();
+    this.analyser?.disconnect();
   }
 
   private schedule(b: SentenceBlock<AudioBlockIn>): void {

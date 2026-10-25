@@ -34,23 +34,24 @@ export function fmtMs(ms: number | null): string {
   return ms >= 10000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
-export function sessionUrl(kind: 'session' | 'observe', id: bigint | string): string {
+/** Query keys that select a screen; everything else (db, uri, debug, voice, VAD knobs) is kept. */
+export const ROUTE_KEYS = ['session', 'observe', 'overview', 'student', 'wait', 'teacher', 'class', 'join', 'miccheck'] as const;
+
+/** URL of a screen: `routeUrl()` = entry page, `routeUrl({ student: '' })` = `?student`, extras appended. */
+export function routeUrl(route: Record<string, string | bigint> = {}): string {
   const p = new URLSearchParams(window.location.search);
-  p.delete('session');
-  p.delete('observe');
-  p.delete('overview');
-  p.set(kind, id.toString());
-  return `${window.location.pathname}?${p.toString()}`;
+  for (const k of ROUTE_KEYS) p.delete(k);
+  for (const [k, v] of Object.entries(route)) p.set(k, v.toString());
+  const s = p.toString().replace(/=$|=(?=&)/g, '');
+  return `${window.location.pathname}${s ? `?${s}` : ''}`;
+}
+
+export function sessionUrl(kind: 'session' | 'observe', id: bigint | string, extra: Record<string, string> = {}): string {
+  return routeUrl({ [kind]: id.toString(), ...extra });
 }
 
 export function homeUrl(extra?: string): string {
-  const p = new URLSearchParams(window.location.search);
-  p.delete('session');
-  p.delete('observe');
-  p.delete('overview');
-  if (extra) p.set(extra, '');
-  const s = p.toString().replace(/=$|=(?=&)/g, '');
-  return `${window.location.pathname}${s ? `?${s}` : ''}`;
+  return routeUrl(extra ? { [extra]: '' } : {});
 }
 
 /** Client-side navigation within the tab (keeps the connection). */

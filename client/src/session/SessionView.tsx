@@ -22,13 +22,20 @@ import { Button, ErrorNote } from '../components/ui';
 import { APP_CONFIG } from '../app-config';
 import { compressPhoto } from '../lib/photo';
 import { eventLog } from '../lib/debug';
-import { homeUrl, navigate, sessionUrl } from '../lib/format';
+import { homeUrl, navigate, routeUrl, sessionUrl } from '../lib/format';
 import { shouldStartConversation } from '../lib/conversation';
 import { latestUtteranceBeats, orderBeats, parseScene, revealCount } from '../lesson/beatPlayer';
 import { parseNotes } from '@tutor/visual/teaching/spacetimeModel';
 import { LessonCanvas } from './LessonCanvas';
 import { useTextPlayback } from './useTextPlayback';
 import { useAgentStatus } from './useAgentStatus';
+import { STAGE_LABELS } from './stages';
+import { TutorAvatar, micLevel, type AvatarState } from '../components/TutorAvatar';
+import { usePresence } from '../stdb/usePresence';
+import { useRows } from '../stdb/useRows';
+import { subscribe } from '../stdb/connection';
+import { afterSessionChange } from '../lib/presence';
+import type { Session } from '../module_bindings/types';
 import '../studio.css';
 
 const PLAYED = 'played';
@@ -36,12 +43,6 @@ const SPEAKING = 'speaking';
 const DROPPED = 'dropped';
 const EMPTY_STARTED = new Map<string, number[]>();
 
-/** Lesson stage labels (the team's phaseLabels). */
-const STAGE_LABELS: Record<string, string> = {
-  diagnose: 'What do you think?', intuition: 'Use the picture', formalize: 'Write it in math',
-  worked_example: 'An example', repair: 'Try this', solo: 'Your turn',
-  transfer: 'A new example', return_to_problem: 'Your original question',
-};
 const LESSON_INTENTS = ['another_way', 'smaller_step', 'continue', 'demonstrate'] as const;
 
 interface CheckView {
@@ -63,9 +64,11 @@ export interface SessionViewProps {
   /** Needed for the microphone; omitted in read-only views. */
   settings?: AppSettings;
   readOnly?: boolean;
+  /** Inside the teacher's observe frame: no debug panel, no observer eyebrow. */
+  embedded?: boolean;
 }
 
-export function SessionView({ conn, sessionId, settings, readOnly = false }: SessionViewProps) {
+export function SessionView({ conn, sessionId, settings, readOnly = false, embedded = false }: SessionViewProps) {
   const data = useSessionData(conn, sessionId, { withAudio: !readOnly });
   const { session } = data;
   const agent = useAgentStatus(conn);
@@ -83,7 +86,10 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
   const lastTurnEnd = useRef<number | null>(null);
   const turnCounter = useRef(0);
   const [flushes, setFlushes] = useState(0);
-  const debugOpen = readOnly || new URLSearchParams(window.location.search).get('debug') === '1';
+  const query = new URLSearchParams(window.location.search);
+  const debugOpen = (readOnly && !embedded) || query.get('debug') === '1';
+  /** Opened from the waiting room when the teacher started the class (?join=1). */
+  const joining = !readOnly && query.get('join') === '1';
   const [conversationOpen, setConversationOpen] = useState(true);
   const listening = !!voice?.capturing && ui.listening;
 
@@ -113,6 +119,33 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
   const check = awaiting ? checkOf(notes, data.lessonState?.checkPrompt ?? '') : null;
   const thinking = session?.turnState === 'thinking';
   const active = !!session?.active;
+
+  // ------------------------------------------------------------ classroom (student tab only)
+  // Presence: in_session while this session is active (lib/presence.ts).
+  usePresence(readOnly ? null : conn, session?.learnerId, readOnly ? 'none' : 'session', active);
+  // A teacher starting a class moves the student into a new linked session; the class ending
+  // sends them back to the waiting room. Watch this learner's sessions and follow.
+  const learnerId = session?.learnerId;
+  useEffect(() => {
+    if (readOnly || learnerId === undefined) return;
+    const sub = subscribe(conn, [`SELECT * FROM session WHERE learner_id = ${learnerId}`], `learner sessions ${learnerId}`);
+    return () => sub.unsubscribe();
+  }, [conn, readOnly, learnerId]);
+  const learnerSessions = useRows<Session>(readOnly ? null : conn.db.session, r => r.learnerId === learnerId, [learnerId]);
+  const follow = useMemo(() => (readOnly ? { kind: 'stay' as const } : afterSessionChange(session, learnerSessions)), [readOnly, session, learnerSessions]);
+  const followKey = follow.kind === 'join' ? `join${follow.sessionId}` : follow.kind;
+  useEffect(() => {
+    if (follow.kind === 'stay') return;
+    const t = setTimeout(
+      () => {
+        eventLog.log('ui.class_follow', { kind: follow.kind, from: sessionId.toString(), to: follow.kind === 'join' ? follow.sessionId.toString() : '' });
+        navigate(follow.kind === 'join' ? sessionUrl('session', follow.sessionId, { join: '1' }) : routeUrl({ wait: learnerId ?? 0n }));
+      },
+      follow.kind === 'wait' ? 2500 : 300
+    );
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followKey, sessionId, learnerId]);
 
   // Debug surface for the E2E harness.
   useEffect(() => {
@@ -315,6 +348,34 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
     [readOnly, localStarted, mode, hiddenFrom]
   );
 
+  // Joined from the waiting room in text mode: the tutor starts at once (voice needs a click for
+  // the AudioContext: the welcome button below, which calls startConversation like "Start talking").
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!joining || autoStarted.current || !data.ready || mode !== 'typed' || !shouldStartConversation(session)) return;
+    autoStarted.current = true;
+    eventLog.log('ui.class_autostart', { sessionId: sessionId.toString() });
+    void callReducer('startConversation', { sessionId }, () => conn.reducers.startConversation({ sessionId }));
+  }, [joining, data.ready, mode, session, conn, sessionId]);
+
+  // ------------------------------------------------------------ tutor avatar + the learner's voice
+  const uiRef = useRef(ui);
+  uiRef.current = ui;
+  const tutorSpeaking = ui.tutorAudio || session?.turnState === SPEAKING;
+  const avatarState: AvatarState = !active ? 'idle' : tutorSpeaking ? 'speaking' : thinking ? 'thinking' : listening ? 'listening' : 'idle';
+  const avatarLevel = useMemo(() => {
+    if (avatarState === 'speaking') return voice && ui.tutorAudio ? () => voice.playback.level() : undefined;
+    if (avatarState === 'listening') return () => micLevel(uiRef.current.levelDb);
+    return undefined;
+  }, [avatarState, voice, ui.tutorAudio]);
+  /** The learner's latest phrase of the turn the tutor has not answered yet (STT text per phrase). */
+  const livePhrase = useMemo(() => {
+    if (readOnly) return '';
+    const lastTutor = data.turns.filter(t => t.role === 'tutor').reduce((m, t) => Math.max(m, t.idx), -1);
+    const p = data.phrases.filter(x => x.status !== 'discarded' && x.turnIdx > lastTutor).sort((a, b) => b.phraseId - a.phraseId)[0];
+    return p?.text ?? '';
+  }, [readOnly, data.turns, data.phrases]);
+
   if (data.error) return <ErrorNote>Subscription failed: {data.error}</ErrorNote>;
   if (data.ready && !session) {
     return (
@@ -341,7 +402,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
     >
       <div className="lesson-topline">
         <div className="lesson-question">
-          {readOnly && <span className="studio-eyebrow">Observer · read-only</span>}
+          {readOnly && !embedded && <span className="studio-eyebrow">Observer · read-only</span>}
           <h1 data-testid="task-display">{session?.taskText || 'What would you like to understand?'}</h1>
         </div>
         <button className="conversation-toggle" aria-expanded={conversationOpen} aria-controls={`lesson-conversation-${sessionId}`} onClick={() => setConversationOpen(v => !v)}>
@@ -359,9 +420,23 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
               <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={readOnly ? undefined : submitAnswer} markerAt={readOnly ? undefined : markerAt} allowCanvasInteraction={canvasInteractive} />
             ) : (
               <div data-testid="board" className="canvas-welcome">
-                <span className="welcome-mark" aria-hidden="true">↗</span>
-                <h2>{thinking ? 'Building your picture…' : 'Your picture will appear here'}</h2>
-                <p>{readOnly ? 'Waiting for the tutor.' : 'Talk or type: the tutor explains with a moving picture.'}</p>
+                <TutorAvatar state={avatarState} level={avatarLevel} size={84} />
+                <h2>{thinking ? 'Building your picture…' : joining && active && session?.turnCount === 0 ? 'Your teacher started the class!' : 'Your picture will appear here'}</h2>
+                <p>
+                  {readOnly
+                    ? 'Waiting for the tutor.'
+                    : thinking
+                      ? 'The tutor is thinking about how to show it.'
+                      : mode === 'voice' && active && !listening && session?.turnCount === 0
+                        ? 'Press the button to turn on sound and the microphone. The tutor starts.'
+                        : 'Talk or type: the tutor explains with a moving picture.'}
+                </p>
+                {!readOnly && active && mode === 'voice' && !listening && session?.turnCount === 0 && (
+                  <button type="button" className="pr-primary" data-testid="welcome-start" onClick={startTalking} disabled={starting}>
+                    <span>{starting ? 'Starting…' : joining ? 'Join the lesson' : 'Start talking'}</span>
+                    <span aria-hidden="true">→</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -377,8 +452,20 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
               <button type="button" data-testid="playback-replay" title="Replay from the beginning and reset changes to this picture" onClick={text.replay}>Replay</button>
             </div>
           )}
+          {readOnly && (
+            <footer className="stage-controls">
+              <div className="stage-presence">
+                <TutorAvatar state={avatarState} size={40} />
+                <span className="stage-status" role="status" data-testid="stage-status">{stateLabel}</span>
+              </div>
+            </footer>
+          )}
           {!readOnly && (
             <footer className="stage-controls">
+              <div className="stage-presence">
+                <TutorAvatar state={avatarState} level={avatarLevel} size={48} />
+                <span className="stage-status" role="status" data-testid="stage-status">{stateLabel}</span>
+              </div>
               <div className="voice-control">
                 {!active ? (
                   <Button size="lg" onClick={() => navigate(homeUrl())}>Start another question</Button>
@@ -393,7 +480,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
                     Pause microphone
                   </Button>
                 )}
-                {listening && <MicMeter ui={ui} />}
+                {listening && <MicMeter ui={ui} phrase={livePhrase} />}
               </div>
               {active && (
                 <form
@@ -410,10 +497,6 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
                   <button type="submit" data-testid="text-send" disabled={!draft.trim()} aria-label="Send">→</button>
                 </form>
               )}
-              <span className="stage-status" role="status" data-testid="stage-status">
-                <i data-active={listening || thinking} />
-                {stateLabel}
-              </span>
               {ui.noise === 'noisy' && listening && <p role="status">{APP_CONFIG.noisyHint}</p>}
             </footer>
           )}
@@ -495,11 +578,18 @@ function MicIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" /></svg>;
 }
 
-function MicMeter({ ui }: { ui: VoiceUiState }) {
-  const pct = Math.max(0, Math.min(100, ((ui.levelDb + 70) / 60) * 100));
-  return <div className="studio-mic" data-testid="mic-state" data-listening={ui.listening} data-speaking={ui.speaking} data-tutor-audio={ui.tutorAudio} aria-label={ui.speaking ? 'You are speaking' : 'Microphone on'}>
-    <span style={{ width: `${pct}%` }} />
-  </div>;
+/** The learner's own voice: five bars on the microphone level, and the latest transcribed phrase. */
+function MicMeter({ ui, phrase }: { ui: VoiceUiState; phrase: string }) {
+  const lv = micLevel(ui.levelDb);
+  const shape = [0.55, 0.85, 1, 0.8, 0.5];
+  return (
+    <div className="stage-you" data-testid="mic-state" data-listening={ui.listening} data-speaking={ui.speaking} data-tutor-audio={ui.tutorAudio} aria-label={ui.speaking ? 'You are speaking' : 'Microphone on'}>
+      <span className="learner-bars" aria-hidden="true">
+        {shape.map((k, i) => <span key={i} style={{ '--b': (ui.speaking ? lv : lv * 0.35) * k } as React.CSSProperties} />)}
+      </span>
+      {ui.speaking ? <span data-testid="live-phrase">Listening…</span> : phrase ? <q data-testid="live-phrase">{phrase}</q> : <span>Microphone on</span>}
+    </div>
+  );
 }
 
 function PhotoUpload({ conn, sessionId, hasImage }: { conn: DbConnection; sessionId: bigint; hasImage: boolean }) {
