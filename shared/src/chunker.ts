@@ -114,6 +114,14 @@ export class SentenceChunker {
     return out;
   }
 
+  /** The text paused at a point where something else follows (e.g. a tool call): emits the
+   *  buffer if it ends at a sentence end, without waiting for the next character. */
+  flushComplete(): string[] {
+    const m = this.buf.match(/[.!?…]+["'”’)\]]*\s*$/);
+    if (!m || !isRealBoundary(this.buf, m.index!, m[0], 'X')) return [];
+    return this.flush();
+  }
+
   /** End of stream: returns the remainder as a final sentence, if any. */
   flush(): string[] {
     const s = this.buf.trim();

@@ -116,6 +116,19 @@ describe('SentenceChunker', () => {
     ]);
   });
 
+  it('flushComplete emits a finished sentence without waiting for the next token', () => {
+    const c = new SentenceChunker();
+    expect(c.push('First we cut the pizza into equal slices. ')).toEqual([]);
+    expect(c.flushComplete()).toEqual(['First we cut the pizza into equal slices.']);
+    expect(c.push('Then we count how many')).toEqual([]);
+    expect(c.flushComplete()).toEqual([]); // mid-sentence: keep
+    expect(c.push(' slices there are, e.g. ')).toEqual([]);
+    expect(c.flushComplete()).toEqual([]); // abbreviation, not an end
+    expect(c.flush()).toEqual(['Then we count how many slices there are, e.g.']);
+    expect(c.push('Wait for 3.')).toEqual([]);
+    expect(c.flushComplete()).toEqual(['Wait for 3.']);
+  });
+
   it('respects custom limits', () => {
     expect(chunk('Yes. No. Maybe.', 2, { minWords: 1 })).toEqual(['Yes.', 'No.', 'Maybe.']);
   });
