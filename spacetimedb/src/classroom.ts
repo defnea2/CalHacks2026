@@ -96,7 +96,7 @@ export function joinActiveClass(ctx: Ctx, learnerId: bigint): SessionRow | undef
   if (prev && prev.classSessionId !== 0n && ctx.db.classSession.id.find(prev.classSessionId)?.active) return undefined;
   const s = linkedSession(ctx, cls, learnerId, prev?.voice ?? true);
   writePresence(ctx, learnerId, IN_SESSION);
-  console.log(`joinActiveClass: learner ${learnerId} late-joined class ${cls.id} (session ${s.id}, ${s.voice ? 'voice' : 'text'})`);
+  console.log(`joinActiveClass: learner ${learnerId} late-joined class ${cls.id} (session ${s.id}, voice=${s.voice})`);
   return s;
 }
 
