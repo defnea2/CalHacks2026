@@ -93,7 +93,9 @@ export function loadConfig(): WorkerConfig {
     maxToolRounds: num(env.MAX_TOOL_ROUNDS, WORKER_DEFAULTS.MAX_TOOL_ROUNDS),
     recentTurns: num(env.RECENT_TURNS, WORKER_DEFAULTS.RECENT_TURNS),
     toolTimeoutMs: num(env.TOOL_TIMEOUT_MS, WORKER_DEFAULTS.TOOL_TIMEOUT_MS),
-    tokenFile: env.AGENT_TOKEN_FILE || path.join(WORKER_DIR, '.agent-token'),
+    // Relative paths are taken from the repo root: `pnpm --filter worker start` runs in worker/,
+    // so `AGENT_TOKEN_FILE=worker/.agent-token.maincloud` would otherwise point at worker/worker/.
+    tokenFile: env.AGENT_TOKEN_FILE ? path.resolve(REPO_ROOT, env.AGENT_TOKEN_FILE) : path.join(WORKER_DIR, '.agent-token'),
     replyMode: env.REPLY_MODE === 'tools' ? 'tools' : 'lesson',
     lessonEffort: (['low', 'medium', 'high'].includes(env.LESSON_EFFORT ?? '') ? env.LESSON_EFFORT : 'low') as WorkerConfig['lessonEffort'],
     heartbeatMs: num(env.HEARTBEAT_MS, 5000),

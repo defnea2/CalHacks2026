@@ -173,6 +173,8 @@ export class StdbLink {
         // Fresh per-session state: after a reconnect or a cleared database (session ids restart
         // at 1) a reused SessionAgent would hold stale turns/utterances and stay silent.
         agent.closeAll();
+        // The subscription is `session WHERE active = true`: the cache holds exactly the live sessions.
+        agent.isActiveSession = id => conn.db.session.id.find(id)?.active === true;
         this.wire(conn, agent);
       })
       .onConnectError((_ctx, err) => {
