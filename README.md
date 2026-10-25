@@ -152,6 +152,16 @@ Automated coverage includes transactional mathematical updates, derived quantiti
 
 Each feature is a separate commit on `feature/visual-engine`. The branch starts from `main`; the earlier `scaffold/shared-contracts` branch is separate and is not required. Voice, teaching/model orchestration, backend, accounts, and the other members' product work remain independent.
 
+## Lesson pipeline (team planner on SpacetimeDB)
+
+The team's lesson methodology runs as the worker's default reply mode (`REPLY_MODE=lesson`; `tools` keeps the older tool loop). Pure teaching code lives in the workspace package `teaching/` (`@tutor/teaching`: contracts, compact compiler, validators, streaming parser, `lessonFlow` state machine), shared by the module, worker and client; the old `src/` paths are re-export shims.
+
+- Per student turn (voice, typed via `submitTextTurn`, or a lesson button `intent`) the worker asks the module for the planner request (`buildLessonRequest`), streams Claude Haiku 5.5 (team prompt, thinking off, `LESSON_EFFORT=low`), and releases every moment as soon as the next `,` proves it complete: `beginLesson` (meta) then `addBeat` per moment. The module compiles and validates each beat against `canvas_state`, writes `beat` + `reply_sentence` (TTS in voice mode, reading delay in text mode) and owns `lesson_state` (check, evidence, stage).
+- Rejections follow the team contract: one repair round with the validator message before anything was spoken, otherwise truncate and close with a recap beat that carries the check. Deadlines: first token 9 s (retried once), 45 s total, 15 s stall after the first beat. A ready turn without an utterance after 12 s is answered again once.
+- `session.voice = false` (`setSessionVoice`) is text mode: no STT/TTS, sentences count as played after 280 ms per word.
+- Smoke tests: `pnpm --filter worker smoke:lesson` (planner only, `--effort low,medium`), `SPACETIME_DB=<own db> pnpm --filter worker smoke:session [--voice]` (scripted session against a running worker).
+- Measured (E2E, real Haiku + Cartesia): turn end -> first audio p50 4.3 s with the tool loop vs 2.5 s with the lesson planner (opening 0.47 s, authored). Details: `docs/CONTRACT-night.md` section 1a.
+
 ## Voice runtime
 
 The Cartesia/SpacetimeDB voice runtime is now included alongside the text-only tutor. See [animated voice canvas integration](docs/VOICE_CANVAS.md) and [voice setup](docs/VOICE_RUNTIME.md). The voice client uses port 5175; its `?canvasPreview` route works without microphone access or API keys. Use `pnpm dev:voice` for the whole stack; voice and typed lessons share one session screen.
