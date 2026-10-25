@@ -8,12 +8,15 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all procedure arg schemas
 import * as BuildContextProcedure from "../build_context_procedure";
 import * as GetSessionImageProcedure from "../get_session_image_procedure";
+import * as RefreshDashboardProcedure from "../refresh_dashboard_procedure";
 import * as SetTopicProcedure from "../set_topic_procedure";
 
 export type BuildContextArgs = __Infer<typeof BuildContextProcedure.params>;
 export type BuildContextResult = __Infer<typeof BuildContextProcedure.returnType>;
 export type GetSessionImageArgs = __Infer<typeof GetSessionImageProcedure.params>;
 export type GetSessionImageResult = __Infer<typeof GetSessionImageProcedure.returnType>;
+export type RefreshDashboardArgs = __Infer<typeof RefreshDashboardProcedure.params>;
+export type RefreshDashboardResult = __Infer<typeof RefreshDashboardProcedure.returnType>;
 export type SetTopicArgs = __Infer<typeof SetTopicProcedure.params>;
 export type SetTopicResult = __Infer<typeof SetTopicProcedure.returnType>;
 

@@ -3,6 +3,9 @@
 // this one; only registered reducers/procedures are named exports here.
 import { t, SenderError } from 'spacetimedb/server';
 import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob } from './schema';
+import { dashboardJob, simTurnJob } from './schema_classroom';
+import * as classroom from './classroom';
+import { textPlayJob } from './schema_pipeline';
 import { METRIC_NAMES, TURN_STATES, type MetricName } from '../../shared/src/types';
 import { AGENT_ROLE, getActiveSession, getSession, metricsFor, requireAgent, ts } from './ctx';
 import { settings } from './env';
@@ -12,6 +15,7 @@ import * as memory from './memory';
 import * as opening from './opening';
 import { base64 } from './providers';
 import * as sessions from './sessions';
+import * as textMode from './text_mode';
 import * as voiceIn from './voice_in';
 import * as voiceOut from './voice_out';
 
@@ -21,13 +25,18 @@ export default spacetimedb;
 
 export const init = spacetimedb.init(ctx => {
   ensureLibrary(ctx);
+  classroom.ensureSimProfiles(ctx);
 });
 
 /** init only runs when the database is created; a republished pack reloads on the next connect. */
 export const onConnect = spacetimedb.clientConnected(ctx => {
   ensureLibrary(ctx);
+  classroom.ensureSimProfiles(ctx);
 });
-export const onDisconnect = spacetimedb.clientDisconnected(_ctx => {});
+/** Marks the connection's (real) learners offline in `presence`. */
+export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
+  classroom.onDisconnect(ctx);
+});
 
 // ---------------------------------------------------------------- client reducers
 
@@ -98,6 +107,19 @@ export const reportNoise = spacetimedb.reducer(
     const m = metricsFor(ctx, sessionId, turn.idx);
     ctx.db.turnMetrics.id.update({ ...m, noiseDb });
   }
+);
+
+/** Text mode (contract section 1): appends a complete typed student turn (status ready); intent ''
+ *  or one of another_way | smaller_step | continue | demonstrate (empty text allowed with an intent).
+ *  Interrupts a running tutor reply like barge-in. */
+export const submitTextTurn = spacetimedb.reducer(
+  { sessionId: t.u64(), text: t.string(), intent: t.string() },
+  (ctx, args) => textMode.submitTextTurn(ctx, args)
+);
+
+/** voice = false: text mode (no STT/TTS; sentences count as played after a reading delay). */
+export const setSessionVoice = spacetimedb.reducer({ sessionId: t.u64(), voice: t.bool() }, (ctx, { sessionId, voice }) =>
+  textMode.setSessionVoice(ctx, sessionId, voice)
 );
 
 // ---------------------------------------------------------------- agent-only reducers
@@ -226,11 +248,17 @@ export const setTopic = spacetimedb.procedure(
     })
 );
 
-/** Agent only. Task photo as a data URL, or '' if none. */
+/** Agent only. Task photo as a data URL, or '' if none. Class sessions without their own
+ *  photo: the teacher's image document. */
 export const getSessionImage = spacetimedb.procedure({ sessionId: t.u64() }, t.string(), (ctx, { sessionId }) => {
   const img = ctx.withTx(tx => {
     requireAgent(tx);
-    return tx.db.sessionImage.sessionId.find(sessionId) ?? null;
+    const own = tx.db.sessionImage.sessionId.find(sessionId);
+    if (own) return { mime: own.mime, data: own.data };
+    const s = tx.db.session.id.find(sessionId);
+    const cls = s?.classSessionId ? tx.db.classSession.id.find(s.classSessionId) : undefined;
+    const doc = cls ? tx.db.classDocument.classSessionId.find(cls.id) : undefined;
+    return cls && doc ? { mime: cls.documentMime, data: doc.data } : null;
   });
   return img ? `data:${img.mime};base64,${base64(img.data)}` : '';
 });
@@ -258,6 +286,12 @@ export const synthesizeSentence = spacetimedb.procedure(
   }
 );
 
+/** Scheduled: a text-mode sentence was read (its reading delay passed) -> played. */
+export const finishTextSentence = spacetimedb.reducer({ onSchedule: textPlayJob }, { job: textPlayJob.rowType }, (ctx, { job }) => {
+  if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
+  textMode.finishTextSentence(ctx, job);
+});
+
 export const extractMemory = spacetimedb.procedure(
   { onSchedule: extractionJob },
   { job: extractionJob.rowType },
@@ -274,6 +308,73 @@ export const summarizeSession = spacetimedb.procedure(
   t.unit(),
   (ctx, { job }) => {
     memory.summarizeSession(ctx, job);
+    return {};
+  }
+);
+
+// ---------------------------------------------------------------- classroom (docs/CLASSROOM.md)
+
+export const createTeacher = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
+  classroom.createTeacher(ctx, name);
+});
+
+/** status: offline | waiting | in_session. Remembers the caller's connection (disconnect -> offline). */
+export const setPresence = spacetimedb.reducer({ learnerId: t.u64(), status: t.string() }, (ctx, { learnerId, status }) =>
+  classroom.setPresence(ctx, learnerId, status)
+);
+
+/** Ends the teacher's previous class session; moves every online student into a new linked
+ *  session; simulatedCount > 0 resets and starts simulation users 1..n (text mode). */
+export const startClassSession = spacetimedb.reducer(
+  {
+    teacherId: t.u64(),
+    goals: t.string(),
+    content: t.string(),
+    delivery: t.string(),
+    documentName: t.string(),
+    documentMime: t.string(),
+    documentText: t.string(),
+    documentData: t.byteArray(),
+    simulatedCount: t.u32(),
+  },
+  (ctx, args) => {
+    classroom.startClassSession(ctx, args);
+  }
+);
+
+export const endClassSession = spacetimedb.reducer({ classSessionId: t.u64() }, (ctx, { classSessionId }) =>
+  classroom.endClassSession(ctx, classSessionId)
+);
+
+/** learnerId 0 stops observing; an overdue dashboard refresh then runs at once. */
+export const setImpersonation = spacetimedb.reducer({ classSessionId: t.u64(), learnerId: t.u64() }, (ctx, { classSessionId, learnerId }) =>
+  classroom.setImpersonation(ctx, classSessionId, learnerId)
+);
+
+/** Refresh button: one Haiku call -> class_summary + student_cluster. Returns JSON
+ *  {ok, skipped?, error?, repaired?, repairs?, clusters?}. Skipped while impersonating. */
+export const refreshDashboard = spacetimedb.procedure({ classSessionId: t.u64() }, t.string(), (ctx, { classSessionId }) =>
+  JSON.stringify(classroom.refreshDashboard(ctx, classSessionId, false))
+);
+
+/** Scheduled every DASHBOARD_INTERVAL_S per active class session. */
+export const dashboardTick = spacetimedb.procedure(
+  { onSchedule: dashboardJob },
+  { job: dashboardJob.rowType },
+  t.unit(),
+  (ctx, { job }) => {
+    classroom.refreshDashboard(ctx, job.classSessionId, true);
+    return {};
+  }
+);
+
+/** Scheduled: the next simulated student message (Haiku) -> text turn with source 'sim'. */
+export const simStudentTurn = spacetimedb.procedure(
+  { onSchedule: simTurnJob },
+  { job: simTurnJob.rowType },
+  t.unit(),
+  (ctx, { job }) => {
+    classroom.simStudentTurn(ctx, job);
     return {};
   }
 );

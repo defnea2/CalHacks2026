@@ -17,4 +17,6 @@ export default __t.row({
   grade: __t.u32(),
   style: __t.string(),
   createdAt: __t.timestamp().name("created_at"),
+  isSimulated: __t.bool().name("is_simulated"),
+  simRank: __t.u32().name("sim_rank"),
 });

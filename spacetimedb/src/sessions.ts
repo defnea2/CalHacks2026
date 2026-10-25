@@ -23,6 +23,8 @@ export function createTestUser(ctx: Ctx, args: { name: string; age: number; grad
     grade: args.grade,
     style: args.style.trim().slice(0, 200),
     createdAt: ctx.timestamp,
+    isSimulated: false,
+    simRank: 0,
   });
 }
 
@@ -32,7 +34,8 @@ function sessionCode(ctx: Ctx): string {
   return code;
 }
 
-export function startSession(ctx: Ctx, args: { learnerId: bigint; taskText: string }): SessionRow {
+/** `voice` false = text mode (internal callers, e.g. the classroom simulation; clients use setSessionVoice). */
+export function startSession(ctx: Ctx, args: { learnerId: bigint; taskText: string; voice?: boolean }): SessionRow {
   if (!ctx.db.learner.id.find(args.learnerId)) throw new SenderError(`learner ${args.learnerId} not found`);
   for (const s of [...ctx.db.session.learnerId.filter(args.learnerId)]) if (s.active) closeSession(ctx, s);
   const session = ctx.db.session.insert({
@@ -51,8 +54,10 @@ export function startSession(ctx: Ctx, args: { learnerId: bigint; taskText: stri
     currentUtteranceId: 0n,
     startedAt: ctx.timestamp,
     endedAt: undefined,
+    classSessionId: 0n,
+    voice: args.voice ?? true,
   });
-  ctx.db.extractionCursor.insert({ sessionId: session.id, nextIdx: 0 });
+  ctx.db.extractionCursor.insert({ sessionId: session.id, nextIdx: 0, runningSinceMicros: 0n });
   return session;
 }
 

@@ -7,6 +7,7 @@ import type { BoardKindDef, JsonSchema, LibraryTask } from '../../shared/src/les
 import { canTransition, conceptBelongsTo, getBoardKind, getPhase, isCategory, renderTemplate, validateJson } from '../../shared/src/lesson/api';
 import { checkAnswer } from '../../shared/src/answers';
 import { GAP_STATES, type ExpectedAnswer, type GapState, type MemoryKind } from '../../shared/src/types';
+import { classContextBlock, hasOwnPhoto } from './classroom_context';
 import { type Ctx, type BoardItemRow, type SessionRow, findSentence, getActiveSession, getSession, parseJson, truncate, updateSession } from './ctx';
 
 const [GAP_OPEN, GAP_CORRECT, GAP_WRONG] = GAP_STATES as unknown as [GapState, GapState, GapState];
@@ -309,7 +310,7 @@ function describeMemory(ctx: Ctx, session: SessionRow): string {
   return lines.length ? '\n' + lines.join('\n') : 'nothing yet';
 }
 
-function describeBoard(ctx: Ctx, sessionId: bigint): string {
+export function describeBoard(ctx: Ctx, sessionId: bigint): string {
   const items = [...ctx.db.boardItem.sessionId.filter(sessionId)].filter(i => i.visible).sort((a, b) => a.idx - b.idx);
   if (!items.length) return 'empty';
   return (
@@ -328,7 +329,8 @@ export function buildContext(ctx: Ctx, sessionId: bigint): string {
   const session = getSession(ctx, sessionId);
   const phase = getPhase(pack, session.phase);
   const phaseText = phase ? `${phase.id} (${phase.label}). Allowed next: ${phase.next.join(', ') || 'none, this is the last phase'}.` : session.phase;
-  const task = (session.taskText.trim() || '(no task text)') + (session.hasImage ? ' A photo of the task was uploaded.' : '');
+  const photo = session.hasImage && (!session.classSessionId || hasOwnPhoto(ctx, session));
+  const task = (session.taskText.trim() || '(no task text)') + (photo ? ' A photo of the task was uploaded.' : '');
   let out = renderTemplate(pack.prompts.context, {
     learner: describeLearner(ctx, session),
     memory: describeMemory(ctx, session),
@@ -336,6 +338,7 @@ export function buildContext(ctx: Ctx, sessionId: bigint): string {
     phase: phaseText,
     board: describeBoard(ctx, sessionId),
   });
+  out += classContextBlock(ctx, session);
   if (session.category) {
     out += `\n\nTopic: ${session.category}${session.concept ? ` / ${session.concept}` : ''}`;
     out += `\nLibrary material: ${JSON.stringify(topicMaterial(ctx, session.category, session.concept))}`;

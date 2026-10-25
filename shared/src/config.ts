@@ -93,9 +93,51 @@ export const MODULE_DEFAULTS = {
   BOARD_CONTENT_MAX: 4000,
   /** Max photo size after client compression. */
   PHOTO_MAX_BYTES: 1_000_000,
+  /** Text mode (session.voice = false): a sentence counts as played after this reading time
+   *  per word (no TTS), so turn states still flow thinking -> speaking -> listening. */
+  TEXT_SENTENCE_MS_PER_WORD: 280,
+  /** Lower bound of one sentence's reading time. */
+  TEXT_SENTENCE_MIN_MS: 700,
+  /** Max typed student turn length. */
+  TEXT_TURN_MAX_CHARS: 2000,
 } as const;
 
 /** "Daisy": very young voice used only for generated test-student speech. */
 export const TEST_STUDENT_VOICE_ID = '32b3f3c5-7171-46aa-abe7-b598964aa793';
 
 export type VoiceConfig = { -readonly [K in keyof typeof VOICE_DEFAULTS]: (typeof VOICE_DEFAULTS)[K] };
+
+/** Classroom simulation + teacher dashboard (night/classroom-core, docs/CLASSROOM.md). */
+export const CLASSROOM_DEFAULTS = {
+  /** Simulated student turns per session per simulation run (env SIM_MAX_TURNS). */
+  SIM_MAX_TURNS: 8,
+  /** Human-like delay after the tutor finished before the simulated student answers. */
+  SIM_DELAY_MIN_S: 2,
+  SIM_DELAY_MAX_S: 5,
+  /** Student-LLM calls in flight at once (procedure slots are shared: ~10 on this machine). */
+  SIM_MAX_CONCURRENT: 4,
+  /** Re-check delay when all slots are busy. */
+  SIM_BUSY_RETRY_S: 1.5,
+  /** Give up a job after this many busy re-checks. */
+  SIM_MAX_ATTEMPTS: 40,
+  /** Retries after a failed student-LLM call (then the session's simulation stops). */
+  SIM_FAILURE_RETRIES: 2,
+  SIM_FAILURE_RETRY_S: 5,
+  SIM_RUNNING_STALE_S: 90,
+  SIM_EFFORT: 'low',
+  SIM_MAX_TOKENS: 2000,
+  /** Transcript turns the student LLM sees. */
+  SIM_RECENT_TURNS: 14,
+  /** Behaviour mix per turn (cumulative thresholds are derived in order; sums to 1). */
+  SIM_BEHAVIOUR: { mistake: 0.3, question: 0.15, unsure: 0.1, correct: 0.45 },
+  /** Dashboard refresh cadence (env DASHBOARD_INTERVAL_S). */
+  DASHBOARD_INTERVAL_S: 30,
+  DASHBOARD_RETRY_S: 10,
+  DASHBOARD_RUNNING_STALE_S: 120,
+  DASHBOARD_EFFORT: 'low',
+  DASHBOARD_MAX_TOKENS: 6000,
+  /** Transcript turns per student in the dashboard prompt. */
+  DASHBOARD_RECENT_TURNS: 16,
+  DOCUMENT_TEXT_MAX: 50_000,
+  DOCUMENT_MAX_BYTES: 1_000_000,
+} as const;

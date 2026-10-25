@@ -26,4 +26,6 @@ export default __t.row({
   currentUtteranceId: __t.u64().name("current_utterance_id"),
   startedAt: __t.timestamp().name("started_at"),
   endedAt: __t.option(__t.timestamp()).name("ended_at"),
+  classSessionId: __t.u64().name("class_session_id"),
+  voice: __t.bool(),
 });

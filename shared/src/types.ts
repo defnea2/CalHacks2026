@@ -22,6 +22,24 @@ export type PhraseStatus = (typeof PHRASE_STATUSES)[number];
 export const SENTENCE_STATUSES = ['pending', 'ready', 'played', 'dropped'] as const;
 export type SentenceStatus = (typeof SENTENCE_STATUSES)[number];
 
+/** turn.source: how a student turn arrived (tutor turns: 'voice' or 'text' per session mode). */
+export const TURN_SOURCES = ['voice', 'text', 'sim'] as const;
+export type TurnSource = (typeof TURN_SOURCES)[number];
+export const SOURCE_VOICE: TurnSource = 'voice';
+export const SOURCE_TEXT: TurnSource = 'text';
+export const SOURCE_SIM: TurnSource = 'sim';
+
+/** turn.intent: '' (normal turn) or a lesson button of the team UI. */
+export const TURN_INTENTS = ['', 'another_way', 'smaller_step', 'continue', 'demonstrate'] as const;
+export type TurnIntent = (typeof TURN_INTENTS)[number];
+/** Transcript text of a button turn sent without typed text. */
+export const INTENT_TEXT: Record<Exclude<TurnIntent, ''>, string> = {
+  another_way: 'Can you show me another way?',
+  smaller_step: 'Can we take a smaller step?',
+  continue: 'Continue.',
+  demonstrate: 'Show me.',
+};
+
 export const MEMORY_KINDS = ['misconception', 'strategy', 'mnemonic', 'quote', 'understood', 'preference'] as const;
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 
