@@ -64,6 +64,11 @@ Merged on `main` (one `--no-ff` merge each, revert with `git revert -m 1 <sha>`)
 
 In progress (side tracks, not merged): `night/identity` (identities + passwordless auth, scheduler-only guards), `night/stdb-hardening` (indexes, retention, JOIN subscriptions — initial worker sync 487 KiB → 14 KiB), `night/dashboard-live` (live chat bubbles, hover buttons, custom icons), `night/cf-dispatch` (Part B: SpacetimeDB → Cloudflare Worker per turn).
 
+### Afternoon (until 16:30 PDT)
+Merged on `main`: `night/stdb-hardening` (`24db3e5`), `night/identity` (`7fd6c48`, device identity + ownership + auth checks + scheduler guards + one-time codes), `night/dashboard-live` (`3f899d7`, live chat bubbles, hover Observe/Profile, custom icons, no groups of 3). Not merged (user decision): `night/cf-dispatch` (Part B, Cloudflare Worker per turn; live on test DB `fibonacci-cfdev`, p50 3.2 s vs 2.8 s Node worker). Pages Git auto-deploy blocked: the Cloudflare Pages GitHub app must be installed by the `defnea2` owner.
+
+E2E status: 1,017 unit tests green on `3f899d7`; the identity branch ran 8/8 on its own. The full browser E2E on `main` fails since ~15:00 PDT with "audio blocks received, 0 played" — the **same failure on the previously green commit `30ef798`**, so it's the machine (likely a stuck macOS `coreaudiod` after load 100+), not the code. Fix: `sudo killall coreaudiod` or reboot, then rerun `pnpm test:e2e`.
+
 Small direct commits on `night/integration`: night plan / contract docs, `164eda5` (e2e smoke typecheck fix), this report.
 
 Test status of the final state (`983c230`): 791 unit tests green (teaching 52, shared 157, module 127, client 131, worker 106, team app 218), typecheck clean, static client build. Final full E2E on this state (06:13–06:25, quiet machine): **8/8 PASS**, 0 external flakes; turn end → first audio p50 2.75 s (min 2.62, max 3.17); "Start talking" → opening audio p50 1.06 s. `main` = `09db721` (fast-forwarded 06:27).
