@@ -94,6 +94,9 @@ export class StdbTransport implements Transport {
   async buildLessonRequest(a: { sessionId: bigint; requestId: string }) {
     return this.c().procedures.buildLessonRequest(a);
   }
+  async prefetchTopic(a: { sessionId: bigint }) {
+    return this.c().procedures.prefetchTopic(a);
+  }
   async beginLesson(a: Parameters<Transport['beginLesson']>[0]) {
     return this.c().reducers.beginLesson(a);
   }

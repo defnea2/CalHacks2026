@@ -26,3 +26,5 @@ export * from "./visual-math/fractions";
 export * from "./teaching/interactions";
 export * from "./teaching/lessonFlow";
 export * from "./server/plannerPrompt";
+export * from "./teaching/arc";
+export * from "./teaching/keyframes";

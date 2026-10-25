@@ -48,6 +48,7 @@ import EndClassSessionReducer from "./end_class_session_reducer";
 import EndSessionReducer from "./end_session_reducer";
 import EndTurnReducer from "./end_turn_reducer";
 import InterruptReducer from "./interrupt_reducer";
+import InterruptUtteranceReducer from "./interrupt_utterance_reducer";
 import MarkPlayedReducer from "./mark_played_reducer";
 import PushAudioReducer from "./push_audio_reducer";
 import RecordMetricReducer from "./record_metric_reducer";
@@ -74,6 +75,7 @@ import UploadPhotoReducer from "./upload_photo_reducer";
 import * as BuildContextProcedure from "./build_context_procedure";
 import * as BuildLessonRequestProcedure from "./build_lesson_request_procedure";
 import * as GetSessionImageProcedure from "./get_session_image_procedure";
+import * as PrefetchTopicProcedure from "./prefetch_topic_procedure";
 import * as RefreshDashboardProcedure from "./refresh_dashboard_procedure";
 import * as SetTopicProcedure from "./set_topic_procedure";
 
@@ -516,6 +518,7 @@ const reducersSchema = __reducers(
   __reducerSchema("end_session", EndSessionReducer),
   __reducerSchema("end_turn", EndTurnReducer),
   __reducerSchema("interrupt", InterruptReducer),
+  __reducerSchema("interrupt_utterance", InterruptUtteranceReducer),
   __reducerSchema("mark_played", MarkPlayedReducer),
   __reducerSchema("push_audio", PushAudioReducer),
   __reducerSchema("record_metric", RecordMetricReducer),
@@ -544,6 +547,7 @@ const proceduresSchema = __procedures(
   __procedureSchema("build_context", BuildContextProcedure.params, BuildContextProcedure.returnType),
   __procedureSchema("build_lesson_request", BuildLessonRequestProcedure.params, BuildLessonRequestProcedure.returnType),
   __procedureSchema("get_session_image", GetSessionImageProcedure.params, GetSessionImageProcedure.returnType),
+  __procedureSchema("prefetch_topic", PrefetchTopicProcedure.params, PrefetchTopicProcedure.returnType),
   __procedureSchema("refresh_dashboard", RefreshDashboardProcedure.params, RefreshDashboardProcedure.returnType),
   __procedureSchema("set_topic", SetTopicProcedure.params, SetTopicProcedure.returnType),
 );

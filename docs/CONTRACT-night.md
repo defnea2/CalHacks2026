@@ -39,6 +39,20 @@ Schema location: put new tables in your own file (`spacetimedb/src/schema_<area>
 | private tables | `lesson_record` (authoritative TeachingPlanner record), `lesson_plan` (lesson streaming for an utterance), `text_play_job`, `text_playback`. |
 | Worker `REPLY_MODE` | `lesson` (default): the team streaming planner (`worker/src/lesson.ts`). `tools`: the previous tool loop (`show_board_item(math_canvas)`, `ask_learner`, ...), kept as a switchable fallback. `LESSON_EFFORT` default `low`. |
 
+### 1b. Two-minute lesson arc, keyframes, topic prefetch (night/lesson-2min)
+
+| Item | Definition |
+|---|---|
+| Lesson arc (pack data) | `shared/src/lesson/pack/arcs.ts` (`pack.arcs`), interpreted by `teaching/src/teaching/arc.ts` (`LessonArcSchema`, `arcPhases`, `arcMoment`, `arcPrompt`, `arcBudget`). `SessionConfig.arc` carries it, so `allowedPhases` and `validateTeachingStep` follow the arc instead of the adaptive policy. |
+| `demo2min` (default) | explain (phase intuition, 4-5 moments, <=115 words, moment 3 = formalization: code forces `showEquation`, one choice/number task, never the homework itself) -> correct: hand back; unclear/incorrect/"I don't know"/cut short: ONE repair (3-4 moments, smaller task) -> hand back (return_to_problem, 1-2 moments, no check). "Show me" stays possible (intuition). |
+| module env `LESSON_ARC` | pack arc id, default `demo2min`; `adaptive` = no arc (previous behaviour). Declared in the module env schema; read when a session's lesson record is created. |
+| `addBeat` (arc) | Rejects a non-final moment at index >= maxMoments-1 (worker closes with the recap carrying the check); forces the equation on the formalization moment. `beginLesson` (arc) rejects a check that contains the original question. |
+| Per-sentence keyframes | `teaching/src/teaching/keyframes.ts` `splitKeyframes`: an equation reveal moves into its own cue `<cue>-s<k>` (k = the sentence that reads it out, >= 1; no split when sentence 0 already reads it). Client `beatPlayer.keyframeParts` reveals that cue when sentence `beat.sentenceIdx + k` starts; text mode shows a beat's parts together. |
+| procedure `prefetchTopic(sessionId) -> string` (agent) | Keyword cues of the pack (`pack/topics.ts`, `guessTopic`) on task text + class goals/content/document + first learner turns; stores `session.category/concept`. JSON `{ok, category, concept, source: session/keywords/none, text, hasImage}`. Without a concept the worker asks the LLM (taxonomy keys) and calls `setTopic`. `buildLessonRequest` also runs the keyword guess when no concept is set. |
+| `buildLessonRequest` result | Additionally `topic {category, concept}` and `library` (= `conceptMaterial`: skills with steps/key step/common mistake/tutor note, explanations, tasks with answers) of the session's concept, or null. |
+| reducer `interruptUtterance(sessionId, utteranceId)` (client) | Barge-in on the utterance the tab is PLAYING. Current utterance -> `interrupt`. Already finished (its last sentence started, session moved to listening) and still the latest tutor turn -> that turn is marked `interrupted` + `playback_flush`. The voice client uses it instead of `interrupt` on barge-in. |
+| Worker | `LESSON_OPENING=lesson` (default): with a task (text or photo) the opening is the authored lead-in (`prompts.openingLessonScript`) followed by the first lesson in the same utterance (the planner waits <= 3.5 s for the topic prefetch while the lead-in plays); `script` = the authored opening only. `LESSON_LIBRARY=1` (default): `libraryIndex` + arc block in the cached system prompt (`plannerSystem`), the concept material in the planner data. The meta goes to `beginLesson` as soon as it parsed; a repeated check or the homework as check is rejected locally before moment 1 streams. |
+
 ## 2. Classroom (owner: `night/classroom-core`)
 
 | Item | Definition |

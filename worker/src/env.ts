@@ -57,6 +57,11 @@ export interface WorkerConfig {
   lessonEffort: 'low' | 'medium' | 'high';
   /** Worker heartbeat period (agent_status). */
   heartbeatMs: number;
+  /** lesson (default): the opening is the authored lead-in + the first lesson in one utterance
+   *  (the tutor owns the explanation from the start); script: the authored opening only. */
+  lessonOpening: 'lesson' | 'script';
+  /** Library index in the planner system prompt + the prefetched concept's material (default on). */
+  lessonLibrary: boolean;
 }
 
 const bool = (v: string | undefined, d: boolean) => (v === undefined || v === '' ? d : !/^(0|false|off|no)$/i.test(v));
@@ -92,5 +97,7 @@ export function loadConfig(): WorkerConfig {
     replyMode: env.REPLY_MODE === 'tools' ? 'tools' : 'lesson',
     lessonEffort: (['low', 'medium', 'high'].includes(env.LESSON_EFFORT ?? '') ? env.LESSON_EFFORT : 'low') as WorkerConfig['lessonEffort'],
     heartbeatMs: num(env.HEARTBEAT_MS, 5000),
+    lessonOpening: env.LESSON_OPENING === 'script' ? 'script' : 'lesson',
+    lessonLibrary: bool(env.LESSON_LIBRARY, true),
   };
 }

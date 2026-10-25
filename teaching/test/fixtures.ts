@@ -22,3 +22,31 @@ export const miniMoments: Array<{ visual: Record<string, unknown>; narration: st
 /** The exact JSON text a model streams for the mini lesson. */
 export const miniLessonText = () => JSON.stringify({ meta: miniMeta, moments: miniMoments });
 export const miniSession = { sessionId: "s1", topic: "Equivalent fractions", lessonStyle: "mini_lesson", age: 9 } as const;
+
+// The two-minute demo arc (lesson pack `demo2min`): explain (5 moments, formalization = moment 3,
+// one choice task), repair (3 moments, one number task), hand back (1 moment, no check).
+const set = (parts: number, shaded: number) => ({ kind: "update", changes: [{ type: "set_bar", barId: "pizza", parts, shaded }] });
+export const demoMeta = {
+  phase: "intuition", title: "Same pizza, more slices", goal: "Expanding keeps the amount", approach: "introduce", reason: "Own the first explanation", assessment: null,
+  check: { kind: "choice", prompt: "Which fraction is the same as one half?", options: [{ id: "a", label: "2/4" }, { id: "b", label: "2/3" }], correctOptionId: "a" },
+} as const;
+export const demoMoments: Array<{ visual: Record<string, unknown>; narration: string; interactive?: boolean; showEquation?: boolean }> = [
+  { visual: { kind: "bars", bars: [{ id: "pizza", label: "Pizza", parts: 3, shaded: 2 }] }, narration: "Here is a pizza cut into three big slices. You have two of them." },
+  { visual: set(12, 8), narration: "Now I cut every slice into four smaller slices. You still have the same pizza, just more slices." },
+  { visual: { kind: "keep" }, narration: "So the top and the bottom both got bigger in the same way. Two thirds equals eight twelfths." },
+  { visual: set(6, 4), narration: "Cut each big slice in two instead. Four of six slices is the same amount again." },
+  { visual: set(2, 1), narration: "Now look at one half of a new pizza." },
+];
+export const demoRepairMeta = {
+  phase: "repair", title: "Smaller pizza", goal: "Double top and bottom", approach: "simplify", reason: "The task was missed", assessment: null,
+  check: { kind: "number", prompt: "One half is how many quarters?", rule: { operation: "value", value: 2 } },
+} as const;
+export const demoRepairMoments = [
+  { visual: { kind: "bars", bars: [{ id: "pizza", label: "Pizza", parts: 2, shaded: 1 }] }, narration: "Let us take a pizza with two slices. One slice is yours." },
+  { visual: set(4, 2), narration: "Cut both slices in half. Now there are four slices and two are yours." },
+  { visual: { kind: "keep" }, narration: "The amount did not change." },
+];
+export const demoHandBackMeta = {
+  phase: "return_to_problem", title: "Your task", goal: "Solve the original task", approach: "handoff", reason: "Arc ends", assessment: null, check: null,
+} as const;
+export const demoHandBackMoments = [{ visual: { kind: "keep" }, narration: "You worked really carefully. Now try your own task: you have everything you need." }];

@@ -1,10 +1,13 @@
 import type { Evidence, SessionConfig, TeachingPhase, TeachingStep } from "./contracts";
+import { arcPhases } from "./arc";
 
 export function allowedPhases(
   current: TeachingStep | null,
   evidence: Evidence | undefined,
-  config?: Pick<SessionConfig, "lessonStyle">,
+  config?: Pick<SessionConfig, "lessonStyle" | "arc">,
 ): TeachingPhase[] {
+  // A rigid arc (lesson pack) replaces the adaptive policy below.
+  if (config?.arc) return arcPhases(config.arc, current, evidence);
   if (!current) return config?.lessonStyle === "mini_lesson" ? ["intuition"] : ["diagnose"];
   if (
     config?.lessonStyle === "mini_lesson" &&

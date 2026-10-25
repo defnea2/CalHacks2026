@@ -536,6 +536,8 @@ const spacetimedb = schema(
       DASHBOARD_INTERVAL_S: t.option(t.string()),
       /** Teacher dashboard LLM thinking effort: low | medium | high (default low). */
       DASHBOARD_EFFORT: t.option(t.string()),
+      /** Lesson arc of new sessions: a pack arc id (default demo2min) or `adaptive` (no arc). */
+      LESSON_ARC: t.option(t.string()),
     },
   }
 );

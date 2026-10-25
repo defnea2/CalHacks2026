@@ -3,6 +3,7 @@ import type { CanvasState } from "../presentation/contracts";
 import { TeachingStepSchema, type SessionConfig, type TeachingStep, type Evidence } from "./contracts";
 import { validateCheck } from "./checks";
 import { allowedPhases } from "./policy";
+import { arcStepRules } from "./arc";
 
 interface ValidationState {
   config: SessionConfig;
@@ -55,7 +56,18 @@ export function validateTeachingStep(
       throw new Error(
         "Phase is not supported by the current learner evidence: " + step.phase,
       );
-    if (state.config.lessonStyle === "mini_lesson") {
+    const arcRules = state.config.arc ? arcStepRules(state.config.arc, step.phase) : null;
+    if (arcRules) {
+      // The arc's stage fixes the step's shape (e.g. the hand-back after a missed task has no check).
+      if (step.beats.length < arcRules.minimum)
+        throw new Error(`This lesson stage needs at least ${arcRules.minimum} connected beats.`);
+      if (arcRules.check && !step.check) throw new Error("This lesson stage ends with one check for the learner.");
+      if (arcRules.check && !state.step) {
+        const visual = step.beats.slice(0, -1).filter(beat => beat.cues.some(cue => cue.commands.some(command => !["note", "clear"].includes(command.type))));
+        if (visual.length < 2)
+          throw new Error("Teach with the picture before asking: include visual commands in the explanation beats, then the check in the final beat.");
+      }
+    } else if (state.config.lessonStyle === "mini_lesson") {
       const opening = !state.step;
       const reteaching = latest?.outcome === "incorrect" || (
         latest?.response.kind === "help" &&

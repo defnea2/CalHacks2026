@@ -39,7 +39,11 @@ import {
   type LessonMeta,
   type LessonRecord,
 } from '../../teaching/src/teaching/lessonFlow';
-import { type Ctx, type SessionRow, type TurnRow, getActiveSession, requireAgent, truncate, utteranceSentences } from './ctx';
+import { arcMoment, LessonArcSchema, type LessonArc } from '../../teaching/src/teaching/arc';
+import { splitKeyframes } from '../../teaching/src/teaching/keyframes';
+import { ADAPTIVE_ARC, conceptMaterial, DEFAULT_ARC, guessTopic, pack } from '../../shared/src/lesson/index';
+import { type Ctx, type SessionRow, type TurnRow, getActiveSession, requireAgent, sessionTurns, truncate, updateSession, utteranceSentences } from './ctx';
+import { readEnv } from './env';
 import { describeLearner, describeMemory } from './lesson';
 import { addSentence } from './voice_out';
 
@@ -77,10 +81,24 @@ function writeCanvas(ctx: Ctx, row: CanvasRow, scene: CanvasState): CanvasRow {
 
 // ------------------------------------------------------------------ lesson record + public state
 
+/** The lesson arc of new sessions: LESSON_ARC (module env) names a pack arc; `adaptive` = none. */
+export function lessonArc(ctx: Ctx): LessonArc | undefined {
+  const id = readEnv(ctx, 'LESSON_ARC') ?? DEFAULT_ARC;
+  if (id === ADAPTIVE_ARC) return undefined;
+  const data = pack.arcs?.[id];
+  if (!data) {
+    console.warn(`LESSON_ARC ${id} is not in the lesson pack; using the adaptive policy`);
+    return undefined;
+  }
+  return LessonArcSchema.parse(data);
+}
+
 function configFor(ctx: Ctx, session: SessionRow) {
   const learner = ctx.db.learner.id.find(session.learnerId);
   const task = session.taskText.trim();
+  const arc = lessonArc(ctx);
   return {
+    ...(arc ? { arc } : {}),
     sessionId: `s${session.id}`,
     age: Math.min(18, Math.max(5, learner?.age ?? 9)),
     topic: truncate(task || 'Math', 1200),
@@ -146,12 +164,51 @@ function withProfile(ctx: Ctx, session: SessionRow, r: LessonRecord): LessonReco
   return { ...r, config: { ...r.config, context: [{ id: 'learner-profile', text, source: 'tutor memory' }, ...r.config.context.slice(-11)] } };
 }
 
-/** Agent: the planner request (JSON ModelRequest) for the session's current state. */
+// ------------------------------------------------------------------ topic prefetch + library
+
+/** What the topic can be read from: task text, the teacher's class content, the learner's first words. */
+export function topicText(ctx: Ctx, session: SessionRow): string {
+  const parts = [session.taskText];
+  if (session.classSessionId) {
+    const c = ctx.db.classSession.id.find(session.classSessionId);
+    if (c) parts.push(c.goals, c.content, c.documentText.slice(0, 1500));
+  }
+  for (const t of sessionTurns(ctx, session.id).filter(t => t.role === 'student').slice(0, 3)) parts.push(t.text);
+  return parts.map(p => p.trim()).filter(Boolean).join('\n');
+}
+
+/**
+ * Topic prefetch (once per session, before the first lesson reply): the pack's keyword cues on
+ * topicText; a hit is stored on the session (category/concept). Returns JSON
+ * {ok, category, concept, source: 'session'|'keywords'|'none', text, hasImage}; without a concept
+ * the worker may classify `text` (+ photo) with the LLM and call setTopic.
+ */
+export function prefetchTopic(ctx: Ctx, sessionId: bigint): string {
+  let session = getActiveSession(ctx, sessionId);
+  const text = truncate(topicText(ctx, session), 3000);
+  if (session.concept) return JSON.stringify({ ok: true, category: session.category, concept: session.concept, source: 'session', text, hasImage: session.hasImage });
+  const guess = guessTopic(pack, text);
+  if (guess && (guess.concept || !session.category)) session = updateSession(ctx, session, { category: guess.category, concept: guess.concept });
+  return JSON.stringify({ ok: !!session.concept, category: session.category, concept: session.concept, source: guess?.concept ? 'keywords' : 'none', text, hasImage: session.hasImage });
+}
+
+/** Library material for the planner: the full checked material of the session's concept. */
+function libraryFor(session: SessionRow): Record<string, unknown> | null {
+  return session.concept ? conceptMaterial(pack, session.concept) : null;
+}
+
+/** Agent: the planner request (JSON ModelRequest) for the session's current state, plus the
+ *  prefetched topic and its library material ({ok, request, topic, library}). */
 export function buildLessonRequest(ctx: Ctx, sessionId: bigint, requestId: string): string {
-  const session = getActiveSession(ctx, sessionId);
+  let session = getActiveSession(ctx, sessionId);
   try {
+    // Prefetch missed (no opening, or new words): the keyword guess is instant.
+    if (!session.concept) {
+      prefetchTopic(ctx, sessionId);
+      session = getActiveSession(ctx, sessionId);
+    }
     const request = buildModelRequest(withProfile(ctx, session, plannable(loadRecord(ctx, session))), sceneOf(canvasRow(ctx, sessionId)), requestId);
-    return JSON.stringify({ ok: true, request });
+    return JSON.stringify({ ok: true, request, topic: { category: session.category, concept: session.concept }, library: libraryFor(session) });
   } catch (e) {
     return JSON.stringify({ ok: false, error: validatorMessage(e) });
   }
@@ -186,6 +243,10 @@ export function beginLesson(ctx: Ctx, args: { sessionId: bigint; utteranceId: bi
   // No repeated questions across steps (the team UI re-asking the same check felt like a loop).
   if (meta.check && recentCheckPrompts(request).some(p => normalizePrompt(p) === normalizePrompt(meta.check!.prompt)))
     throw new SenderError(`The check repeats a question the learner was already asked ("${meta.check.prompt}"). Ask a new question with different words or numbers.`);
+  // Under an arc the homework is handed back at the end: a check may not be the original question.
+  const original = request.context.session.originalQuestion;
+  if (request.context.session.arc && meta.check && original && normalizePrompt(meta.check.prompt).includes(normalizePrompt(original)))
+    throw new SenderError(`The check asks the learner's own homework ("${original}"). Ask a similar task with different numbers; the homework is handed back at the end.`);
   if (!allowed.includes(meta.phase)) throw new SenderError(`Phase is not supported by the current learner evidence: ${meta.phase}. Allowed: ${allowed.join(', ') || 'none'}.`);
   ctx.db.lessonPlan.insert({
     utteranceId: args.utteranceId,
@@ -235,7 +296,11 @@ export function addBeat(ctx: Ctx, args: { sessionId: bigint; utteranceId: bigint
   try {
     const input = parseBeatInput(meta, parse(args.visual, 'visual'), args.narration); // pack-literal-ok (argument name)
     final = input.final;
-    compiled = compileMoment(meta, input.moment, args.idx, final, sceneOf(canvas));
+    // The arc owns the shape: the formalization slot shows the equation, the moment cap holds.
+    const moment = { ...input.moment, ...arcMoment(request.context.session.arc, meta.phase, args.idx, final, input.moment) };
+    compiled = compileMoment(meta, moment, args.idx, final, sceneOf(canvas));
+    // Keyframes on point: the equation reveal moves to the sentence that reads it out.
+    compiled = { ...compiled, beat: splitKeyframes(compiled.beat, narrationSentences(compiled.beat.narration)) };
     if (final) {
       const done = finalizeLesson(request, meta, [...beats, compiled.beat], plannable(record));
       meta = done.meta;

@@ -83,6 +83,8 @@ export const startConversation = spacetimedb.reducer({ sessionId: t.u64() }, (ct
 
 /** Barge-in: turnState = interrupted, unplayed sentences dropped, playback_flush emitted. */
 export const interrupt = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => voiceOut.interrupt(ctx, sessionId));
+/** Barge-in on the utterance the client was playing (also its last sentence, after the session moved on). */
+export const interruptUtterance = spacetimedb.reducer({ sessionId: t.u64(), utteranceId: t.u64() }, (ctx, { sessionId, utteranceId }) => voiceOut.interruptUtterance(ctx, sessionId, utteranceId));
 
 /** Client started playing a sentence (drives firstPlaybackAt and "unplayed" for interrupts). */
 export const markPlayed = spacetimedb.reducer(
@@ -289,6 +291,14 @@ export const buildLessonRequest = spacetimedb.procedure({ sessionId: t.u64(), re
   ctx.withTx(tx => {
     requireAgent(tx);
     return pipeline.buildLessonRequest(tx, sessionId, requestId);
+  }));
+
+/** Agent only. Topic prefetch before the first lesson reply (keyword cues of the pack; JSON
+ *  {ok, category, concept, source, text, hasImage}); without a concept the worker classifies with the LLM. */
+export const prefetchTopic = spacetimedb.procedure({ sessionId: t.u64() }, t.string(), (ctx, { sessionId }) =>
+  ctx.withTx(tx => {
+    requireAgent(tx);
+    return pipeline.prefetchTopic(tx, sessionId);
   }));
 
 /** Agent only. set_topic tool: validates + stores topic, returns JSON {ok, error?, material, notes}. */

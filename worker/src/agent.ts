@@ -4,9 +4,10 @@
 //
 // The SpacetimeDB adapter (stdb.ts) feeds subscription rows in through the on* methods; tests
 // call them directly with a fake Transport and a fake LlmProvider.
-import { OPENING_TURN_IDX, renderPhaseBlock, VOICE_DEFAULTS, type LessonPack, type LlmProvider, type PhraseStatus, type SentenceStatus, type TurnState, type TurnStatus, buildToolSpecs } from '@tutor/shared';
+import { libraryIndex, OPENING_TURN_IDX, renderPhaseBlock, VOICE_DEFAULTS, type LessonPack, type LlmProvider, type PhraseStatus, type SentenceStatus, type TurnState, type TurnStatus, buildToolSpecs } from '@tutor/shared';
 import { buildSystemPrompt } from './prompt';
-import { ReplyRun, type ReplyDeps } from './reply';
+import { openingLines, ReplyRun, type ReplyDeps } from './reply';
+import { prefetchTopic } from './topic';
 import { LessonRun, type LessonDeadlines } from './lesson';
 import { ToolRouter } from './router';
 import { createToolDefs } from './tools/index';
@@ -30,6 +31,10 @@ export interface AgentOptions {
   /** 'lesson' (default): the team's streaming lesson planner (beats via addBeat);
    *  'tools': the tool-based reply loop (show_board_item(math_canvas), ask_learner, ...). */
   replyMode?: 'lesson' | 'tools';
+  /** Lesson mode: 'lesson' (default) = authored lead-in + first lesson as the opening; 'script' = authored opening only. */
+  lessonOpening?: 'lesson' | 'script';
+  /** Lesson mode: library index + prefetched concept material for the planner (default true). */
+  lessonLibrary?: boolean;
   lessonDeadlines?: Partial<LessonDeadlines>;
   /** A ready student turn with no utterance after this long (worker failure) is answered again, once. Default 12 s; 0 = off. */
   stallRetryMs?: number;
@@ -63,13 +68,17 @@ const TRANSCRIBING: PhraseStatus = 'transcribing';
 const CLOSING: TurnStatus = 'closing';
 const DEFAULT_CONTEXT_TTL_MS = 10_000;
 /** Transport calls that change what buildContext returns (board, phase, topic, memory). */
-const MUTATIONS = ['setPhase', 'showBoardItem', 'clearBoard', 'remember', 'setTopic', 'appendTutorTurn', 'beginLesson', 'addBeat'] as const;
+const MUTATIONS = ['setPhase', 'showBoardItem', 'clearBoard', 'remember', 'setTopic', 'prefetchTopic', 'appendTutorTurn', 'beginLesson', 'addBeat'] as const;
+/** Lesson opening: how long the planner request waits for the topic prefetch (the authored lead-in plays meanwhile). */
+const OPENING_TOPIC_WAIT_MS = 3500;
 
 export class Agent {
   readonly sessions = new Map<bigint, SessionAgent>();
   readonly router: ToolRouter;
   /** Stable for the whole run (prompt cache); phase instructions go in a separate message. */
   readonly system: string;
+  /** Lesson planner library index (system prompt, cache-stable); undefined = library off. */
+  readonly libraryIndex?: string;
   private lastUtteranceId = 0n;
   readonly log: (msg: string) => void;
   readonly now: () => number;
@@ -82,6 +91,7 @@ export class Agent {
     // Free-speech rules (speak first, inline markers) only when model text is actually spoken.
     const free = deps.opts.verifiedSpeech === false ? `\n\n${deps.pack.prompts.freeSpeech}` : '';
     this.system = buildSystemPrompt(deps.pack, this.router.specs()) + free;
+    if (deps.opts.lessonLibrary !== false) this.libraryIndex = libraryIndex(deps.pack);
   }
 
 
@@ -179,6 +189,8 @@ export class SessionAgent {
   imageSent = false;
   /** The opening reply was started (at most once per session and worker). */
   openingStarted = false;
+  /** Topic prefetch of this session (started once, with the opening or the first reply). */
+  private topicPromise?: Promise<unknown>;
   private preemptTimer?: ReturnType<typeof setTimeout>;
   private closed = false;
 
@@ -345,8 +357,19 @@ export class SessionAgent {
     return [...this.turns.values()].every(t => t.role === STUDENT && OPEN_STATUSES.includes(t.status as TurnStatus));
   }
 
+  /** Topic prefetch, once per session, off the critical path (see topic.ts). */
+  ensureTopic(): Promise<unknown> {
+    const a = this.agent;
+    this.topicPromise ??= prefetchTopic({ transport: this.transport(), llm: a.deps.lessonLlm ?? a.deps.llm, pack: a.deps.pack, log: a.log, now: a.now }, this.id).then(r => {
+      this.log(`topic ${r.category || '-'}/${r.concept || '-'} (${r.source}, ${r.ms} ms)`);
+      return r;
+    });
+    return this.topicPromise;
+  }
+
   private startOpening(): void {
     this.openingStarted = true;
+    if ((this.agent.deps.opts.replyMode ?? 'lesson') === 'lesson') void this.ensureTopic();
     this.clearPreemptTimer();
     const run = this.newRun({ idx: OPENING_TURN_IDX, text: '' }, false, true);
     this.log(`opening -> u${run.utteranceId}`);
@@ -439,10 +462,16 @@ export class SessionAgent {
     const a = this.agent;
     // The opening stays the authored script (no LLM, ~0.5 s to audio; measured 2.8 s as a generated
     // lesson, and the learner usually answers it); lessons start with the first student turn.
-    const authoredOpening = opening && a.deps.opts.verifiedSpeech !== false && !!a.deps.pack.prompts.openingScript;
-    if ((a.deps.opts.replyMode ?? 'lesson') === 'lesson' && !authoredOpening) {
+    const lessonMode = (a.deps.opts.replyMode ?? 'lesson') === 'lesson';
+    const task = this.row?.taskText.trim() ?? '';
+    // Lesson opening (LESSON_OPENING=lesson, default): the authored lead-in, then the first lesson in
+    // the same utterance; the planner's latency hides behind the lead-in. Needs a task to teach.
+    const leadIn = a.deps.pack.prompts.openingLessonScript;
+    const lessonOpening = opening && lessonMode && a.deps.opts.lessonOpening !== 'script' && a.deps.opts.verifiedSpeech !== false && !!leadIn && (!!task || !!this.row?.hasImage);
+    const authoredOpening = opening && !lessonOpening && a.deps.opts.verifiedSpeech !== false && !!a.deps.pack.prompts.openingScript;
+    if (lessonMode && !authoredOpening) {
       return new LessonRun(
-        { transport: this.transport(), llm: a.deps.lessonLlm ?? a.deps.llm, log: a.log, now: a.now, deadlines: a.deps.opts.lessonDeadlines },
+        { transport: this.transport(), llm: a.deps.lessonLlm ?? a.deps.llm, log: a.log, now: a.now, deadlines: a.deps.opts.lessonDeadlines, libraryIndex: a.libraryIndex },
         {
           sessionId: this.id,
           turnIdx: turn.idx,
@@ -451,6 +480,10 @@ export class SessionAgent {
           utteranceId: a.nextUtteranceId(),
           wantImage: !this.imageSent && !!this.row?.hasImage,
           held,
+          prelude: lessonOpening ? openingLines(leadIn!, task) : undefined,
+          // Only the opening waits (its lead-in covers it); later turns never wait on the critical path.
+          topicReady: this.ensureTopic(),
+          topicWaitMs: lessonOpening ? OPENING_TOPIC_WAIT_MS : 0,
         }
       );
     }

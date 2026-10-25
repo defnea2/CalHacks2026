@@ -5,7 +5,7 @@ import { spacetimeCommand } from './spacetime.mjs';
 import { loadEnv, ROOT } from './env.mjs';
 
 // Shell variables override .env (e.g. STT_BASE_URL=https://host/stt-proxy.php node scripts/publish.mjs).
-const env = { ...loadEnv(), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(CARTESIA_|OPENROUTER_|ANTHROPIC_|STT_|TTS_|MEMORY_|SIM_|DASHBOARD_|SPACETIME_DB|SPACETIME_SERVER)/.test(k))) };
+const env = { ...loadEnv(), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(CARTESIA_|OPENROUTER_|ANTHROPIC_|STT_|TTS_|MEMORY_|SIM_|DASHBOARD_|LESSON_|SPACETIME_DB|SPACETIME_SERVER)/.test(k))) };
 // Cartesia is always needed; the LLM keys: Anthropic (default) or the OpenRouter pair.
 const required = ['CARTESIA_API_KEY', ...(env.ANTHROPIC_API_KEY ? [] : ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL'])];
 for (const k of required) if (!env[k]) { console.error(`missing ${k} in .env (set ANTHROPIC_API_KEY, or OPENROUTER_API_KEY + OPENROUTER_MODEL)`); process.exit(1); }
@@ -16,7 +16,7 @@ const moduleEnv = {
   OPENROUTER_EXTRACTION_MODEL: env.OPENROUTER_EXTRACTION_MODEL || env.OPENROUTER_MODEL || '',
   AGENT_SECRET: env.AGENT_SECRET,
 };
-for (const k of ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS', 'SIM_MAX_TURNS', 'DASHBOARD_INTERVAL_S', 'DASHBOARD_EFFORT', 'ANTHROPIC_API_KEY', 'ANTHROPIC_EXTRACTION_MODEL', 'MEMORY_PROVIDER']) if (env[k]) moduleEnv[k] = env[k];
+for (const k of ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS', 'SIM_MAX_TURNS', 'DASHBOARD_INTERVAL_S', 'DASHBOARD_EFFORT', 'LESSON_ARC', 'ANTHROPIC_API_KEY', 'ANTHROPIC_EXTRACTION_MODEL', 'MEMORY_PROVIDER']) if (env[k]) moduleEnv[k] = env[k];
 
 const db = env.SPACETIME_DB || 'voice-tutor';
 // SPACETIME_SERVER=maincloud publishes to SpacetimeDB's hosted cloud (needs `spacetime login`).

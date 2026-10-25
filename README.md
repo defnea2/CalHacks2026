@@ -128,6 +128,8 @@ Client and worker never talk to each other directly.
 
 ## Lesson pipeline (team planner on SpacetimeDB)
 
+**Two-minute demo arc** (`LESSON_ARC=demo2min`, default; `adaptive` = previous policy; `LESSON_OPENING=lesson|script`): the tutor leads straight from a short authored lead-in into a visualized explanation (picture first), a formalization (equation revealed on the sentence that reads it) and one task with different numbers than the homework; correct → hand back, unclear/wrong/"I don't know" → one smaller repair, then hand back. Measured: explanation 8–11 s, formalization 21–32 s, task 33–49 s after the start click; worst case whole arc ~90 s. Topic prefetch (keywords, Haiku fallback) + library index in the cached prompt add no latency. Details: `docs/CONTRACT-night.md` §1b, `docs/ARCHITECTURE.md` §7.
+
 The team's lesson methodology runs as the worker's default reply mode (`REPLY_MODE=lesson`; `tools` keeps the older tool loop). Pure teaching code lives in the workspace package `teaching/` (`@tutor/teaching`: contracts, compact compiler, validators, streaming parser, `lessonFlow` state machine), shared by the module, worker and client.
 
 - Per student turn (voice, typed via `submitTextTurn`, or a lesson button `intent`) the worker asks the module for the planner request (`buildLessonRequest`), streams Claude Haiku 5.5 (team prompt, thinking off, `LESSON_EFFORT=low`), and releases every moment as soon as the next `,` proves it complete: `beginLesson` (meta) then `addBeat` per moment. The module compiles and validates each beat against `canvas_state`, writes `beat` + `reply_sentence` (TTS in voice mode, reading delay in text mode) and owns `lesson_state` (check, evidence, stage).

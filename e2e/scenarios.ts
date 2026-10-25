@@ -21,8 +21,12 @@ export const E2E_DEFAULTS = {
   /** The tutor speaks first: background prepended to every fixture so the student starts
    *  speaking after the opening (LLM + TTS + 4-5 sentences, ~15-18 s). With only ~4 s between the
    *  opening's end and the student's first word, the soft "Um" of um-pauses was reproducibly lost
-   *  (vad.misfire) and the turn split; with ~10 s it is detected as before. */
-  openingLeadMs: Number(process.env.E2E_OPENING_LEAD_MS || 28_000),
+   *  (vad.misfire) and the turn split; with ~10 s it is detected as before.
+   *  Lesson opening (worker LESSON_OPENING=lesson, default): the opening is the authored lead-in
+   *  plus the first ~50 s lesson (explanation, formalization, task), so the student answers the
+   *  task after ~70 s. E2E_LESSON_OPENING=script restores the short authored opening (28 s). */
+  lessonOpening: (process.env.E2E_LESSON_OPENING || process.env.LESSON_OPENING || 'lesson') !== 'script',
+  openingLeadMs: Number(process.env.E2E_OPENING_LEAD_MS || ((process.env.E2E_LESSON_OPENING || process.env.LESSON_OPENING || 'lesson') !== 'script' ? 75_000 : 28_000)),
   /** First sentence of the opening: a few words (warn above). */
   openingFirstSentenceMaxWords: 10,
 };
@@ -43,7 +47,9 @@ export interface Scenario {
   singleTurn?: boolean;
   /** Open an observer tab for this session and check that it mirrors it. */
   observer?: boolean;
-  /** Max wait for the whole scenario after the opening lead-in (openingLeadMs). */
+  /** Max wait for the whole scenario after the opening lead-in (openingLeadMs). Lesson mode: one
+   *  reply is a mini lesson of ~30-60 s of speech, so these are generous (was 60 s: um-pauses
+   *  "not settled after 88 s"). */
   timeoutMs: number;
 }
 
@@ -59,20 +65,20 @@ export const GROUPS: Group[] = [
     name: 'single',
     parallel: false,
     scenarios: [
-      { id: 'correct-step', fixture: 'correct-step', turns: 1, timeoutMs: 60_000 },
-      { id: 'wrong-step', fixture: 'wrong-step', turns: 1, timeoutMs: 60_000 },
-      { id: 'um-pauses', fixture: 'um-pauses', turns: 1, singleTurn: true, timeoutMs: 60_000 },
-      { id: 'noisy', fixture: 'noisy', turns: 1, noisy: true, timeoutMs: 60_000 },
-      { id: 'interrupt', fixture: 'interrupt', turns: 2, interrupt: true, timeoutMs: 90_000 },
+      { id: 'correct-step', fixture: 'correct-step', turns: 1, timeoutMs: 120_000 },
+      { id: 'wrong-step', fixture: 'wrong-step', turns: 1, timeoutMs: 120_000 },
+      { id: 'um-pauses', fixture: 'um-pauses', turns: 1, singleTurn: true, timeoutMs: 120_000 },
+      { id: 'noisy', fixture: 'noisy', turns: 1, noisy: true, timeoutMs: 120_000 },
+      { id: 'interrupt', fixture: 'interrupt', turns: 2, interrupt: true, timeoutMs: 180_000 },
     ],
   },
   {
     name: 'parallel',
     parallel: true,
     scenarios: [
-      { id: 'par-correct-step', fixture: 'correct-step', turns: 1, observer: true, timeoutMs: 75_000 },
-      { id: 'par-wrong-step', fixture: 'wrong-step', turns: 1, timeoutMs: 75_000 },
-      { id: 'par-um-pauses', fixture: 'um-pauses', turns: 1, singleTurn: true, timeoutMs: 75_000 },
+      { id: 'par-correct-step', fixture: 'correct-step', turns: 1, observer: true, timeoutMs: 150_000 },
+      { id: 'par-wrong-step', fixture: 'wrong-step', turns: 1, timeoutMs: 150_000 },
+      { id: 'par-um-pauses', fixture: 'um-pauses', turns: 1, singleTurn: true, timeoutMs: 150_000 },
     ],
   },
 ];

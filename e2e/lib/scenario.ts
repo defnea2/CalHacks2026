@@ -259,11 +259,57 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
 
 // ---------------------------------------------------------------- assertions
 
+/**
+ * Two-minute arc (lesson pack demo2min): seconds of audio after the start click (the first page
+ * event) until the explanation (first picture beat), the formalization (first equation shown:
+ * a `-s<k>` keyframe cue or show_math/set_equation visible) and the task (last sentence of the
+ * first lesson utterance = its check prompt) started playing on this tab.
+ */
+export function arcTimeline(events: Ev[], srv: ServerSession): { explanation: number | null; formalization: number | null; task: number | null } {
+  const t0 = events.length ? Math.min(...events.map(e => e.t)) : 0;
+  const started = new Map<string, number>();
+  for (const e of events) if (e.type === 'audio.play_start') started.set(`${e.utteranceId}:${e.idx}`, e.t);
+  const at = (u: string, i: number) => {
+    const t = started.get(`${u}:${i}`);
+    return t === undefined ? null : Math.round((t - t0) / 100) / 10;
+  };
+  let explanation: number | null = null;
+  let formalization: number | null = null;
+  for (const b of srv.beats) {
+    let v: { cues?: { id: string; commands: { type: string; visual?: { showEquation?: boolean }; change?: { type: string; visible?: boolean } }[] }[] };
+    try {
+      v = JSON.parse(b.visual);
+    } catch {
+      continue;
+    }
+    for (const cue of v.cues ?? []) {
+      const k = Number(/-s(\d+)$/.exec(cue.id)?.[1] ?? 0);
+      for (const c of cue.commands) {
+        if (explanation === null && (c.type === 'show_math' || (c.type === 'update_math' && !['set_equation', 'set_interaction'].includes(c.change?.type ?? '')))) explanation = at(b.utteranceId, b.sentenceIdx);
+        if (formalization === null && ((c.type === 'show_math' && c.visual?.showEquation) || (c.type === 'update_math' && c.change?.type === 'set_equation' && c.change.visible))) formalization = at(b.utteranceId, b.sentenceIdx + k);
+      }
+    }
+  }
+  const firstLesson = srv.beats[0]?.utteranceId;
+  const last = firstLesson ? srv.sentences.filter(s => s.utteranceId === firstLesson).at(-1) : undefined;
+  return { explanation, formalization, task: last ? at(last.utteranceId, last.idx) : null };
+}
+
+function evaluateArc(add: (name: string, status: CheckStatus, detail: string) => void, events: Ev[], srv: ServerSession): void {
+  if (!srv.beats.length) return add('arc-timeline', 'warn', 'no lesson beats');
+  const a = arcTimeline(events, srv);
+  const all = a.explanation !== null && a.formalization !== null && a.task !== null;
+  const ok = all && a.task! <= 120;
+  const f = (v: number | null) => (v === null ? 'not shown' : `${v.toFixed(1)} s`);
+  add('arc-timeline', ok ? 'pass' : 'warn', `explanation ${f(a.explanation)}, formalization ${f(a.formalization)}, task ${f(a.task)} after the start click (target: all within 120 s)`);
+}
+
 function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], state: PageState, dom: DomSnapshot, srv: ServerSession, obs: ObserverSample[]): void {
   const add = (name: string, status: CheckStatus, detail: string) => run.checks.push({ name, status, detail });
   const ofType = (p: string) => events.filter(e => e.type === p || e.type.startsWith(p + '.'));
   const openingU = openingUtterance(srv);
   evaluateOpening(add, ofType, srv, openingU);
+  evaluateArc(add, events, srv);
 
   // Transcript vs. fixture text.
   const studentPhrases = srv.phrases.filter(p => p.text.trim());
@@ -488,7 +534,7 @@ function evaluateInterrupt(
   run: ScenarioRun
 ): void {
   const barge = ofType('vad.barge_in')[0];
-  const call = ofType('reducer.call').find(e => e.name === 'interrupt');
+  const call = ofType('reducer.call').find(e => e.name === 'interrupt' || e.name === 'interruptUtterance');
   const flush = ofType('audio.flush').find(e => e.reason === 'barge_in');
   if (!barge) {
     const firstPlay = ofType('audio.play_start')[0];
