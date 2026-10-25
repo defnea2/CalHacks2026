@@ -108,10 +108,12 @@ export function MathWorkspace({
   scene,
   enabled,
   onAction,
+  minimal = false,
 }: {
   scene: MathScene;
   enabled: boolean;
   onAction?(action: MathAction): void;
+  minimal?: boolean;
 }) {
   const visual = scene.visual;
   const canChange = enabled && visual.interactive;
@@ -134,19 +136,20 @@ export function MathWorkspace({
     >
       {visual.kind === "parallelogram" ? <>
         <ShearProof shape={{ base: visual.base, height: visual.height, shear: visual.shear }} stage={visual.stage}
+          caption={minimal ? '' : undefined}
           draggable={canChange} animate={animateChanges} showArea={visual.showEquation}
           onShear={shear => emit({ type: "set_parallelogram", shear })} />
         {visual.interactive && visual.stage === "slant" && <fieldset className="math-controls" disabled={!canChange}>
-          <legend>Drag the top edge, or use the slider</legend>
+          <legend className={minimal ? 'lab-sr-only' : ''}>Drag the top edge, or use the slider</legend>
           <label>Slant<input aria-label="Parallelogram slant" type="range" min="0" max={visual.base} step="0.5" value={visual.shear}
             onChange={e => emit({ type: "set_parallelogram", shear: Number(e.target.value) })} /><output>{visual.shear}</output></label>
         </fieldset>}
-      </> : visual.kind === "geometry" ? <Suspense fallback={<div className="math-geometry-loading" role="status">Opening the geometry tools…</div>}><GeometryPicture visual={visual} enabled={canChange} onChange={emit} animateChanges={animateChanges} /></Suspense> : visual.kind === "array" ? (
+      </> : visual.kind === "geometry" ? <Suspense fallback={<div className="math-geometry-loading" role="status" aria-label="Loading diagram" />}><GeometryPicture visual={visual} minimal={minimal} enabled={canChange} onChange={emit} animateChanges={animateChanges} /></Suspense> : visual.kind === "array" ? (
         <>
           <ArrayPicture visual={visual} animateChanges={animateChanges} />
           {visual.interactive && (
             <fieldset className="math-controls" disabled={!canChange}>
-              <legend>Change the picture</legend>
+              <legend className={minimal ? 'lab-sr-only' : ''}>Array controls</legend>
               <label>
                 Groups{" "}
                 <input
@@ -200,6 +203,7 @@ export function MathWorkspace({
       ) : (
         activity && (
           <LearningWorkspace
+            minimal={minimal}
             showComparisonControl={false}
             embedded
             scene={activity}

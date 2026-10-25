@@ -3,7 +3,7 @@ import { usePointerDrag } from "../interactions/usePointerDrag";
 import { clamp, tickValues, valueFromPosition } from "../visual-math/geometry";
 import { isEnabled, objectClass, type ActivityProps } from "./types";
 
-type Props = ActivityProps<"bars_number_line">;
+type Props = ActivityProps<"bars_number_line"> & { minimal?: boolean };
 function MarkerLine({
   marker,
   activity,
@@ -11,6 +11,7 @@ function MarkerLine({
   emit,
   announce,
   index,
+  minimal,
 }: Props & { marker: Props["activity"]["markers"][number]; index: number }) {
   const rail = useRef<HTMLDivElement>(null);
   const enabled = isEnabled(scene, "move_marker");
@@ -109,7 +110,7 @@ function MarkerLine({
           <span aria-hidden="true">✦</span>
         </button>
       </div>
-      <div className="lab-line-controls">
+      {(!minimal || enabled) && <div className="lab-line-controls">
         <button
           disabled={!enabled || marker.value <= activity.min}
           aria-label={`Move ${marker.label} left`}
@@ -123,7 +124,7 @@ function MarkerLine({
         >
           ←
         </button>
-        <span>Drag the marker or use the arrow keys</span>
+        {!minimal && <span>Drag the marker or use the arrow keys</span>}
         <button
           disabled={!enabled || marker.value >= activity.max}
           aria-label={`Move ${marker.label} right`}
@@ -137,7 +138,7 @@ function MarkerLine({
         >
           →
         </button>
-      </div>
+      </div>}
     </section>
   );
 }
@@ -145,14 +146,14 @@ function MarkerLine({
 export function NumberLineActivity(props: Props) {
   return (
     <>
-      <div className="lab-instruction">
+      {!props.minimal && <div className="lab-instruction">
         <span className="instruction-number">1</span>
         <span>
           {isEnabled(props.scene, "move_marker")
             ? "Slide along the line. Notice the distance between each number."
             : "The markers show numbers on equal scales. Notice their positions."}
         </span>
-      </div>
+      </div>}
       <div className="lab-lines">
         {props.activity.markers.map((marker, index) => (
           <MarkerLine

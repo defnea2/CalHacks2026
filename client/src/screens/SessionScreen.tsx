@@ -163,13 +163,11 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
     );
   }
 
-  const liveCaption = [...data.sentences].filter(tutorShown).sort((a, b) => Number(a.id - b.id)).at(-1)?.display;
-  const stateLabel = !session?.active ? 'Session finished' : ui.tutorAudio ? 'Listen and watch' : session.turnState === 'thinking' ? 'Thinking it through…' : ui.speaking ? 'I’m listening' : voice ? 'Your turn' : 'Ready when you are';
+  const stateLabel = !session?.active ? 'Finished' : ui.tutorAudio ? 'Speaking' : session.turnState === 'thinking' ? 'Thinking' : voice ? 'Listening' : 'Microphone off';
   return (
     <div data-testid="session-screen" data-session-id={sessionId.toString()} className={`lesson-studio ${conversationOpen ? '' : 'conversation-hidden'}`}>
       <div className="lesson-topline">
         <div className="lesson-question">
-          <span className="studio-eyebrow">Our question</span>
           <h1 data-testid="task-display">{session?.taskText || 'What would you like to understand?'}</h1>
         </div>
         <button className="conversation-toggle" aria-expanded={conversationOpen} aria-controls="lesson-conversation" onClick={() => setConversationOpen(v => !v)}>
@@ -179,11 +177,9 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
       <ErrorNote>{error}</ErrorNote>
       <div className="lesson-layout">
         <section className="lesson-stage" aria-label="Learning canvas">
-          <div className="stage-topline"><span className="studio-eyebrow">Work it out</span><span className="stage-status" role="status"><i data-active={!!voice} />{stateLabel}</span></div>
           <div className="lesson-picture">
             <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} allowCanvasInteraction={!!session?.active && session.turnState === 'listening' && !ui.tutorAudio} />
           </div>
-          <div className="stage-caption" aria-live="off">{liveCaption || 'Tell me what feels confusing. We’ll make it visible here.'}</div>
           <footer className="stage-controls">
             <div className="voice-control">
               {session && !session.active ? <Button size="lg" onClick={() => navigate(homeUrl())}>Start another question</Button> : !voice ? <Button size="lg" data-testid="start-talking" onClick={startTalking} disabled={starting || !session?.active}>
@@ -191,7 +187,8 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
               </Button> : <Button size="lg" variant="outline" data-testid="stop-talking" onClick={stopTalking}><MicIcon />Pause microphone</Button>}
               {voice && <MicMeter ui={ui} />}
             </div>
-            <p data-testid="headphones-hint">{session && !session.active ? 'Your picture and conversation are saved.' : ui.noise === 'noisy' ? APP_CONFIG.noisyHint : voice ? 'Think aloud. You can interrupt at any time.' : 'Headphones help us hear each other.'}</p>
+            <span className="stage-status" role="status"><i data-active={!!voice} />{stateLabel}</span>
+            {ui.noise === 'noisy' && <p role="status">{APP_CONFIG.noisyHint}</p>}
           </footer>
         </section>
         <aside id="lesson-conversation" className="lesson-conversation" hidden={!conversationOpen} aria-label="Conversation">

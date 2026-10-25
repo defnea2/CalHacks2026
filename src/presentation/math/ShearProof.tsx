@@ -101,7 +101,7 @@ export function ShearProof({ shape, stage, draggable: canSlant, onShear, animate
     reassembled: done ? "Nothing added, nothing removed: the pieces make a rectangle." : "Sliding the same triangle across…",
   }[stage];
   return <figure className="shear-proof" data-stage={stage}>
-    <figcaption className="shear-caption" aria-live="polite">{text}</figcaption>
+    {text && <figcaption className="shear-caption" aria-live="polite">{text}</figcaption>}
     <svg ref={svg} viewBox={`0 0 ${width} ${height}`} role="img"
       aria-label={`Parallelogram with base ${b}, height ${h}, slanted ${s} units${done ? ", reassembled into a rectangle" : ""}${showArea ? `, area ${shapeArea(shape)} square units` : ""}`}>
       <g className="shear-grid" aria-hidden="true">

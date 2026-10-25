@@ -8,7 +8,8 @@ export function BarsActivity({
   scene,
   emit,
   showComparisonControl = true,
-}: ActivityProps<"bars_number_line"> & { showComparisonControl?: boolean }) {
+  minimal = false,
+}: ActivityProps<"bars_number_line"> & { showComparisonControl?: boolean; minimal?: boolean }) {
   const [compare, setCompare] = useState(false);
   const reduce = useReducedMotion();
   const first = activity.bars[0],
@@ -19,14 +20,14 @@ export function BarsActivity({
       : null;
   return (
     <>
-      <div className="lab-instruction">
+      {!minimal && <div className="lab-instruction">
         <span className="instruction-number">1</span>
         <span>
           {isEnabled(scene, "set_shaded")
             ? "All bars are the same whole. Tap a part to colour that much, then compare."
             : "All bars are the same whole. Follow the coloured amounts."}
         </span>
-      </div>
+      </div>}
       <div className="lab-bars">
         {activity.bars.map((bar, index) => (
           <section
@@ -81,7 +82,7 @@ export function BarsActivity({
                 </motion.button>
               ))}
             </div>
-            <div className="lab-bar-settings">
+            {(!minimal || isEnabled(scene, 'set_parts') || isEnabled(scene, 'set_shaded')) && <div className="lab-bar-settings">
               <label>
                 Equal parts
                 <select
@@ -115,7 +116,7 @@ export function BarsActivity({
               >
                 Clear colour
               </button>
-            </div>
+            </div>}
           </section>
         ))}
       </div>
