@@ -72,6 +72,10 @@ export interface PromptTemplates {
   /** Verified speech: the opening is AUTHORED, not generated. One spoken line per row;
    *  placeholder {{task}} (the task text, '' when none: rows containing it are then skipped). */
   openingScript: string;
+  /** Lesson-mode opening (LESSON_OPENING=lesson): the authored lead-in spoken while the first
+   *  lesson is planned; the lesson's moments follow in the same utterance. Same format as
+   *  openingScript. Only used when there is a task (text or photo). */
+  openingLessonScript?: string;
   /** Rules only for free speech (verifiedSpeech off): speaking first, inline board markers.
    *  The worker appends this to the system prompt only in that mode. */
   freeSpeech: string;

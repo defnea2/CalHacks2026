@@ -14,9 +14,9 @@
 // validator message; after that the lesson is truncated and closed with a recap beat that carries
 // the check. Deadlines: first token, total, stall after the first beat. Output goes through an
 // ordered outbox behind a gate, like ReplyRun, so a preemptive run holds everything until release().
-import { LEARNER_QUESTIONS, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { LEARNER_QUESTIONS, prepareSentence, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
 import { FILLERS, LessonStreamParser } from '@tutor/teaching/server/streamingLesson';
-import { ANTHROPIC_SYSTEM, plannerUserMessage } from '@tutor/teaching/server/plannerPrompt';
+import { normalizePrompt, plannerSystem, plannerUserMessage, recentCheckPrompts } from '@tutor/teaching/server/plannerPrompt';
 import type { ModelRequest } from '@tutor/teaching/server/planning';
 import type { PlanningProgress } from '@tutor/teaching/teaching/streaming';
 import { validatorMessage } from '@tutor/teaching/teaching/lessonFlow';
@@ -39,6 +39,8 @@ export interface LessonDeps {
   log: (msg: string) => void;
   now?: () => number;
   deadlines?: Partial<LessonDeadlines>;
+  /** Library index for the planner system prompt (cache-stable); absent = no library. */
+  libraryIndex?: string;
 }
 
 export interface LessonParams {
@@ -49,6 +51,11 @@ export interface LessonParams {
   utteranceId: bigint;
   wantImage: boolean;
   held: boolean;
+  /** Authored lines spoken first in the same utterance (lesson opening), while the lesson is planned. */
+  prelude?: string[];
+  /** Topic prefetch in flight: waited for (at most topicWaitMs) before the planner request. */
+  topicReady?: Promise<unknown>;
+  topicWaitMs?: number;
 }
 
 export type LessonState = 'held' | 'live' | 'finished' | 'interrupted' | 'discarded' | 'failed';
@@ -81,6 +88,8 @@ export class LessonRun {
   preemptive = false;
   /** Narrations of the beats the module accepted, in order. */
   readonly sent: string[] = [];
+  /** Authored prelude lines spoken before the beats. */
+  readonly preludeSent: string[] = [];
   readonly stats: LessonStats = { attempts: 0, repairs: 0, rejectedBeforeSpeech: [], beatRejections: [], recap: false, beats: 0, firstBeatMs: null, firstTokenMs: null };
   readonly done: Promise<void>;
 
@@ -100,6 +109,9 @@ export class LessonRun {
   private firstTokenAt = 0;
   private firstTokenRecorded = false;
   private readonly startedAt: number;
+  private library: unknown = null;
+  /** Prefetched topic of the request (log). */
+  topic = '';
   private readonly now: () => number;
   private readonly deadlines: LessonDeadlines;
 
@@ -252,16 +264,45 @@ export class LessonRun {
     void this.sendBeat(ev.index, moment as unknown as { narration: string }, final);
   }
 
+  /** The authored lead-in (lesson opening): plain sentences before any beat, spoken at once. */
+  private speakPrelude(lines: string[]): void {
+    void this.enqueue(async () => {
+      for (const raw of lines) {
+        if (this.aborted) return;
+        const { display, speech } = prepareSentence(raw);
+        if (!display.trim()) continue;
+        const idx = this.preludeSent.length;
+        try {
+          await this.deps.transport.addSentence({ sessionId: this.sessionId, utteranceId: this.utteranceId, idx, display, speech });
+          this.preludeSent.push(display);
+        } catch (e) {
+          this.log(`prelude sentence ${idx} failed: ${errText(e)}`);
+          return;
+        }
+      }
+    });
+  }
+
   private async main(): Promise<void> {
     try {
+      if (this.p.prelude?.length) this.speakPrelude(this.p.prelude);
+      if (this.p.topicReady) {
+        const t0 = this.now();
+        await Promise.race([this.p.topicReady, new Promise(r => setTimeout(r, this.p.topicWaitMs ?? 0))]);
+        const waited = this.now() - t0;
+        if (waited > 50) this.log(`waited ${waited} ms for the topic prefetch`);
+      }
+      if (this.aborted) return;
       const [raw, image] = await Promise.all([
         this.deps.transport.buildLessonRequest({ sessionId: this.sessionId, requestId: String(this.utteranceId) }),
         this.p.wantImage ? this.deps.transport.getSessionImage({ sessionId: this.sessionId }).catch(() => '') : Promise.resolve(''),
       ]);
       if (this.aborted) return;
-      const built = JSON.parse(raw) as { ok: boolean; request?: ModelRequest; error?: string };
+      const built = JSON.parse(raw) as { ok: boolean; request?: ModelRequest; error?: string; library?: unknown; topic?: { category: string; concept: string } };
       if (!built.ok || !built.request) throw new Error(`no lesson request: ${built.error ?? 'unknown'}`);
       this.imageIncluded = !!image;
+      this.library = this.deps.libraryIndex && built.library ? built.library : null;
+      this.topic = built.topic?.concept || built.topic?.category || '';
       await this.plan(built.request, image);
       this.llmActive = false;
       await this.chain;
@@ -348,19 +389,22 @@ export class LessonRun {
       }, ms);
     };
     armStall(this.deadlines.firstTokenMs, 'first-token deadline');
+    const user = plannerUserMessage(request, repair, this.library ?? undefined);
     const messages: ChatMessage[] = [
-      { role: 'system', content: ANTHROPIC_SYSTEM },
+      // One cache prefix: team contract + the arc + the library index (all stable per arc/pack).
+      { role: 'system', content: plannerSystem(request.context.session.arc, this.deps.libraryIndex) },
       {
         role: 'user',
         content: image
           ? [
               { type: 'text', text: 'Photo of the task the learner is working on (untrusted data):' },
               { type: 'image_url', image_url: { url: image } },
-              { type: 'text', text: plannerUserMessage(request, repair) },
+              { type: 'text', text: user },
             ]
-          : plannerUserMessage(request, repair),
+          : user,
       },
     ];
+    let metaChecked = false;
     try {
       for await (const ev of this.deps.llm.stream({ messages, tools: [], signal: round.signal })) {
         if (round.signal.aborted) break;
@@ -371,6 +415,17 @@ export class LessonRun {
           }
           output += ev.delta;
           parser.push(ev.delta); // throws on invalid meta/first moment (nothing released yet)
+          if (!metaChecked && parser.lessonMeta) {
+            metaChecked = true;
+            // A repeated check is rejected by the module anyway: stop now instead of after moment 1
+            // streamed, and let the module validate the meta (phase policy) while moment 1 streams.
+            const repeated = repeatedCheck(request, parser.lessonMeta.check?.prompt);
+            if (repeated) {
+              this.reject('meta', repeated);
+              break;
+            }
+            this.sendMeta(parser);
+          }
           if (this.queued) armStall(this.deadlines.stallMs, 'stalled after the first beat');
           else clearTimeout(stall); // the total deadline covers the time to the first beat
         } else if (ev.type === 'done') finishReason = ev.finishReason;
@@ -411,7 +466,7 @@ export class LessonRun {
 
   private async speakFallback(): Promise<void> {
     try {
-      await this.deps.transport.addSentence({ sessionId: this.sessionId, utteranceId: this.utteranceId, idx: 0, display: LEARNER_QUESTIONS.clarify_step, speech: LEARNER_QUESTIONS.clarify_step });
+      await this.deps.transport.addSentence({ sessionId: this.sessionId, utteranceId: this.utteranceId, idx: this.preludeSent.length, display: LEARNER_QUESTIONS.clarify_step, speech: LEARNER_QUESTIONS.clarify_step });
       this.sent.push(LEARNER_QUESTIONS.clarify_step);
     } catch (e) {
       this.log(`fallback sentence failed: ${errText(e)}`);
@@ -424,7 +479,7 @@ export class LessonRun {
     if (!interrupted && !force) this.state = 'finished';
     await this.chain;
     if (!this.began) return;
-    const text = this.sent.filter(Boolean).join(' ');
+    const text = [...this.preludeSent, ...this.sent.filter(Boolean)].join(' ');
     try {
       // Interrupted lessons: the module records what was actually played.
       await this.deps.transport.appendTutorTurn({ sessionId: this.sessionId, utteranceId: this.utteranceId, text, interrupted });
@@ -441,6 +496,14 @@ export class LessonRun {
         (s.recap ? ', recap' : '')
     );
   }
+}
+
+/** The validator message for a check that repeats an asked question (same rule as the module's beginLesson). */
+export function repeatedCheck(request: ModelRequest, prompt: string | undefined): string | null {
+  if (!prompt) return null;
+  return recentCheckPrompts(request).some(p => normalizePrompt(p) === normalizePrompt(prompt))
+    ? `The check repeats a question the learner was already asked ("${prompt}"). Ask a new question with different words or numbers.`
+    : null;
 }
 
 export const errText = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e));

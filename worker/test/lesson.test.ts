@@ -53,7 +53,7 @@ describe('lesson mode', () => {
     expect(beats.slice(0, 5).every(b => !('final' in JSON.parse(String(b.visual))))).toBe(true);
     expect(JSON.parse(String(beats[5]!.visual))).toMatchObject({ final: true, interactive: true });
     expect(transport.of('appendTutorTurn')[0]).toMatchObject({ interrupted: false });
-    expect(transport.names().filter(n => !['buildContext', 'buildLessonRequest'].includes(n))[0]).toBe('beginUtterance');
+    expect(transport.names().filter(n => !['buildContext', 'buildLessonRequest', 'prefetchTopic'].includes(n))[0]).toBe('beginUtterance');
   });
 
   it('repair round with the validator message when the first output is invalid (nothing spoken yet)', async () => {
@@ -170,8 +170,38 @@ describe('lesson mode', () => {
 });
 
 describe('opening in lesson mode', () => {
-  it('stays the authored script (no LLM, no lesson); the first student turn starts the lesson', async () => {
+  it('LESSON_OPENING=lesson: the authored lead-in, then the first lesson in the same utterance', async () => {
     const { agent, transport, llm } = lessonAgent([[text(miniLessonText()), done]], { verifiedSpeech: true });
+    agent.onSession(session(A, { voice: false, turnState: 'thinking' }));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('beginOpening')).toHaveLength(1);
+    expect(transport.of('beginUtterance')).toHaveLength(0);
+    expect(transport.of('prefetchTopic')).toHaveLength(1);
+    const names = transport.names();
+    // Lead-in sentences go out before the planner request returns anything.
+    expect(names.indexOf('addSentence')).toBeLessThan(names.indexOf('beginLesson'));
+    const lead = transport.of('addSentence');
+    expect(lead.map(s => s.idx)).toEqual([0, 1]);
+    expect(String(lead[0]!.display)).toContain('Expand 2/3 to twelfths');
+    expect(transport.of('addBeat')).toHaveLength(6);
+    expect(llm.calls).toHaveLength(1);
+    // The planner got the arc-free system prompt plus the library index.
+    expect(String(llm.calls[0]!.messages[0]!.content)).toContain('LIBRARY INDEX');
+    const tutorText = String(transport.of('appendTutorTurn')[0]!.text);
+    expect(tutorText.startsWith(String(lead[0]!.display))).toBe(true);
+    expect(tutorText).toContain(miniMoments[0]!.narration);
+  });
+
+  it('without a task the opening stays the authored script', async () => {
+    const { agent, transport, llm } = lessonAgent([[text(miniLessonText()), done]], { verifiedSpeech: true });
+    agent.onSession(session(A, { voice: false, turnState: 'thinking', taskText: '' }));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('beginLesson')).toHaveLength(0);
+    expect(llm.calls).toHaveLength(0);
+  });
+
+  it('LESSON_OPENING=script: stays the authored script (no LLM, no lesson); the first student turn starts the lesson', async () => {
+    const { agent, transport, llm } = lessonAgent([[text(miniLessonText()), done]], { verifiedSpeech: true, lessonOpening: 'script' });
     agent.onSession(session(A, { voice: false, turnState: 'thinking' }));
     await waitFor(() => transport.of('appendTutorTurn').length === 1);
     expect(transport.of('beginOpening')).toHaveLength(1);
@@ -183,6 +213,37 @@ describe('opening in lesson mode', () => {
     agent.onTurn(turn(A, 1, 'why is 2/4 one half?'));
     await waitFor(() => transport.of('appendTutorTurn').length === 2);
     expect(transport.of('beginLesson')).toHaveLength(1);
+  });
+});
+
+describe('topic prefetch', () => {
+  it('keywords miss -> the LLM picks a taxonomy concept and the module stores it (setTopic)', async () => {
+    const { agent, transport, llm } = lessonAgent([[text('{"category":"fractions","concept":"fractions-expand"}'), done], [text(miniLessonText()), done]], { verifiedSpeech: true, lessonOpening: 'script' });
+    transport.topicPrefetch = JSON.stringify({ ok: false, category: '', concept: '', source: 'none', text: 'Page 34 number 5', hasImage: false });
+    agent.onSession(session(A, { voice: false, turnState: 'thinking' }));
+    await waitFor(() => transport.of('setTopic').length === 1);
+    expect(transport.of('setTopic')[0]).toMatchObject({ category: 'fractions', concept: 'fractions-expand' });
+    expect(String(llm.calls[0]!.messages[0]!.content)).toContain('fractions-expand (Expanding fractions)');
+  });
+});
+
+describe('repeated check', () => {
+  it('is rejected locally as soon as the meta parsed (before moment 1 streams): repair round, nothing sent', async () => {
+    const asked = { ...request(), context: { ...request().context, recentSteps: [{ id: 's0', phase: 'intuition', learningGoal: 'g', approach: 'introduce', rationale: 'r', beats: [{ id: 'b', narration: 'n', cues: [] }], check: miniMeta.check, evidenceToObserve: ['x'], assessment: null }] } };
+    const g = gate();
+    const json = miniLessonText();
+    const metaEnd = json.indexOf(',"moments"');
+    const fresh = JSON.stringify({ meta: { ...miniMeta, check: { ...miniMeta.check, prompt: 'What stays the same?' } }, moments: miniMoments });
+    const { agent, transport, llm } = lessonAgent([[text(json.slice(0, metaEnd + 1)), { type: 'wait', until: g.p }, text(json.slice(metaEnd + 1)), done], [text(fresh), done]]);
+    transport.lessonRequest = asked;
+    agent.onSession(session(A, { voice: false }));
+    agent.onTurn(turn(A, 0, 'help'));
+    await waitFor(() => llm.calls.length === 2, 2000, 'repair round');
+    expect(String(llm.calls[1]!.messages[1]!.content)).toMatch(/repeats a question/);
+    g.open();
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('beginLesson')).toHaveLength(1); // only the fresh meta reached the module
+    expect(JSON.parse(String(transport.of('beginLesson')[0]!.meta)).check.prompt).toBe('What stays the same?');
   });
 });
 

@@ -77,6 +77,8 @@ export interface Transport {
   // ---- team lesson planner (contract section 1)
   /** JSON {ok: true, request: ModelRequest} | {ok: false, error}. */
   buildLessonRequest(a: { sessionId: bigint; requestId: string }): Promise<string>;
+  /** Topic prefetch (keyword cues in the module): JSON {ok, category, concept, source, text, hasImage}. */
+  prefetchTopic(a: { sessionId: bigint }): Promise<string>;
   beginLesson(a: { sessionId: bigint; utteranceId: bigint; meta: string }): Promise<void>;
   addBeat(a: { sessionId: bigint; utteranceId: bigint; idx: number; visual: string; narration: string }): Promise<void>;
   agentHeartbeat(a: { model: string; provider: string; busySessions: number }): Promise<void>;

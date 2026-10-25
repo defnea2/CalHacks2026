@@ -48,6 +48,8 @@ const agent = new Agent({
     recentTurns: cfg.recentTurns,
     toolTimeoutMs: cfg.toolTimeoutMs,
     replyMode: cfg.replyMode,
+    lessonOpening: cfg.lessonOpening,
+    lessonLibrary: cfg.lessonLibrary,
   },
 });
 const tutor = TutorRequests.anthropic(link.transport, cfg.anthropicApiKey, cfg.anthropicModel, log);
@@ -55,7 +57,7 @@ const tutor = TutorRequests.anthropic(link.transport, cfg.anthropicApiKey, cfg.a
 log(
   `worker: ${modelInfo}, ` +
     `preemptive ${cfg.preemptive ? `on (${cfg.preemptiveSilenceMs} ms)` : 'off'}, pack ${pack.version}, ${agent.router.tools.length} tools, ` +
-    `reply mode ${cfg.replyMode}${cfg.replyMode === 'lesson' ? ` (effort ${cfg.lessonEffort})` : ''}`
+    `reply mode ${cfg.replyMode}${cfg.replyMode === 'lesson' ? ` (effort ${cfg.lessonEffort}, opening ${cfg.lessonOpening}, library ${cfg.lessonLibrary ? 'on' : 'off'})` : ''}`
 );
 link.start(agent, tutor);
 

@@ -56,6 +56,8 @@ export class FakeTransport implements Transport {
   getSessionImage = async (a: object) => (await this.rec('getSessionImage', a), this.image);
   lessonRequest: unknown = null;
   buildLessonRequest = async (a: object) => (await this.rec('buildLessonRequest', a), JSON.stringify(this.lessonRequest ? { ok: true, request: this.lessonRequest } : { ok: false, error: 'no lesson request' }));
+  topicPrefetch = JSON.stringify({ ok: false, category: '', concept: '', source: 'none', text: '', hasImage: false });
+  prefetchTopic = async (a: object) => (await this.rec('prefetchTopic', a), this.topicPrefetch);
   beginLesson = (a: object) => this.rec('beginLesson', a);
   addBeat = (a: object) => this.rec('addBeat', a);
   agentHeartbeat = (a: object) => this.rec('agentHeartbeat', a);
