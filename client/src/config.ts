@@ -18,6 +18,10 @@ export const CLIENT_DEFAULTS = {
   PLAYBACK_LEAD_MS: 10,
   /** Silero model: v5 (32 ms frames) or legacy (96 ms frames). */
   VAD_MODEL: 'v5' as 'v5' | 'legacy',
+  /** Browser microphone processing (1 = on). `?mic_aec=0&mic_ns=0&mic_agc=0` for testing. */
+  MIC_AEC: 1,
+  MIC_NS: 1,
+  MIC_AGC: 1,
 };
 
 export type VoiceSettings = { -readonly [K in keyof typeof VOICE_DEFAULTS]: number };

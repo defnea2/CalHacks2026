@@ -58,7 +58,12 @@ export class AudioCapture {
       },
       getStream: async () => {
         this.stream = await navigator.mediaDevices.getUserMedia({
-          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          audio: {
+            channelCount: 1,
+            echoCancellation: settings.client.MIC_AEC !== 0,
+            noiseSuppression: settings.client.MIC_NS !== 0,
+            autoGainControl: settings.client.MIC_AGC !== 0,
+          },
         });
         const track = this.stream.getAudioTracks()[0];
         eventLog.log('capture.mic', { label: track?.label ?? '', settings: track?.getSettings?.() ?? {} });
