@@ -17,8 +17,11 @@ export function useConnection(settings: AppSettings): { conn: DbConnection | nul
     const c = DbConnection.builder()
       .withUri(settings.spacetimeUri)
       .withDatabaseName(settings.spacetimeDb)
-      // No fsync wait before updates reach us (~5.5 ms per hop, docs/latency-internal.md).
-      .withConfirmedReads(false)
+      // Confirmed reads stay ON in the client (~5.5 ms per hop, docs/latency-internal.md): with
+      // unconfirmed reads a row seen by the previous screen's subscription went missing from the
+      // cache when the session screen swapped subscriptions ("Session N does not exist", 3 of 5
+      // runs on night/base). The worker, whose subscriptions never change, keeps them off.
+      .withConfirmedReads(true)
       .onConnect((cn, identity) => {
         if (!alive) return;
         eventLog.log('conn.connected', { identity: identity.toHexString().slice(0, 16) });

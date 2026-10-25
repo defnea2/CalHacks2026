@@ -104,7 +104,7 @@ async function snapshotDom(page: Page): Promise<DomSnapshot> {
       // Team canvas: all math_canvas items share one persistent animated canvas.
       mathBoard: (() => {
         const el = document.querySelector('[data-testid="animated-math-board"]');
-        return el ? { canvas: !!el.querySelector('svg,canvas,.katex'), error: !!el.querySelector('[role="alert"]') } : null;
+        return el ? { canvas: !!el.querySelector('.teaching-canvas'), error: !!el.querySelector('[role="alert"]') } : null;
       })(),
       board: q('[data-testid="board-item"]').map(el => ({
         id: el.getAttribute('data-id') ?? '',

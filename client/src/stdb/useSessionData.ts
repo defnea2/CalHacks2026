@@ -33,20 +33,41 @@ export function sessionQueries(sessionId: bigint, withAudio: boolean): string[] 
   return q;
 }
 
+/** Resubscribes before a session counts as missing (~2 s in total). */
+const MISSING_RETRIES = 5;
+
 export function useSessionData(conn: DbConnection | null, sessionId: bigint, opts: { withAudio: boolean }): SessionData {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  // Resubscribe attempts while the applied subscription lacks the session row. Right after
+  // startSession the row can be missing from the cache for a moment (the previous screen's
+  // overlapping subscription is torn down as this one is applied; unconfirmed reads), which used
+  // to show "Session N does not exist" for a session that exists.
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => setAttempt(0), [conn, sessionId]);
 
   useEffect(() => {
     if (!conn) return;
     setReady(false);
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const sub = subscribe(conn, sessionQueries(sessionId, opts.withAudio), `session ${sessionId}`);
     sub.ready.then(
-      () => setReady(true),
+      () => {
+        if (cancelled) return;
+        const found = [...conn.db.session.iter()].some(r => r.id === sessionId);
+        if (found || attempt >= MISSING_RETRIES) setReady(true);
+        else retry = setTimeout(() => !cancelled && setAttempt(a => a + 1), 150 * (attempt + 1));
+      },
       e => setError(String(e?.message ?? e))
     );
-    return () => sub.unsubscribe();
-  }, [conn, sessionId, opts.withAudio]);
+    return () => {
+      cancelled = true;
+      clearTimeout(retry);
+      sub.unsubscribe();
+    };
+  }, [conn, sessionId, opts.withAudio, attempt]);
 
   const db = conn?.db;
   const mine = (r: { sessionId: bigint }) => r.sessionId === sessionId;
