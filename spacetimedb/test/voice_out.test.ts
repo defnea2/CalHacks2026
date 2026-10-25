@@ -55,10 +55,21 @@ describe('utterances and TTS', () => {
   });
 
   it('rejects sentences of a stale utterance', () => {
-    const { h, agent, s } = ready();
+    const { h, agent, client, s } = ready();
     call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 1n, replyToIdx: 0, preemptive: true });
+    call(h, client, mod.interrupt, { sessionId: s.id });
     call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 2n, replyToIdx: 0, preemptive: false });
     expect(() => call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 1n, idx: 0, display: 'x', speech: 'x' })).toThrow(/not current/);
+  });
+
+  it('keeps the first reply when a second one starts for the same turn (e.g. two workers)', () => {
+    const { h, agent, s } = ready();
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 1n, replyToIdx: 0, preemptive: false });
+    expect(() => call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 2n, replyToIdx: 0, preemptive: false })).toThrow(
+      /already being answered/
+    );
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 1n, idx: 0, display: 'Hi.', speech: 'Hi.' });
+    expect(session(h, s.id).currentUtteranceId).toBe(1n);
   });
 
   it('markPlayed + appendTutorTurn -> listening; tutor turn counts as a turn', () => {

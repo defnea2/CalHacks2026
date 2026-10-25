@@ -46,8 +46,12 @@ export function beginUtterance(
   }
   const target = findTurn(ctx, args.sessionId, args.replyToIdx);
   if (!target || target.role !== 'student') throw new SenderError(`no student turn ${args.replyToIdx}`);
-  updateSession(ctx, session, { currentUtteranceId: args.utteranceId });
   const m = metricsFor(ctx, args.sessionId, args.replyToIdx);
+  // Another reply to this turn is already speaking (e.g. a second worker): keep the first one.
+  if (m.utteranceId !== 0n && m.utteranceId !== args.utteranceId && session.currentUtteranceId === m.utteranceId) {
+    throw new SenderError(`turn ${args.replyToIdx} is already being answered by utterance ${m.utteranceId}`);
+  }
+  updateSession(ctx, session, { currentUtteranceId: args.utteranceId });
   ctx.db.turnMetrics.id.update({ ...m, utteranceId: args.utteranceId, preemptive: args.preemptive });
 }
 
