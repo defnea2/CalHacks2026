@@ -29,8 +29,22 @@
 .lesson-stage .shear-proof svg { flex: 1; min-height: 140px; height: 100%; }
 .lesson-stage .shear-caption { display: none; }
 .lesson-stage .math-controls { flex-shrink: 0; padding: 8px; gap: 12px; }
+.lesson-stage .math-controls:disabled { display: none; }
 .lesson-stage .math-equation { flex-shrink: 0; padding: 10px; margin: 0; font-size: 20px; }
 .lesson-stage .math-equation small { margin-top: 4px; }
+.lesson-stage .lab-instruction { display: none; }
+.lesson-stage .lab-embedded { padding: 0; }
+.lesson-stage .lab-bars { gap: 16px; }
+.lesson-stage .lab-bar-card, .lesson-stage .lab-line-card { border: 0; padding: 8px 0; }
+.lesson-stage .lab-bar-heading { margin-bottom: 8px; }
+.lesson-stage .lab-fraction { font-size: 16px; }
+.lesson-stage .lab-fraction-bar { height: 56px; }
+.lesson-stage .lab-object-title:disabled, .lesson-stage .lab-fraction-bar button:disabled { opacity: 1; }
+.lesson-stage .lab-bar-settings { margin-top: 8px; }
+.lesson-stage .lab-number-rail { margin: 35px 20px 50px; }
+.lesson-stage .math-geometry { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.lesson-stage .math-geometry > [role=group] { flex: 1; min-height: 180px; }
+.lesson-stage .math-geometry-caption { font-size: 12px; }
 .stage-caption { padding: 12px 35px 22px; max-width: 780px; margin: auto; text-align: center; font-size: 17px; line-height: 1.5; min-height: 68px; color: #4d6154; text-wrap: pretty; }
 .stage-controls { display: flex; align-items: center; justify-content: space-between; gap: 20px; border-top: 1px solid #e2e6dc; padding: 14px 26px; flex-shrink: 0; }
 .stage-controls button { background: #2c4e3c; border-color: #2c4e3c; color: #fffdf6; height: 44px; font-size: 13px; }

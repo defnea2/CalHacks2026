@@ -53,6 +53,10 @@ one audio cue. Its punctuation does not change the number of cues. A completed
 plan ends the model loop, avoiding a second LLM request and duplicate narration.
 Trailing free text and a second narrated canvas in the same reply are suppressed.
 The same preemptive-output gate and interruption checks apply to planned speech.
+The production provider adapter also withholds free text from any round that
+calls tools, so setup and repair commentary cannot become student-facing audio.
+Plain conversational replies are released when their round completes without a
+tool; the final tool-free fallback still streams normally.
 
 The worker tags the board with `utteranceId` and the next `sentenceIdx`. Moment N
 runs when audio for `sentenceIdx + sentenceOffset` actually starts. This is

@@ -186,12 +186,12 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
           <div className="stage-caption" aria-live="off">{liveCaption || 'Tell me what feels confusing. We’ll make it visible here.'}</div>
           <footer className="stage-controls">
             <div className="voice-control">
-              {!voice ? <Button size="lg" data-testid="start-talking" onClick={startTalking} disabled={starting || !session?.active}>
+              {session && !session.active ? <Button size="lg" onClick={() => navigate(homeUrl())}>Start another question</Button> : !voice ? <Button size="lg" data-testid="start-talking" onClick={startTalking} disabled={starting || !session?.active}>
                 <MicIcon />{starting ? 'Starting…' : APP_CONFIG.startButtonText}
               </Button> : <Button size="lg" variant="outline" data-testid="stop-talking" onClick={stopTalking}><MicIcon />Pause microphone</Button>}
               {voice && <MicMeter ui={ui} />}
             </div>
-            <p data-testid="headphones-hint">{ui.noise === 'noisy' ? APP_CONFIG.noisyHint : voice ? 'Think aloud. You can interrupt at any time.' : 'Headphones help us hear each other.'}</p>
+            <p data-testid="headphones-hint">{session && !session.active ? 'Your picture and conversation are saved.' : ui.noise === 'noisy' ? APP_CONFIG.noisyHint : voice ? 'Think aloud. You can interrupt at any time.' : 'Headphones help us hear each other.'}</p>
           </footer>
         </section>
         <aside id="lesson-conversation" className="lesson-conversation" hidden={!conversationOpen} aria-label="Conversation">
@@ -209,7 +209,6 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
         </aside>
       </div>
       {debugOpen && <><Indicators data={data} noise={{ state: ui.noise, floorDb: ui.floorDb }} /><DebugPanel data={data} localLatency={localLatency} /></>}
-      {session && !session.active && <Button variant="outline" onClick={() => navigate(homeUrl())}>Back to learners</Button>}
     </div>
   );
 }

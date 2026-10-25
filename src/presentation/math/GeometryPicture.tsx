@@ -13,6 +13,16 @@ export function GeometryPicture({ visual: v, enabled, onChange, animateChanges =
   const [drawn, setDrawn] = useState({ width: v.width, height: v.height });
   const current = useRef(drawn);
   const [previous, setPrevious] = useState<typeof drawn | null>(null);
+  const plot = useRef<HTMLDivElement>(null);
+  const [plotHeight, setPlotHeight] = useState(300);
+  useEffect(() => {
+    if (!plot.current || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setPlotHeight(Math.max(180, Math.round(entry.contentRect.height)));
+    });
+    observer.observe(plot.current);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const from = current.current, to = { width: v.width, height: v.height };
     if (!animateChanges || reduced || (from.width === to.width && from.height === to.height)) {
@@ -39,8 +49,8 @@ export function GeometryPicture({ visual: v, enabled, onChange, animateChanges =
   const corners: [number, number][] = triangle ? [[left,bottom],[x,bottom],point] : [[left,bottom],[x,bottom],point,[left,y]];
   return <div className="math-geometry">
     <p className="math-geometry-caption">{triangle ? "A triangle inside its rectangle" : "Each grid square is one square unit."}</p>
-    <div role="group" aria-label={`${triangle ? "Right triangle" : "Rectangle"}, base ${v.width}, height ${v.height}`}>
-      <Mafs height={300} pan={false} zoom={false} viewBox={{ x: [-1,13], y: [-1,Math.max(5, v.height + 1)], padding: 0 }}>
+    <div ref={plot} role="group" aria-label={`${triangle ? "Right triangle" : "Rectangle"}, base ${v.width}, height ${v.height}`}>
+      <Mafs height={plotHeight} pan={false} zoom={false} viewBox={{ x: [-1,13], y: [-1,Math.max(5, v.height + 1)], padding: 0 }}>
         <Coordinates.Cartesian xAxis={{ labels: false, axis: false }} yAxis={{ labels: false, axis: false }} />
         {triangle && <Polygon points={[[left,bottom],[x,bottom],point,[left,y]]} color="#b8723f" fillOpacity={0.04} strokeStyle="dashed" strokeOpacity={0.45} />}
         {previous && !triangle && <Polygon points={[[left,bottom],[left+previous.width,bottom],[left+previous.width,bottom+previous.height],[left,bottom+previous.height]]} color="#b8723f" fillOpacity={0.04} strokeStyle="dashed" weight={2} />}
