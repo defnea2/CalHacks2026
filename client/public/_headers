@@ -1,0 +1,40 @@
+# Cloudflare Pages response headers for the static client (copied to dist/ by Vite).
+# Rules that match the same path join a repeated header with a comma, so every header below is
+# set by exactly one rule per path. No COOP/COEP: ONNX Runtime runs with numThreads = 1 (VAD and
+# Smart Turn), so SharedArrayBuffer / cross-origin isolation are not needed (and COEP would block
+# the Google Fonts stylesheet). See docs/DEPLOY.md.
+
+# HTML: always revalidate, so a new deploy is picked up on the next load.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+
+# Vite output: content-hashed file names.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# VAD worklet, Silero + Smart Turn models, ONNX Runtime wasm + glue: fixed names, change only
+# with a dependency bump. One day, then revalidate (ETag).
+/vad/*
+  Cache-Control: public, max-age=86400, must-revalidate
+  X-Content-Type-Options: nosniff
+/vad/ort-wasm-simd-threaded.wasm
+  Content-Type: application/wasm
+/vad/ort-wasm-simd-threaded.mjs
+  Content-Type: text/javascript; charset=utf-8
+/vad/vad.worklet.bundle.min.js
+  Content-Type: text/javascript; charset=utf-8
+/vad/silero_vad_v5.onnx
+  Content-Type: application/octet-stream
+/vad/silero_vad_legacy.onnx
+  Content-Type: application/octet-stream
+/vad/smart-turn-v3.2-cpu.onnx
+  Content-Type: application/octet-stream
+/vad/LICENSE-smart-turn.txt
+  Content-Type: text/plain; charset=utf-8
+
+# Microphone and camera (photo button) only for this origin, never for embedded frames.
+/*
+  Permissions-Policy: microphone=(self), camera=(self)
+  Referrer-Policy: strict-origin-when-cross-origin

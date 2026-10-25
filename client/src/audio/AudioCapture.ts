@@ -29,7 +29,9 @@ export interface CaptureOptions {
   onTrackEnded?: () => void;
 }
 
-export const VAD_ASSET_PATH = `${import.meta.env.BASE_URL ?? '/'}vad/`;
+// Absolute URL: with the relative build base ('./') ONNX Runtime would otherwise resolve its wasm
+// glue against its own chunk (assets/), not the page.
+export const VAD_ASSET_PATH = new URL(`${import.meta.env.BASE_URL ?? '/'}vad/`, globalThis.location?.href ?? 'http://localhost/').href;
 
 export class AudioCapture {
   readonly machine: VadMachine;

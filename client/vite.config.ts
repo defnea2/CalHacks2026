@@ -55,13 +55,18 @@ function vadAssets(): Plugin {
     },
     writeBundle() {
       mkdirSync(join(outDir, 'vad'), { recursive: true });
-      for (const [name, src] of files) copyFileSync(src, join(outDir, 'vad', name));
+      // The JSEP (WebGPU/WebNN) runtime is never loaded: VAD and Smart Turn run on the plain wasm
+      // EP. Its 28 MB wasm is also over Cloudflare Pages' 25 MiB per-file limit (docs/DEPLOY.md).
+      for (const [name, src] of files) if (!name.includes('.jsep.')) copyFileSync(src, join(outDir, 'vad', name));
     },
   };
 }
 
 export default defineConfig({
   envDir: '..',
+  // Relative asset URLs: dist/ works as plain static files from any root or sub-path
+  // (Cloudflare Pages, `npx serve`). The app routes by query string only (?class=, ?lesson, ...).
+  base: './',
   // The team's UI (repo-root src/: app, teaching, presentation, visuals, interactions, visual-math)
   // is part of this one static build under the alias @tutor/visual (folder names unchanged).
   resolve: { dedupe: ['react', 'react-dom', 'zod', 'motion', 'mafs', 'katex'], alias: { '@tutor/visual': join(here, '..', 'src') } },
