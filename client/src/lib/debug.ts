@@ -19,7 +19,7 @@ export class EventLog {
   private listeners = new Set<Listener>();
 
   log(type: string, data: Record<string, unknown> = {}): LogEvent {
-    const e: LogEvent = { t: performance.now(), wall: Date.now(), type, ...data };
+    const e: LogEvent = { t: performance.now(), wall: Date.now(), ...data, type };
     this.events.push(e);
     if (this.events.length > MAX_EVENTS) this.events.splice(0, this.events.length - MAX_EVENTS);
     for (const l of this.listeners) l(e);

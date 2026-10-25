@@ -5,10 +5,11 @@ import { PickUser } from './screens/PickUser';
 import { SessionScreen } from './screens/SessionScreen';
 import { ObserverScreen } from './screens/ObserverScreen';
 import { Overview } from './screens/Overview';
+import { MicCheck } from './screens/MicCheck';
 import { APP_CONFIG } from './app-config';
 import { homeUrl, navigate } from './lib/format';
 
-type Route = { name: 'pick' } | { name: 'session'; id: bigint } | { name: 'observe'; id: bigint } | { name: 'overview' };
+type Route = { name: 'pick' } | { name: 'session'; id: bigint } | { name: 'observe'; id: bigint } | { name: 'overview' } | { name: 'miccheck' };
 
 function parseRoute(search: string): Route {
   const p = new URLSearchParams(search);
@@ -21,6 +22,7 @@ function parseRoute(search: string): Route {
   const o = id('observe');
   if (o !== null) return { name: 'observe', id: o };
   if (p.has('overview')) return { name: 'overview' };
+  if (p.has('miccheck')) return { name: 'miccheck' };
   return { name: 'pick' };
 }
 
@@ -78,7 +80,9 @@ export function App({ settings }: { settings: AppSettings }) {
             Cannot reach SpacetimeDB at {settings.spacetimeUri} / {settings.spacetimeDb}: {error}
           </p>
         ) : null}
-        {!conn ? (
+        {route.name === 'miccheck' ? (
+          <MicCheck settings={settings} />
+        ) : !conn ? (
           <p className="py-16 text-center text-sm text-muted-foreground">Connecting…</p>
         ) : route.name === 'session' ? (
           <SessionScreen key={`s${route.id}`} conn={conn} sessionId={route.id} settings={settings} />

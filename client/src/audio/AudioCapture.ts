@@ -64,9 +64,30 @@ export class AudioCapture {
     eventLog.log('capture.started', {});
   }
 
+  private stats = { n: 0, levelSum: 0, maxLevel: -100, maxProb: 0, since: 0 };
+
   private onFrame(prob: number, frame: Float32Array): void {
     if (this.stopped) return;
     const level = rmsDbfs(frame);
+    // once a second: frame statistics (helps debug fake microphones in the E2E harness)
+    const st = this.stats;
+    const now = performance.now();
+    if (st.since === 0) st.since = now;
+    st.n++;
+    st.levelSum += level;
+    st.maxLevel = Math.max(st.maxLevel, level);
+    st.maxProb = Math.max(st.maxProb, prob);
+    if (now - st.since >= 1000) {
+      eventLog.log('vad.frame_stats', {
+        frames: st.n,
+        meanDb: Math.round(st.levelSum / st.n),
+        maxDb: Math.round(st.maxLevel),
+        maxProb: Math.round(st.maxProb * 100) / 100,
+        floorDb: this.machine.noise.floorDb === null ? null : Math.round(this.machine.noise.floorDb),
+        tutorSpeaking: this.machine.tutorSpeaking,
+      });
+      this.stats = { n: 0, levelSum: 0, maxLevel: -100, maxProb: 0, since: now };
+    }
     this.opts.onFrame?.(level, prob);
     for (const e of this.machine.process(prob, frame, level)) this.opts.onEvent(e);
   }
