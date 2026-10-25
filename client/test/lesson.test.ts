@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BeatCanvasPlayer, latestUtteranceBeats, orderBeats, parseScene, playbackOver, readingMs, revealCount, type OrderedBeat } from '../src/lesson/beatPlayer';
+import { BeatCanvasPlayer, latestUtteranceBeats, orderBeats, parseScene, playbackOver, readingMs, revealCount, withoutUnheard, type OrderedBeat } from '../src/lesson/beatPlayer';
 import { utteranceProgress } from '../src/board/reveal';
 import { agentStatusView, AGENT_STALE_MS } from '../src/session/useAgentStatus';
 import { typedTurnText } from '../src/components/session';
@@ -37,6 +37,14 @@ describe('revealCount', () => {
     expect(revealCount({ beats, started: new Map([['5', [0, 1, 2]]]), over: playbackOver(done, serverOver), mode: 'voice', textShown: 0 })).toBe(4);
     // No sentence rows for an utterance: the server's view decides.
     expect(playbackOver(new Map(), () => true)(3n)).toBe(true);
+  });
+  it('voice: unheard beats of an interrupted utterance are dropped, the next utterance still plays', () => {
+    const started = new Map([['5', [0]], ['7', [0]]]);
+    const all = orderBeats([row(5n, 0, array(1, 1)), row(5n, 1, array(2, 2)), row(5n, 2, array(3, 3)), row(7n, 0, array(4, 4))]);
+    const kept = withoutUnheard(all, new Set(['5']), started);
+    expect(kept.map(b => b.key)).toEqual(['5:0', '7:0']);
+    expect(revealCount({ beats: kept, started, over: u => u === 5n, mode: 'voice', textShown: 0 })).toBe(2);
+    expect(withoutUnheard(all, new Set(), started)).toHaveLength(4);
   });
   it('text: earlier utterances fully, the latest up to the local cursor', () => {
     expect(revealCount({ beats, started: new Map(), over: () => false, mode: 'typed', textShown: 2 })).toBe(3);

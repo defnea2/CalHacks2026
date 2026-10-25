@@ -101,6 +101,19 @@ export function playbackOver(progress: ReadonlyMap<string, { over: boolean }>, s
   return u => progress.get(u.toString())?.over ?? serverOver(u);
 }
 
+/**
+ * Voice: beats of an interrupted utterance whose sentence never started are not shown (the module
+ * rolls canvas_state back to the last beat the learner saw). They are removed from the list rather
+ * than stopping the prefix, so the next utterance's beats still play.
+ */
+export function withoutUnheard(beats: readonly OrderedBeat[], interrupted: ReadonlySet<string>, started: ReadonlyMap<string, readonly number[]>): OrderedBeat[] {
+  if (!interrupted.size) return beats as OrderedBeat[];
+  return beats.filter(b => {
+    const u = b.utteranceId.toString();
+    return !interrupted.has(u) || b.sentenceIdx < 0 || (started.get(u) ?? []).includes(b.sentenceIdx);
+  });
+}
+
 /** Beats of the latest utterance (text-mode playback works on these: one step per beat, its
  *  keyframe parts show together by idx). */
 export function latestUtteranceBeats(beats: readonly OrderedBeat[]): OrderedBeat[] {

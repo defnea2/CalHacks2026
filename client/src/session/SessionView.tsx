@@ -24,7 +24,7 @@ import { compressPhoto } from '../lib/photo';
 import { eventLog } from '../lib/debug';
 import { homeUrl, navigate, routeUrl, sessionUrl } from '../lib/format';
 import { shouldStartConversation } from '../lib/conversation';
-import { latestUtteranceBeats, orderBeats, parseScene, playbackOver, revealCount } from '../lesson/beatPlayer';
+import { latestUtteranceBeats, orderBeats, parseScene, playbackOver, revealCount, withoutUnheard } from '../lesson/beatPlayer';
 import { parseNotes } from '@tutor/visual/teaching/spacetimeModel';
 import { LessonCanvas } from './LessonCanvas';
 import { useTextPlayback } from './useTextPlayback';
@@ -97,15 +97,17 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
   const mode: 'voice' | 'typed' = session?.voice === false ? 'typed' : 'voice';
 
   // ------------------------------------------------------------ lesson rows → canvas
-  const beats = useMemo(() => orderBeats(data.beats), [data.beats]);
-  const latest = useMemo(() => latestUtteranceBeats(beats), [beats]);
-  const text = useTextPlayback(latest, mode === 'typed' && !readOnly, reducedMotion);
   const started = useMemo(() => {
     const m = new Map<string, number[]>();
     for (const s of data.sentences) if (s.status === PLAYED) m.set(s.utteranceId.toString(), [...(m.get(s.utteranceId.toString()) ?? []), s.idx]);
     if (!readOnly) for (const [u, idx] of localStarted) m.set(u, [...new Set([...(m.get(u) ?? []), ...idx])]);
     return m;
   }, [data.sentences, localStarted, readOnly]);
+  const interrupted = useMemo(() => new Set(data.turns.filter(t => t.role === 'tutor' && t.interrupted).map(t => t.utteranceId.toString())), [data.turns]);
+  const allBeats = useMemo(() => orderBeats(data.beats), [data.beats]);
+  const beats = useMemo(() => (mode === 'typed' && !readOnly ? allBeats : withoutUnheard(allBeats, interrupted, started)), [allBeats, mode, readOnly, interrupted, started]);
+  const latest = useMemo(() => latestUtteranceBeats(beats), [beats]);
+  const text = useTextPlayback(latest, mode === 'typed' && !readOnly, reducedMotion);
   const beatsOver = useMemo(() => playbackOver(progress, serverOver), [progress, serverOver]);
   const shownCount = revealCount({ beats, started, over: beatsOver, mode: readOnly && mode === 'typed' ? 'voice' : mode, textShown: text.shown });
   // Observer of a text session: the module marks sentences played after their reading time.
@@ -399,7 +401,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
       data-testid={readOnly ? 'observer-screen' : 'session-screen'}
       data-session-id={sessionId.toString()}
       data-mode={mode}
-      className={`lesson-studio ${conversationOpen ? '' : 'conversation-hidden'} ${readOnly ? 'lesson-readonly' : ''}`}
+      className={`lesson-studio ${conversationOpen ? '' : 'conversation-hidden'} ${readOnly ? 'lesson-readonly' : ''} ${debugOpen ? 'with-debug' : ''}`}
     >
       <div className="lesson-topline">
         <div className="lesson-question">
