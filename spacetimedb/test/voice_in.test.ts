@@ -40,11 +40,11 @@ describe('pushAudio', () => {
       seen = req;
       return { status: 200, body: JSON.stringify({ type: 'transcript', text: ' two thirds ', duration: 0.3 }) };
     });
-    expect(seen!.uri).toBe('http://127.0.0.1:8787/stt?encoding=pcm_s16le&sample_rate=16000');
+    expect(seen!.uri).toBe('https://api.cartesia.ai/stt?encoding=pcm_s16le&sample_rate=16000');
     expect(seen!.headers['authorization']).toBe('Bearer cartesia-test');
     expect(seen!.headers['cartesia-version']).toBeTruthy();
     expect(seen!.headers['content-type']).toMatch(/^multipart\/form-data; boundary=/);
-    expect(seen!.text).toContain('name="model"\r\n\r\nink-2');
+    expect(seen!.text).toContain('name="model"\r\n\r\nink-whisper');
     expect(seen!.text).toContain('name="language"');
     // audio bytes in seq order: 1s then 2s then 3s
     const body = seen!.body;

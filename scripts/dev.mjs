@@ -9,7 +9,7 @@ const NO_PROXY = { NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localho
 const env = { ...loadEnv(), ...process.env, ...NO_PROXY, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}` };
 const children = [];
 const provider = env.LLM_PROVIDER || (env.ANTHROPIC_API_KEY ? 'anthropic' : 'openrouter');
-const required = ['CARTESIA_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', ...(provider === 'anthropic' ? ['ANTHROPIC_API_KEY'] : [])];
+const required = ['CARTESIA_API_KEY', ...(provider === 'anthropic' ? ['ANTHROPIC_API_KEY'] : ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL'])];
 const missing = required.filter(key => !env[key]?.trim());
 if (missing.length) {
   console.error(`Missing local voice configuration: ${missing.join(', ')}. Fill .env.local before starting.`);
@@ -63,7 +63,9 @@ const publishArgs = ['scripts/publish.mjs', ...(process.argv.includes('--clear')
 if (spawnSync('node', publishArgs, { cwd: ROOT, env, stdio: 'inherit' }).status !== 0) process.exit(1);
 spawnSync('pnpm', ['stdb:generate'], { cwd: ROOT, env, stdio: 'inherit' });
 
-if (!(await up('http://127.0.0.1:8787/health'))) run('stt', 'pnpm', ['--filter', 'stt-proxy', 'start'], '36');
+// The local stt-proxy is only useful when STT_BASE_URL points at it (it can't be reached from
+// SpacetimeDB procedures on loopback; see README "STT decision").
+if (/^https?:\/\/(127\.|localhost)/.test(env.STT_BASE_URL || '') && !(await up('http://127.0.0.1:8787/health'))) run('stt', 'pnpm', ['--filter', 'stt-proxy', 'start'], '36');
 run('worker', 'pnpm', ['--filter', 'worker', 'start'], '33');
 if (!process.argv.includes('--no-client')) run('client', 'pnpm', ['--filter', 'client', 'dev', '--port', env.VOICE_CLIENT_PORT || '5175'], '32');
 
