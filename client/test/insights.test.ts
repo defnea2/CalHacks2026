@@ -80,6 +80,8 @@ describe('sections in teacher language', () => {
     expect(noteSentence({ ...notes[0]!, text: 'mixes tops and bottoms' })).toBe('Mixes tops and bottoms.');
     expect(noteMeta(NOW, notes[0]!)).toBe('clearly · seen 3 times · 2 hours ago');
     expect(noteMeta(NOW, q)).not.toMatch(/clearly|likely/);
+    expect(noteMeta(NOW, notes[1]!)).toBe('likely'); // seeded, never reinforced
+    expect(noteMeta(NOW, { ...notes[1]!, reinforced: 1 })).toBe('likely · seen twice · 9 days ago');
   });
 
   it('evidence: "said in session N" with exact numbering, else relative date', () => {
@@ -134,6 +136,8 @@ describe('at a glance + next focus', () => {
   it('header lines', () => {
     expect(sessionsLine(fx())).toMatch(/^3 sessions since Oct \d+$/);
     expect(sessionsLine(emptyInsightsFixture(NOW))).toBe('No sessions yet');
+    const seededSummary = { ...emptyInsightsFixture(NOW), summaries: fx().summaries.slice(0, 1) };
+    expect(sessionsLine(seededSummary)).toMatch(/^1 session since/);
     expect(ageGrade(fx().learner)).toBe('Age 9 · Grade 4');
     expect(ageGrade({ ...fx().learner, grade: 0 })).toBe('Age 9 · Kindergarten');
   });

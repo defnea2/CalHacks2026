@@ -135,6 +135,8 @@ export function noteSentence(n: InsightNote): string {
 export function noteMeta(now: number, n: InsightNote): string {
   const parts: string[] = [];
   if (n.kind !== 'quote') parts.push(confidenceWord(n.confidence));
+  // seeded notes come from the starting profile: no sightings or dates to speak of
+  if (n.seeded && !n.reinforced) return parts.join(' · ');
   parts.push(seenLabel(n.reinforced));
   const at = n.updatedMs || n.createdMs;
   if (at) parts.push(relativeDate(now, at));
@@ -260,7 +262,8 @@ export function pastSessions(x: Pick<LearnerInsights, 'summaries'>): LearnerInsi
 
 /** "4 sessions since Oct 3" / "No sessions yet". */
 export function sessionsLine(x: LearnerInsights): string {
-  const n = x.learner.sessionCount;
+  // seeded demo summaries have no session row: count them too
+  const n = Math.max(x.learner.sessionCount, x.summaries.length);
   if (!n) return 'No sessions yet';
   const since = x.learner.firstSeenMs ? ` since ${new Date(x.learner.firstSeenMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : '';
   return `${n} session${n === 1 ? '' : 's'}${since}`;
