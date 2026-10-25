@@ -404,6 +404,14 @@ export const dispatchTurn = spacetimedb.procedure({ onSchedule: dispatchJob }, {
   return {};
 });
 
+/** Agent only, LLM_DISPATCH=manual (local testing): the session's pending dispatch body (JSON), marked sent; '' if none. */
+export const takeDispatch = spacetimedb.procedure({ sessionId: t.u64() }, t.string(), (ctx, { sessionId }) =>
+  ctx.withTx(tx => {
+    requireAgent(tx);
+    return dispatch.takeDispatch(tx, sessionId);
+  })
+);
+
 /** Scheduled (LLM_DISPATCH=cloudflare): liveness of one dispatch; retry once, then the fallback line. */
 export const dispatchWatch = spacetimedb.reducer({ onSchedule: dispatchWatchJob }, { job: dispatchWatchJob.rowType }, (ctx, { job }) => {
   if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');

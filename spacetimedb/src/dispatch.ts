@@ -43,7 +43,7 @@ const RETRY_DELAY_S = 0.5;
 export const FALLBACK_LINE = LEARNER_QUESTIONS.clarify_step;
 const ERROR_MAX = 300;
 
-export const isCloudflare = (ctx: { env: unknown }) => settings.llmDispatch(ctx) === 'cloudflare';
+export const isCloudflare = (ctx: { env: unknown }) => settings.llmDispatch(ctx) !== 'worker';
 
 const short = (s: string) => (s.length > ERROR_MAX ? `${s.slice(0, ERROR_MAX - 1)}…` : s);
 
@@ -83,7 +83,7 @@ function create(ctx: Ctx, a: { sessionId: bigint; kind: 'turn' | 'opening'; turn
     lastBeatAt: undefined,
     error: '',
   });
-  ctx.db.dispatchJob.insert({ scheduledId: 0n, scheduledAt: dueIn(ctx, a.attempt ? RETRY_DELAY_S : 0), dispatchId: row.id });
+  if (settings.llmDispatch(ctx) === 'cloudflare') ctx.db.dispatchJob.insert({ scheduledId: 0n, scheduledAt: dueIn(ctx, a.attempt ? RETRY_DELAY_S : 0), dispatchId: row.id });
   ctx.db.dispatchWatchJob.insert({ scheduledId: 0n, scheduledAt: dueIn(ctx, WATCH_FIRST_S + (a.attempt ? RETRY_DELAY_S : 0)), dispatchId: row.id });
   return row;
 }
@@ -277,6 +277,22 @@ export function dispatchTurn(ctx: PCtx, job: { dispatchId: bigint }): void {
     if (d.status !== 'pending') return; // superseded meanwhile
     retryOrFallback(tx, d, error);
   });
+}
+
+/** LLM_DISPATCH=manual (local testing, procedures cannot reach a local Worker): the agent takes the
+ *  session's pending dispatch body itself (marked sent) and replays it to `wrangler dev`. '' = none. */
+export function takeDispatch(ctx: Ctx, sessionId: bigint): string {
+  if (settings.llmDispatch(ctx) !== 'manual') throw new SenderError('takeDispatch needs LLM_DISPATCH=manual');
+  const d = [...ctx.db.llmDispatch.sessionId.filter(sessionId)].filter(x => x.status === 'pending').sort((a, b) => (a.id < b.id ? 1 : -1))[0];
+  if (!d) return '';
+  const why = staleReason(ctx, d);
+  if (why) {
+    ctx.db.llmDispatch.id.update({ ...d, status: 'superseded', error: why });
+    return '';
+  }
+  const body = JSON.stringify(buildBody(ctx, d));
+  ctx.db.llmDispatch.id.update({ ...ctx.db.llmDispatch.id.find(d.id)!, status: 'sent', sentAt: ctx.timestamp, acceptedAt: ctx.timestamp });
+  return body;
 }
 
 // ------------------------------------------------------------------ retry, fallback, watch

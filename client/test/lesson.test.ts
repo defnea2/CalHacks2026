@@ -91,6 +91,9 @@ describe('small views', () => {
     expect(agentStatusView(undefined, now).online).toBe(false);
     expect(agentStatusView(row(1000), now)).toMatchObject({ online: true, label: 'Connected to claude-haiku-5-5' });
     expect(agentStatusView(row(AGENT_STALE_MS + 1), now).online).toBe(false);
+    // Cloudflare dispatch (no heartbeat): the module-written row counts as online.
+    const cf = { id: 0, model: 'claude-haiku-5-5', provider: 'cloudflare', busySessions: 0, lastSeen: { microsSinceUnixEpoch: 0n } } as never;
+    expect(agentStatusView(cf, now).online).toBe(true);
   });
   it('typed turns show their text, intent-only turns their button label', () => {
     expect(typedTurnText('six', '')).toBe('six');

@@ -200,3 +200,18 @@ describe('LLM_DISPATCH=cloudflare', () => {
     expect(() => (mod.dispatchTurn as any)(proc(h, auth('mallory') as never), { job: djob })).toThrow(/scheduler only/);
   });
 });
+
+describe('LLM_DISPATCH=manual (local testing)', () => {
+  it('creates dispatches without POSTing; the agent takes the body once', () => {
+    const { h, client, agent, s } = fresh({ LLM_DISPATCH: 'manual' });
+    call(h, client, mod.submitTextTurn, { sessionId: s.id, text: 'hello', intent: '' });
+    expect([...h.db.dispatchJob.iter()]).toHaveLength(0);
+    const take = (who: ReturnType<typeof auth>) => (mod.takeDispatch as any)(proc(h, who as never), { sessionId: s.id });
+    expect(() => take(client)).toThrow(/agent only/);
+    const body = JSON.parse(take(agent));
+    expect(body).toMatchObject({ kind: 'turn', transcript: 'hello', utteranceId: String(dispatches(h, s.id)[0]!.utteranceId) });
+    expect(dispatches(h, s.id)[0]!.status).toBe('sent');
+    expect(take(agent)).toBe('');
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: BigInt(body.utteranceId), replyToIdx: 0, preemptive: false });
+  });
+});

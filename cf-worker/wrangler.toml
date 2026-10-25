@@ -1,0 +1,17 @@
+# Cloudflare Worker for LLM_DISPATCH=cloudflare (docs/DEPLOY.md "Cloudflare dispatch").
+# Secrets (never here): wrangler secret put ANTHROPIC_API_KEY / STDB_TOKEN / CF_DISPATCH_SECRET
+name = "fibonacci-dispatch"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[vars]
+# SpacetimeDB HTTP API base and database the dispatches come from.
+STDB_URL = "https://maincloud.spacetimedb.com"
+STDB_DB = "fibonacci-cfdev"
+ANTHROPIC_MODEL = "claude-haiku-5-5"
+LESSON_EFFORT = "low"
+LESSON_LIBRARY = "true"
+
+[observability]
+enabled = true

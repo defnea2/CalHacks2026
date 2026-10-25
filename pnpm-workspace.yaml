@@ -6,6 +6,7 @@ packages:
   - client
   - e2e
   - stt-proxy
+  - cf-worker
 allowBuilds:
   esbuild: true
   protobufjs: true

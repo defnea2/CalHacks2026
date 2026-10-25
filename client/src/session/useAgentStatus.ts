@@ -19,7 +19,8 @@ export interface AgentStatusView {
 
 export function agentStatusView(row: AgentStatus | undefined, now: number): AgentStatusView {
   const seen = tsMs(row?.lastSeen);
-  const online = !!row && seen !== null && now - seen < AGENT_STALE_MS;
+  // LLM_DISPATCH=cloudflare: no heartbeat; the module dispatches each turn and writes this row itself.
+  const online = !!row && (row.provider === 'cloudflare' || (seen !== null && now - seen < AGENT_STALE_MS));
   return {
     online,
     model: row?.model ?? '',

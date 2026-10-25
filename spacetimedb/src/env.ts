@@ -73,8 +73,12 @@ export const settings = {
   simMaxTurns: (ctx: { env: unknown }) => intEnv(ctx, 'SIM_MAX_TURNS', CLASSROOM_DEFAULTS.SIM_MAX_TURNS),
   dashboardIntervalS: (ctx: { env: unknown }) => intEnv(ctx, 'DASHBOARD_INTERVAL_S', CLASSROOM_DEFAULTS.DASHBOARD_INTERVAL_S),
   /** Thinking effort of the dashboard call (env DASHBOARD_EFFORT = low | medium | high). */
-  /** `worker` (default: the Node worker answers) | `cloudflare` (the module dispatches each turn, dispatch.ts). */
-  llmDispatch: (ctx: { env: unknown }): 'worker' | 'cloudflare' => (readEnv(ctx, 'LLM_DISPATCH')?.toLowerCase() === 'cloudflare' ? 'cloudflare' : 'worker'),
+  /** `worker` (default: the Node worker answers) | `cloudflare` (the module dispatches each turn, dispatch.ts)
+   *  | `manual` (local testing: dispatches are created but not POSTed; an agent takes them with takeDispatch). */
+  llmDispatch: (ctx: { env: unknown }): 'worker' | 'cloudflare' | 'manual' => {
+    const v = readEnv(ctx, 'LLM_DISPATCH')?.toLowerCase();
+    return v === 'cloudflare' || v === 'manual' ? v : 'worker';
+  },
   cfDispatchUrl: (ctx: { env: unknown }) => readEnv(ctx, 'CF_DISPATCH_URL') ?? '',
   cfDispatchSecret: (ctx: { env: unknown }) => readEnv(ctx, 'CF_DISPATCH_SECRET') ?? '',
   dashboardEffort: (ctx: { env: unknown }): 'low' | 'medium' | 'high' => {
