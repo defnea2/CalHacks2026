@@ -103,7 +103,8 @@ async function snapshotDom(page: Page): Promise<DomSnapshot> {
       noise: document.querySelector('[data-testid="noise-indicator"]')?.getAttribute('data-noise') ?? null,
       // Team canvas: all math_canvas items share one persistent animated canvas.
       mathBoard: (() => {
-        const el = document.querySelector('[data-testid="animated-math-board"]');
+        // Legacy math_canvas board items, or the beat-driven lesson canvas (one per session).
+        const el = document.querySelector('[data-testid="lesson-canvas"]') ?? document.querySelector('[data-testid="animated-math-board"]');
         return el ? { canvas: !!el.querySelector('.teaching-canvas'), error: !!el.querySelector('[role="alert"]') } : null;
       })(),
       board: q('[data-testid="board-item"]').map(el => ({

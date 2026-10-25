@@ -2,7 +2,18 @@
 
 # Client
 
-Local web client: Vite + React + TypeScript + Tailwind v4 (neutral oklch tokens as in the neoknow test client). It talks only to SpacetimeDB, through the generated bindings in `src/module_bindings/`.
+Local web client: Vite + React + TypeScript + Tailwind v4 (neutral oklch tokens as in the neoknow test client). It talks only to SpacetimeDB, through the generated bindings in `src/module_bindings/`, and builds to static files (`pnpm --filter client build` → `dist/`; no server endpoints).
+
+## One app
+
+This is the only frontend. The team's UI stays in the repo-root `src/` with its folder names (`app`, `teaching`, `teaching/ui`, `presentation`, `visuals`, `interactions`, `visual-math`, `session`, `shared`) and is compiled into this build through the alias **`@tutor/visual`** → `../src` (`vite.config.ts` `resolve.alias`, `tsconfig.json` `paths`). Its tests keep running at the root (`npx vitest run`, jsdom). The former root Vite app (`index.html`, `src/main.tsx`, `vite.teaching.config.ts`) and its dev-server plugin (`src/server/teachingPlugin.ts`, `/api/teaching/*`, `settings.ts`) are gone; root `pnpm dev` / `pnpm build` delegate here.
+
+| Layer | Where |
+| --- | --- |
+| Session screen (voice + text, observer) | `src/session/SessionView.tsx` (`<SessionView conn sessionId readOnly? />`), canvas `LessonCanvas.tsx`, text playback `useTextPlayback.ts`, worker heartbeat `useAgentStatus.ts` |
+| Beat rows → team canvas | `src/lesson/beatPlayer.ts` (`orderBeats`, `revealCount`, `BeatCanvasPlayer` over the team `VisualDirector`) |
+| Team lesson app + harness | `src/screens/TeamLab.tsx` (`?lesson`, `?harness`) |
+| Team `PlanningModel` over SpacetimeDB | `@tutor/visual/teaching/spacetimeModel` (`createSpacetimePlanningModel(conn, sessionId)`) |
 
 ```bash
 pnpm --filter client dev     # http://127.0.0.1:5175
@@ -15,12 +26,14 @@ pnpm --filter client build
 | URL | Screen |
 | --- | --- |
 | `/` | Pick a user: learner list, create a test user, start or reopen a session (task text + optional photo, compressed to ≤ 1 MB in the browser) |
-| `?session=<id>` | Session: header (learner, code), phase/topic/turn-state/noise indicators, "Start talking" (on a session without turns the tutor then speaks first, via `startConversation`), captions, board, debug panel (per-turn latency + event log). A reload resumes it |
-| `?observe=<id>` | Observer: read-only mirror (captions, board, metrics). Plays nothing; reveals follow `reply_sentence.status = played` |
+| `?session=<id>` | Session (`SessionView`): the canvas is the main area (team `TeachingCanvas` driven by `beat` rows; legacy `board_item`s when a session has no beats), a small conversation column (captions, lesson stage, check prompt/choices, lesson buttons). The learner talks ("Start talking"; on a session without turns the tutor speaks first via `startConversation`) or types (`submitTextTurn`); "Show another way" / "Smaller step" / "Continue" / "Show me" are turns with an intent; canvas manipulations go to `submitInteraction`. Voice sessions reveal beats when their sentence plays; text sessions (`session.voice = false`, "Type instead of talking" on the start form or `?voice=0`) use the team's local playback (Pause / Next / Skip / Replay). Debug panel with `?debug=1`. A reload resumes it |
+| `?observe=<id>` | Observer: `<SessionView readOnly />` (the classroom dashboard reuses it). Plays nothing, no inputs; reveals follow `reply_sentence.status = played` |
+| `?lesson` | The team's lesson app (prepared/sample lessons, slant lesson, math studio, development tools). Live lessons create a SpacetimeDB session (`?learner=<id>` or a fresh guest learner) and run the team's `TeachingSession` on `createSpacetimePlanningModel`; "Talk instead" opens the same session in `?session=` |
+| `?harness` | The team's planning harness (offline fixtures) |
 | `?overview` | Active sessions with learner, phase, turn state; links open the observer |
 | `?miccheck` | Runs microphone + VAD locally, sends nothing. Useful to check VAD assets and timings |
 
-Subscriptions are narrow: a session tab subscribes to `session WHERE id = X`, `learner WHERE id = L`, and `phrase`, `turn`, `reply_sentence`, `board_item`, `turn_metrics`, `playback_flush`, `audio_out` `WHERE session_id = X`. Only the pick-user and overview screens read all learners and all active sessions.
+Subscriptions are narrow: a session tab subscribes to `session WHERE id = X`, `learner WHERE id = L`, and `phrase`, `turn`, `reply_sentence`, `board_item`, `turn_metrics`, `playback_flush`, `audio_out`, `beat`, `lesson_state`, `canvas_state` `WHERE session_id = X`, plus the single-row `agent_status`. Only the pick-user and overview screens read all learners and all active sessions.
 
 ## Config
 
@@ -68,8 +81,13 @@ Inline markers: the tutor writes `⟦b1⟧` in its text where an item belongs an
 | `learner-list`, `learner-item` | `data-learner-id`, `data-learner-name` | pick user (click → session or start form) |
 | `learner-active-session`, `learner-new-session` | | pick user |
 | `create-user-form`, `create-name`, `create-age`, `create-grade`, `create-style`, `create-submit` | | pick user |
-| `start-form`, `task-text`, `photo-input`, `start-session` | | pick user, after choosing a learner without an active session |
-| `session-screen` / `observer-screen` | `data-session-id` | |
+| `start-form`, `task-text`, `photo-input`, `text-mode`, `start-session` | | pick user, after choosing a learner without an active session (`text-mode`: checkbox, session starts with `voice = false`) |
+| `session-screen` / `observer-screen` | `data-session-id`, `data-mode` = voice / text | |
+| `lesson-canvas` | `data-beats` (rows in play order), `data-shown` (on the canvas) | session, observer (contains `.teaching-canvas`) |
+| `lesson-narration`, `lesson-stage` (`data-stage`), `lesson-thinking`, `agent-status` (`data-online`) | | session, observer |
+| `text-form`, `text-input`, `text-send`, `intent-another_way`, `intent-smaller_step`, `intent-continue`, `intent-demonstrate`, `lesson-help`, `stage-status` | | session |
+| `lesson-check` (`data-kind`), `check-prompt`, `choice-option` (`data-option-id`), `check-picture` | | session, while `lesson_state.awaitingResponse` |
+| `lesson-playback`, `playback-pause`, `playback-next`, `playback-skip`, `playback-replay` | | text sessions with more than one beat |
 | `learner-name`, `session-code` | `data-session-id` | header |
 | `phase-indicator` | `data-phase` (id), text = pack label | |
 | `topic-indicator` | `data-category`, `data-concept` | |
@@ -106,6 +124,7 @@ window.__tutor = {
     phrases: {phraseId, turnIdx, status, text}[],
     sentences: {utteranceId, idx, status, display}[],
     boardItems: {id, idx, kind, visible, utteranceId, sentenceIdx, markerPos, answerState}[],
+    lesson: {mode, stage, awaiting, beats, shown, agentOnline},
     observing, flushes,          // observer only
   },
   voice,                         // VoiceSession while talking (voice.playback, voice.ctx)
@@ -140,4 +159,5 @@ Event types:
 | `audio.flush` | utteranceId (0 = current), reason = playback_flush / barge_in / destroy, stopped |
 | `latency.turn_end_to_first_audio` | ms, utteranceId |
 | `observer.flush` | utteranceId |
-| `ui.*` | pick_learner, start_talking, start_failed, photo_failed, render_error |
+| `lesson.beat_shown` / `lesson.beat_error` | key (`utteranceId:idx`), sentenceIdx / error (the canvas resynced to `canvas_state`) |
+| `ui.*` | pick_learner, start_talking, start_failed, photo_failed, render_error, text_turn (intent, chars), interaction_rejected, text_mode_failed |

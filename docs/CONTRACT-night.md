@@ -47,3 +47,20 @@ Schema location: put new tables in your own file (`spacetimedb/src/schema_<area>
 ## 3. Unchanged boundaries
 - STT/TTS stay module procedures (STT via `STT_BASE_URL`), LLM streaming stays in the worker, the client builds static.
 - Live DB `voice-tutor` is the lead's. Agents publish to their own DB names.
+
+## 4. Client consumption of section 1 (owner: `night/client-static`)
+
+What the static client assumes about the section 1 rows (implemented in `src/teaching/spacetimeModel.ts` and `client/src/lesson/beatPlayer.ts`; tolerant where marked):
+
+| Item | Client assumption |
+| --- | --- |
+| `beat.visual` | JSON of the team `VisualBeat` without `narration`: `{id?, cues:[{id, atMs, commands}], question?}`. Also accepted: `{commands:[...]}` or a bare command array (one cue at 0 ms). The client applies beats of a session in `(utteranceId, idx)` order, contiguous only (a gap waits). |
+| `beat.narration` / `beat.sentenceIdx` | Narration = the `reply_sentence` that speaks it. Voice: the beat shows when that sentence starts playing (session tab) / is `played` (observer), all beats once the utterance is over. `-1` = show at once. |
+| `canvas_state.scene` | JSON `CanvasState` (team). Used only as fallback when a beat cannot be applied locally (resync), so it should be the canvas after the latest beat. |
+| `lesson_state.stage` | A team `TeachingPhase` id (shown as the team's stage label). |
+| `lesson_state.awaitingResponse` + `checkPrompt` | Shows the check prompt and the answer UI while `true` (and the session is not thinking/speaking). |
+| `lesson_state.notes` (JSON, all optional) | `step`: the team step metadata without beats (`id, phase, learningGoal, approach, rationale, exampleProblem, check, evidenceToObserve, assessment`) — `step.check` drives choice buttons (`kind: 'choice'`, `options`) and "Check my picture" (`math_value`/`placement`/`order`); `utteranceId` (string): the utterance the step belongs to; `error`: a planner failure for that utterance (the adapter rejects with it). **Write `notes.step` for utterance U before or with U's first beat**: the team `TeachingSession` freezes the blueprint at the first beat. |
+| End of a reply | The tutor `turn` row with `utteranceId = U` (or `session.currentUtteranceId` moving to another utterance). |
+| `submitInteraction(kind, payload)` | kinds sent by the client: `math` (`{action, scene}` from the team `VisualDirector.interactMath`), `activity`, `check_picture` (`{canvas}` or `{stepId, canvas}`; followed by `submitTextTurn('Check my picture.', '')`). |
+| `agent_status` | Row `id = 0`; online when `lastSeen` is younger than 30 s; label shows `model`. |
+| `tutor_request` / `tutor_result` | Not consumed yet: the slant lesson uses its labeled offline reply until the shapes exist. |
