@@ -113,22 +113,24 @@ export function Captions({
     return [...byTurn.values(), ...byUtt.values()].sort((a, b) => a.at - b.at);
   }, [data.phrases, data.sentences, tutorShown]);
 
-  const end = useRef<HTMLDivElement>(null);
+  const transcript = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
   useEffect(() => {
-    // (Chrome's scrollIntoView may return a promise; an effect must not return it)
-    void end.current?.scrollIntoView?.({ block: 'nearest' });
+    // Scroll this panel only. New speech must never move the canvas off screen.
+    if (transcript.current && follow.current) transcript.current.scrollTop = transcript.current.scrollHeight;
   }, [entries]);
 
   return (
-    <div data-testid="captions" className="flex max-h-[420px] min-h-40 flex-col gap-3 overflow-y-auto p-4">
-      {entries.length === 0 ? <p className="text-sm text-muted-foreground">Captions appear here.</p> : null}
+    <div ref={transcript} data-testid="captions" className="lesson-transcript flex max-h-[420px] min-h-40 flex-col gap-3 overflow-y-auto p-4" onScroll={() => { const el = transcript.current; if (el) follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
+      {entries.length === 0 ? <p className="text-sm text-muted-foreground">Your conversation will appear here as you talk.</p> : null}
       {entries.map(e => (
         <div
           key={e.key}
           data-testid={e.role === 'student' ? 'caption-student' : 'caption-tutor'}
           data-ref={e.ref}
-          className={cx('max-w-[85%] rounded-2xl px-4 py-2 text-[15px] leading-snug', e.role === 'student' ? 'self-end bg-primary text-primary-foreground' : 'self-start bg-secondary')}
+          className={cx('caption-entry max-w-[85%] rounded-2xl px-4 py-2 text-[15px] leading-snug', e.role === 'student' ? 'self-end bg-primary text-primary-foreground' : 'self-start bg-secondary')}
         >
+          <span className="caption-speaker">{e.role === 'student' ? 'You' : 'Tutor'}</span>
           {e.parts.map(p => (
             <span
               key={p.id}
@@ -142,7 +144,7 @@ export function Captions({
           ))}
         </div>
       ))}
-      <div ref={end} />
+
     </div>
   );
 }

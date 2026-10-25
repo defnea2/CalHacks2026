@@ -33,7 +33,7 @@ export function Board({ items, progress, serverOver, onSubmitAnswer, allowCanvas
   const started = new Map([...progress].map(([id, p]) => [id, p.started]));
   return (
     <div data-testid="board" className="flex flex-col gap-3">
-      {shown.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">The board is empty.</p> : null}
+      {shown.length === 0 ? <div className="canvas-welcome"><span className="welcome-mark" aria-hidden="true">↗</span><h2>Let’s see how it works.</h2><p>Start with your question.<br />The picture will take shape as we talk.</p></div> : null}
       <AnimatedMathBoard items={mathItems} started={started} interactive={allowCanvasInteraction} />
       {shown.filter(item => item.kind !== 'math_canvas').map(item => {
         const p = progress.get(item.utteranceId.toString()) ?? { maxStarted: -1, started: [], over: serverOver(item.utteranceId) };
