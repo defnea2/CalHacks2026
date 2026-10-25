@@ -227,6 +227,8 @@ export class ReplyRun {
         image,
       });
       let spoken = false;
+      let toolRoundLimit = this.deps.maxToolRounds;
+      let repairAvailable = true;
       for (let round = 0; ; round++) {
         // Canvas offsets count grammatical sentences. Merging short sentences or
         // splitting long ones shifts every later visual cue away from its speech.
@@ -237,7 +239,7 @@ export class ReplyRun {
         const results: Promise<ToolResult>[] = [];
         // Last allowed round: offer no tools, so the model has to speak (it otherwise tends to
         // chain tool-only rounds and the student hears nothing).
-        const last = round >= this.deps.maxToolRounds && round > 0;
+        const last = round >= toolRoundLimit && round > 0;
         const tools = last ? [] : this.deps.router.specs();
         // A round that fails before any event arrived is retried (flaky network): nothing from it
         // reached SpacetimeDB yet. Once output has started, a failure ends the reply as before.
@@ -281,11 +283,17 @@ export class ReplyRun {
           ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
         ];
         if (!calls.length) break;
+        // A rejected visual must have one bounded chance to repair its command,
+        // even when topic lookup already consumed a normal tool round.
+        if (repairAvailable && res.some(r => !r.ok && r.kind === 'query')) {
+          toolRoundLimit++;
+          repairAvailable = false;
+        }
         // Query results must go back to the LLM; action results only if nothing was said yet.
         const again = res.some(r => r.kind === 'query') || !spoken;
         if (!again) break;
-        if (round >= this.deps.maxToolRounds) {
-          this.log(`max tool rounds (${this.deps.maxToolRounds}) reached`);
+        if (round >= toolRoundLimit) {
+          this.log(`max tool rounds (${toolRoundLimit}) reached`);
           break;
         }
       }

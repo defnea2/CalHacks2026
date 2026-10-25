@@ -4,7 +4,7 @@ import { pack, TOOL_NAMES } from '@tutor/shared';
 import { done, FakeLlm, makeAgent, session, text, tokens, tool, turn, waitFor } from './fakes';
 
 const S = 1n;
-const kind = pack.boardKinds[0]!.name;
+const kind = pack.boardKinds.find(k => k.name === 'text')!.name;
 const phaseId = pack.phases[1]!.id;
 const category = pack.taxonomy[0]!.key;
 
@@ -116,6 +116,23 @@ describe('reply', () => {
     const llm = new FakeLlm([[tool(TOOL_NAMES.showBoardItem, { kind, content: { text: 'a' } }), ...tokens('Here is a picture of our pizza for you.'), done]]);
     const { transport } = await answer(llm);
     expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(0);
+  });
+
+  it('repairs an invalid continuation after topic lookup before narrating it', async () => {
+    const llm = new FakeLlm([
+      [text('Let us look at the picture. '), tool(TOOL_NAMES.setTopic, { category }), done],
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: { title: 'Cut', moments: [
+        { sentenceOffset: 1, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+      ] } }), done],
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: { title: 'Cut', moments: [
+        { sentenceOffset: 0, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'cut' } },
+      ] } }), done],
+      [text('Cut the triangle here.'), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(llm.calls.map(c => c.tools.length > 0)).toEqual([true, true, true, false]);
+    expect(transport.of('showBoardItem')).toHaveLength(1);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Let us look at the picture.', 'Cut the triangle here.']);
   });
 
   it('action-only reply without text calls the LLM again with the results', async () => {

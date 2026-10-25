@@ -7,7 +7,7 @@ import { FakeTransport, sleep } from './fakes';
 
 const ctx = (transport: FakeTransport) => ({ sessionId: 7n, utteranceId: 99n, nextSentenceIdx: 3, transport });
 const call = (name: string, args: unknown) => ({ id: 'c1', name, arguments: typeof args === 'string' ? args : JSON.stringify(args) });
-const kindName = pack.boardKinds[0]!.name;
+const kindName = pack.boardKinds.find(k => k.name === 'text')!.name;
 const phaseId = pack.phases[1]!.id;
 
 describe('tool registry', () => {
@@ -80,6 +80,18 @@ describe('ToolRouter', () => {
     }), ctx(tr));
     expect(r.ok).toBe(false);
     expect(r.kind).toBe('query'); // error goes back for repair, even after a preamble
+    expect(tr.of('showBoardItem')).toEqual([]);
+  });
+
+  it('returns an actionable error for an update-only continuation', async () => {
+    const tr = t();
+    const r = await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, {
+      kind: 'math_canvas', content: { title: 'Cut', moments: [
+        { sentenceOffset: 1, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+      ] },
+    }), ctx(tr));
+    expect(r.ok).toBe(false);
+    expect(r.result).toContain('complete picture at sentence offset zero');
     expect(tr.of('showBoardItem')).toEqual([]);
   });
 
