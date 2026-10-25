@@ -57,6 +57,13 @@ Routes: `/` entry (student or teacher) · `?student` · `?wait=<id>` waiting roo
 
 **Incident 07:07:** the shared SpacetimeDB server died because the disk was full (`No space left on device`). 26 finished agent worktrees removed (all pushed), server restarted 07:25 with the same data; demo data intact. Keep ≥ 10 GB free.
 
+### Late morning (08:30–09:20)
+Merged on `main` (one `--no-ff` merge each, revert with `git revert -m 1 <sha>`): `night/branding` (Fibonacci name + spiral logo), `night/turn-photo` (photo any time, sent with the next turn), `night/voice-ux` (voice only, mic/speaker on at start, sound settings), `night/cloud-plan` + `night/maincloud-prep` + `night/maincloud-deploy` (docs/CLOUD_PLAN.md, docs/DEPLOY.md; **live: Maincloud `fibonacci-demo` + https://fibonacci-26f.pages.dev/**, worker on the laptop from worktree `deploy/cloud`), `night/sim-history` (full seeded history for 20 personas + demo users), `night/lesson-quality` + `night/pushback` (task guards, equivalent grading, confirm before big jumps), `night/latency-fix` (guard test; the latency rise was Cartesia STT network time, not code), `night/stdb-consistency` (TTS job cancellation, worker guard, docs/SPACETIME_AUDIT.md). `demo/video` = the stable recording state (643b75f).
+
+**Final E2E on merged main (16:12Z run): 8/8 PASS**, 0 external flakes; turn end → first audio p50 **2.30 s** (min 0.50, max 3.31); session start → opening audio p50 0.53 s. 951 unit tests green.
+
+In progress (side tracks, not merged): `night/identity` (identities + passwordless auth, scheduler-only guards), `night/stdb-hardening` (indexes, retention, JOIN subscriptions — initial worker sync 487 KiB → 14 KiB), `night/dashboard-live` (live chat bubbles, hover buttons, custom icons), `night/cf-dispatch` (Part B: SpacetimeDB → Cloudflare Worker per turn).
+
 Small direct commits on `night/integration`: night plan / contract docs, `164eda5` (e2e smoke typecheck fix), this report.
 
 Test status of the final state (`983c230`): 791 unit tests green (teaching 52, shared 157, module 127, client 131, worker 106, team app 218), typecheck clean, static client build. Final full E2E on this state (06:13–06:25, quiet machine): **8/8 PASS**, 0 external flakes; turn end → first audio p50 2.75 s (min 2.62, max 3.17); "Start talking" → opening audio p50 1.06 s. `main` = `09db721` (fast-forwarded 06:27).
