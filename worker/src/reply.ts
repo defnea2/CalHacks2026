@@ -217,10 +217,13 @@ export class ReplyRun {
     for (const line of lines) await this.publishSentence(line);
   }
 
-  private enqueueTool(call: ToolResult['call']): Promise<ToolResult> {
+  private enqueueTool(call: ToolResult['call'], allowed = true): Promise<ToolResult> {
     const skipped: ToolResult = { call, kind: this.deps.router.kindOf(call.name), ok: false, result: 'error: reply was interrupted' };
     return this.enqueue(async () => {
-      const r = await this.deps.router.run(call, {
+      // Check again at execution time: an earlier tool in this same streamed
+      // round may have invalidated the proposed visual.
+      allowed = allowed && (!this.rejectedVisual || call.name === TOOL_NAMES.showBoardItem || call.name === TOOL_NAMES.visualUnavailable);
+      const r: ToolResult = !allowed ? { call, ok: false, kind: 'query', result: 'error: this tool is not offered in this round. Repair the visual using show_board_item or acknowledge the missing capability using visual_unavailable.' } : await this.deps.router.run(call, {
         sessionId: this.sessionId,
         utteranceId: this.utteranceId,
         nextSentenceIdx: this.sent.length,
@@ -284,7 +287,7 @@ export class ReplyRun {
                 // A finished sentence before the call belongs before it (board reveal index).
                 for (const s of chunker.flushComplete()) this.enqueueSentence(s);
                 calls.push(ev.call);
-                results.push(this.enqueueTool(ev.call));
+                results.push(this.enqueueTool(ev.call, tools.some(t => t.name === ev.call.name)));
               } else if (ev.type === 'done') {
                 raw = ev.raw;
               }
@@ -313,7 +316,7 @@ export class ReplyRun {
         if (!calls.length) break;
         // A rejected visual must have one bounded chance to repair its command,
         // even when topic lookup already consumed a normal tool round.
-        if (repairAvailable && res.some(r => !r.ok && r.kind === 'query')) {
+        if (!last && repairAvailable && res.some(r => !r.ok && r.kind === 'query')) {
           toolRoundLimit++;
           repairAvailable = false;
         }

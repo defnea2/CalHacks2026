@@ -51,6 +51,7 @@ const scenarios = [
 
 async function main() {
   console.log(info);
+  const failures: string[] = [];
   for (const scenario of scenarios) {
     if (process.argv.length > 2 && !process.argv.slice(2).some(filter => scenario.name.includes(filter))) continue;
     const transport = new FakeTransport();
@@ -88,8 +89,12 @@ async function main() {
         agent.onTurn(turn(1n, i * 2 + 1, String(tutor.text), 'done', 'tutor'));
       }
       console.log(`PASS: ${scenario.name}`);
+    } catch (error) {
+      failures.push(`${scenario.name}: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`FAIL: ${scenario.name}`);
     } finally { agent.closeAll(); }
   }
+  assert.equal(failures.length, 0, failures.join('\n'));
 }
 
 main().catch(error => {

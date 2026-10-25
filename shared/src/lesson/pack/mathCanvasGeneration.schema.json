@@ -54,6 +54,7 @@
               },
               "targets": {
                 "default": [],
+                "description": "Optional visible bar/marker IDs or unambiguous labels A, B, etc. Comparisons need two targets; observations and transformations can select one.",
                 "maxItems": 2,
                 "type": "array",
                 "items": {

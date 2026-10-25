@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { VoiceCanvasContentSchema } from './contracts';
+import { VoiceCanvasContentSchema, VoiceCanvasGenerationSchema } from './contracts';
 import { SpeechCanvasPlayer, type SpeechCanvasItem } from './SpeechCanvasPlayer';
 import schema from '../../../shared/src/lesson/pack/mathCanvas.schema.json';
+import generationSchema from '../../../shared/src/lesson/pack/mathCanvasGeneration.schema.json';
 import { validateJson } from '../../../shared/src/lesson/api';
 import { validateVoiceCanvasContent } from './validate';
 import type { JsonSchema } from '../../../shared/src/lesson/types';
@@ -100,6 +101,8 @@ describe('speech canvas', () => {
 
   it('the voice database schema matches the canonical canvas schema', () => {
     expect(schema).toEqual(z.toJSONSchema(VoiceCanvasContentSchema, { io: 'input' }));
+    expect(generationSchema).toEqual(z.toJSONSchema(VoiceCanvasGenerationSchema, { io: 'input' }));
+    expect(validateJson(generationSchema as unknown as JsonSchema, content).length).toBeGreaterThan(0);
     expect(validateJson(schema as unknown as JsonSchema, content)).toEqual([]);
     expect(validateJson(schema as unknown as JsonSchema, { ...content, title: '' })).not.toEqual([]);
     expect(validateJson(schema as unknown as JsonSchema, { title: 'X', moments: [{ sentenceOffset: 0, visual: { kind: 'execute', code: 'bad' } }] })).not.toEqual([]);

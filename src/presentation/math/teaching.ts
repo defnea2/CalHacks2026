@@ -6,7 +6,7 @@ import { MathVisualSchema, geometryArea, type MathVisual } from './models';
 export const TeachingIntentSchema = z.object({
   concept: z.enum(['equal_groups', 'distributivity', 'fraction_amount', 'fraction_comparison', 'fraction_equivalence', 'number_order', 'number_distance', 'area', 'area_conservation']),
   action: z.enum(['observe', 'calculate', 'compare', 'change', 'conserve', 'question']),
-  targets: z.array(z.string().min(1).max(80)).max(2).default([]),
+  targets: z.array(z.string().min(1).max(80)).max(2).default([]).describe('Optional visible bar/marker IDs or unambiguous labels A, B, etc. Comparisons need two targets; observations and transformations can select one.'),
 }).strict();
 export type TeachingIntent = z.input<typeof TeachingIntentSchema>;
 type Concept = z.infer<typeof TeachingIntentSchema>['concept'];
@@ -34,6 +34,15 @@ export function canonicalMathVisual(input: MathVisual): MathVisual {
 
 const number = (n: number) => String(Number(n.toFixed(8)));
 const fail = (message: string): never => { throw new Error(`Unsupported teaching claim: ${message}`); };
+/** Resolve references, never quantities. A visible label is accepted only when
+ * it identifies exactly one object, with no conflicting ID match. */
+export function resolveMathTarget(v: MathVisual, target: string): string {
+  if (v.kind !== 'bars' && v.kind !== 'number_line') return fail('this representation has no addressable targets');
+  const items = v.kind === 'bars' ? v.bars : v.markers;
+  const matches = items.filter(x => x.id === target || x.label === target);
+  if (matches.length !== 1) return fail('distinct visible targets are required; reference is unknown or ambiguous');
+  return matches[0].id;
+}
 function pair(v: MathVisual, targets: string[]) {
   if (v.kind !== 'bars' && v.kind !== 'number_line') return fail('comparison needs fraction bars or number-line markers');
   const items = v.kind === 'bars' ? v.bars : v.markers;
@@ -95,7 +104,7 @@ function question(v: MathVisual, intent: z.infer<typeof TeachingIntentSchema>): 
   return v.kind === 'bars' ? `Do bars ${a.label} and ${b.label} show the same shaded amount, or is one greater?`
     : intent.concept === 'number_distance' ? `How far apart are ${a.label} and ${b.label}?` : `Which is farther right, ${a.label} or ${b.label}, or are they at the same position?`;
 }
-function signature(v: MathVisual) {
+export function mathStateKey(v: MathVisual) {
   const { title: _title, interactive: _interactive, showEquation: _equation, focus: _focus, id: _id, ...math } = v;
   return JSON.stringify(math);
 }
@@ -144,6 +153,7 @@ function conserve(before: MathVisual, after: MathVisual, intent: z.infer<typeof 
  * is copied through. This checks the renderer's actual before/after states. */
 export function compileTeaching(input: unknown, after: MathVisual, before?: MathVisual): { narration: string; intent: z.infer<typeof TeachingIntentSchema> } {
   const intent = TeachingIntentSchema.parse(input);
+  intent.targets = intent.targets.map(target => resolveMathTarget(after, target));
   const capability = MATH_CAPABILITIES[intent.concept];
   if (!capability.kinds.includes(after.kind)) return fail(`${intent.concept} cannot be shown with ${after.kind}`);
   after = selectTargets(after, intent.targets);
@@ -163,7 +173,7 @@ export function compileTeaching(input: unknown, after: MathVisual, before?: Math
     case 'change':
     case 'conserve': {
       if (!before || !capability.kinds.includes(before.kind)) return fail('a transformation needs a compatible starting picture');
-      if (signature(before) === signature(after)) return fail('no mathematical change was rendered');
+      if (mathStateKey(before) === mathStateKey(after)) return fail('no mathematical change was rendered');
       if (intent.action === 'conserve') narration = conserve(before, after, intent);
       else narration = change(before, after);
       break;

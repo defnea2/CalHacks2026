@@ -141,6 +141,20 @@ describe('reply', () => {
     expect(transport.of('clearBoard')).toHaveLength(1);
   });
 
+  it.each([false, true])('cannot escape visual repair through a conversational tool (same round: %s)', async sameRound => {
+    const invalid = structuredClone(narratedCanvas);
+    invalid.moments[1]!.visual = { kind: 'update', changes: [{ type: 'set_bar', barId: 'a', parts: 4, shaded: 1 }] };
+    const rounds = [
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: invalid }), done],
+      [tool(TOOL_NAMES.askLearner, { question: 'invite_reasoning' }), done],
+    ];
+    const llm = new FakeLlm(sameRound ? [[rounds[0][0], ...rounds[1]]] : rounds);
+    const { transport } = await answer(llm);
+    if (!sameRound) expect(llm.calls[1]!.tools.map(t => t.name).sort()).toEqual([TOOL_NAMES.showBoardItem, TOOL_NAMES.visualUnavailable].sort());
+    expect(transport.of('showBoardItem')).toEqual([]);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual([VISUAL_UNAVAILABLE]);
+  });
+
   it('acknowledges an unsupported capability without a fake picture or another model round', async () => {
     const llm = new FakeLlm([[tool(TOOL_NAMES.visualUnavailable, {}), done]]);
     const { transport } = await answer(llm);
@@ -239,14 +253,14 @@ describe('reply', () => {
         { sentenceOffset: 1, teaching: { concept: 'area_conservation', action: 'change' }, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
       ] } }), done],
       [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: { title: 'Cut', moments: [
-        { sentenceOffset: 0, teaching: { concept: 'area', action: 'observe' }, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'cut' } },
+        { sentenceOffset: 0, teaching: { concept: 'area', action: 'calculate' }, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'cut' } },
       ] } }), done],
       [text('Cut the triangle here.'), done],
     ]);
     const { transport } = await answer(llm);
     expect(llm.calls.map(c => c.tools.length > 0)).toEqual([true, true, true]);
     expect(transport.of('showBoardItem')).toHaveLength(1);
-    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Let us look at the picture.', 'A perpendicular cut separates the left triangle from the rest of the shape.']);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Let us look at the picture.', 'Base 6 times perpendicular height 4 gives an area of 24 square units.']);
   });
 
   it('action-only reply without text calls the LLM again with the results', async () => {
@@ -289,7 +303,7 @@ describe('reply', () => {
     const { transport, logs } = await answer(llm);
     expect(llm.calls).toHaveLength(3); // first call + 2 tool rounds
     expect(llm.calls.map(c => c.tools.length > 0)).toEqual([true, true, false]); // last round must speak
-    expect(transport.of('setTopic')).toHaveLength(3);
+    expect(transport.of('setTopic')).toHaveLength(2); // the final round offered no tools
     expect(logs.some(l => l.includes('max tool rounds'))).toBe(true);
   });
 

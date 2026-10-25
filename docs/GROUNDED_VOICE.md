@@ -55,7 +55,7 @@ The worker adds computed `narration` to each stored moment. Any supplied narrati
 | Number order, distance | Number line | Marker coordinates, relative order, absolute distance |
 | Area, area conservation | Rectangle, right triangle, parallelogram | Base, perpendicular height, shape-specific area |
 
-`observe` describes structure; `calculate` derives its result; `compare` relates two visible objects; `change` describes an actual update; `conserve` additionally proves the measured quantity stayed equal; `question` asks about visible quantities. Optional `targets` are two distinct bar or marker IDs. Questions are final and hide the answer equation.
+`observe` describes structure; `calculate` derives its result; `compare` relates two visible objects; `change` describes an actual update; `conserve` additionally proves the measured quantity stayed equal; `question` asks about visible quantities. Optional `targets` select one or two visible bars/markers; comparisons need two. References accept IDs or unambiguous visible A/B labels. Questions are final and hide the answer equation.
 
 Examples and transitions remain generated. These are mathematical operations, not a catalogue of fixed lessons. The compiler currently uses authored sentence patterns for their factual explanations and questions. Expressiveness is bounded by these operations.
 
@@ -64,12 +64,14 @@ Examples and transitions remain generated. These are mathematical operations, no
 - Schema validity alone is insufficient. `compileGroundedMoment` applies commands to the planned state, then `compileTeaching` evaluates claims against those values.
 - Unknown capabilities and incompatible representations fail. A right-triangle area diagram cannot establish an angle-classification capability.
 - Comparison targets must exist and differ. Fraction equality uses integer cross multiplication.
+- An observation alone is not a completed lesson. A plan must include a calculation, comparison, transformation or learner question; repeated statements are rejected instead of padding the lesson.
 - Conservation must include an actual mathematical change and preserve the relevant quantity. Changing one half into one quarter cannot be narrated as preserving the shaded amount.
+- An explanation may hold the picture while referring to its most recent verified transformation. The compiler retains that actual before-state as evidence; a new picture resets it. This permits “move the pieces, then explain why” without accepting invented conservation.
 - Transformations update existing objects. Cut-and-slide stages keep the same base, height and shear so pieces cannot silently resize during a proof.
 - A failed final moment rejects the entire proposal before its first board item or speech is published. Numeric values are not silently clamped, repartitioned or repaired by the grounding layer.
 - Canvas labels are neutral A/B identifiers; titles cannot inject independent mathematical claims. The live canvas renders diagrams, notation, measurements and usable controls, with conversation confined to its panel.
 - Ordinary model text cannot reach speech in production. `ask_learner` supplies authored clarification/reasoning/handoff questions. `visual_unavailable` clears an unrelated picture and speaks a clear limitation.
-- After a failed visual proposal, one repair is allowed; exhaustion produces the same honest limitation, never an unchecked free-text explanation.
+- After a failed visual proposal, one repair is allowed; that round exposes only visual repair or explicit limitation. Calls to unoffered tools are rejected. Exhaustion produces the same honest limitation, never an unchecked free-text explanation.
 - Preemptive generation stays behind the existing release gate. Interrupted or dropped audio cannot reveal future moments; duplicate subscription events cannot repeat them.
 
 ## Adding coverage
@@ -91,3 +93,7 @@ Playback alignment is at audio-cue starts, not individual words. Provider latenc
 ## Verification
 
 Unit tests exercise cross-family invalid claims, 144 fraction comparisons, false conservation, invalid targets, missing grounding, transactional rejection, exact stored narration, plain-text bypass prevention, interruption and preemptive output. Run `pnpm --filter e2e smoke:generation` for real-model scenarios across fractions, multiplication, distance, area preservation and unsupported topics. `smoke:pipeline` additionally runs synthetic learner audio through real STT and TTS; playback acknowledgments are simulated.
+
+Verified locally on 2026-10-25: 509 tests passed (250 root, 112 shared, 69 worker, 38 client, 40 database), all package type checks passed, and the voice client production build passed. The existing bundle-size advisory remains. The final real-model run passed all six scenarios, including the two-turn fraction scenario and two unsupported-topic cases. Earlier runs exposed incomplete plans and ambiguous references; those now have regression checks. This small sample is not a guarantee of consistent pedagogical choices.
+
+The final live-backend synthetic proof test produced four Cartesia audio cues for slant → cut → reassembled → question, with exact stored narration/cue agreement. First audio was available 6.401 seconds after endTurn, including 3.149 seconds for STT. These are single-run observations; microphone capture, speaker playback and VAD latency were not measured. The live client was also inspected in the browser to confirm the minimal canvas.
