@@ -1,6 +1,7 @@
 // Publishes the module to the local server, passing secrets as SpacetimeDB module env
 // (shell variables override spacetime.json). Usage: node scripts/publish.mjs [--clear]
 import { spawnSync } from 'node:child_process';
+import { spacetimeCommand } from './spacetime.mjs';
 import { loadEnv, ROOT } from './env.mjs';
 
 // Shell variables override .env (e.g. STT_BASE_URL=https://host/stt-proxy.php node scripts/publish.mjs).
@@ -16,7 +17,7 @@ const moduleEnv = {
 };
 for (const k of ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS']) if (env[k]) moduleEnv[k] = env[k];
 
-const db = env.SPACETIME_DB || 'tutor';
+const db = env.SPACETIME_DB || 'voice-tutor';
 // SPACETIME_SERVER=maincloud publishes to SpacetimeDB's hosted cloud (needs `spacetime login`).
 const server = env.SPACETIME_SERVER || 'local';
 if (server !== 'local' && (!env.STT_BASE_URL || /^https?:\/\/(127\.|localhost)/.test(env.STT_BASE_URL))) {
@@ -25,8 +26,8 @@ if (server !== 'local' && (!env.STT_BASE_URL || /^https?:\/\/(127\.|localhost)/.
 }
 const args = ['publish', db, '--server', server, '--module-path', 'spacetimedb', '--yes'];
 if (process.argv.includes('--clear')) args.push('--delete-data=always');
-const spacetime = process.env.SPACETIME_BIN || 'spacetime';
-const r = spawnSync(spacetime, args, {
+const { command, prefix } = spacetimeCommand();
+const r = spawnSync(command, [...prefix, ...args], {
   cwd: ROOT,
   stdio: 'inherit',
   env: { ...process.env, ...moduleEnv, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' },

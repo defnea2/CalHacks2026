@@ -15,10 +15,10 @@ export function AnimatedMathBoard({ items, started, interactive = false }: {
   }, [player, items, started, interactive]);
   if (!items.length) return null;
   return <div data-testid="animated-math-board">
-    {snapshot.canvas.math ? <TeachingCanvas canvas={snapshot.canvas}
+    {snapshot.canvas.math ? <TeachingCanvas canvas={snapshot.canvas} minimal
       interactionEnabled={interactive && player.director.canInteract()}
       onMathAction={action => { player.interact(action); }} />
-      : <p className="py-6 text-sm text-muted-foreground">The picture will appear with the explanation.</p>}
+      : null}
     {error && <p role="alert" className="mt-2 text-sm text-red-700">This picture could not be shown. Ask the tutor to try again.</p>}
   </div>;
 }

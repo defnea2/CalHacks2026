@@ -56,6 +56,7 @@ function vadAssets(): Plugin {
 }
 
 export default defineConfig({
+  envDir: '..',
   resolve: { dedupe: ['react', 'react-dom'] },
   plugins: [vadAssets(), react(), tailwindcss()],
   optimizeDeps: { include: ['@ricky0123/vad-web', 'onnxruntime-web/wasm'] },

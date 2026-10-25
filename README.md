@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. Real generated lessons use the included local server and your existing ChatGPT login through `codex login`. No API key is needed. Offline samples also work without a login. See [no-key model setup](docs/teaching/LOCAL_MODEL.md).
+Copy `.env.example` to `.env.local`, set the server-only `ANTHROPIC_API_KEY`, and restart the dev server. Open http://127.0.0.1:5173. Generated lessons use Anthropic streaming; offline samples work without credentials. See [Anthropic setup and voice integration](docs/teaching/VOICE.md). The [older Codex bridge](docs/teaching/LOCAL_MODEL.md) remains explicitly selectable for local development.
 
 ## Compact math and instant exploration
 
@@ -29,7 +29,7 @@ Answer a question to get the next explanation automatically. **Show another way*
 
 For a quick demo: Equal groups → choose **2 + 3** → **Show another way** → move an object into a basket → answer **six** → continue through independent practice. The same layout supports decimals, scientific diagrams, and future topics supplied by a real planning model.
 
-**Original question and connection settings** lets you preserve a homework question or choose a different compatible planning endpoint. The included `/api/teaching/plan` is a local development bridge to the signed-in Codex CLI. Errors are visible and never silently substitute a fixture.
+**Original question and connection settings** lets you preserve a homework question or choose a different compatible planning endpoint. The included `/api/teaching/plan` streams validated plans from Anthropic, with JSON compatibility for existing clients. Errors are visible and never silently substitute a fixture.
 
 - [Integrated session API, demo checklist, and voice migration](docs/teaching/SESSION.md)
 - [Teaching planner and model contracts](docs/teaching/INTEGRATION.md)
@@ -46,7 +46,7 @@ Choose bars or decimal number lines for other mathematical representations, or a
 - [LiveKit + Cartesia teammate handoff](docs/LIVEKIT_CARTESIA.md)
 - [Narration director and free-form drawing API](docs/NARRATION_CANVAS.md)
 
-The public integration entry point is `src/presentation/index.ts`. Live model generation is connected through the local Codex bridge; LiveKit/Cartesia transport is not connected yet. The **Guided explanation** tab retains the recorded water/equal-groups rehearsals for audio synchronization testing. **Interactive building blocks** retains the standalone activity editor.
+The visual integration entry point is `src/presentation/index.ts`; the voice-ready coordinator is exported from `src/teaching/index.ts`. Anthropic supplies streaming plans. `TeachingSession` voice mode accepts final STT text and exposes exact phrases, cancellation signals and playback events. LiveKit/Cartesia transport is not connected yet. The **Guided explanation** tab retains recorded rehearsals for audio synchronization testing. **Interactive building blocks** retains the standalone activity editor.
 
 ## Interactive building blocks
 
@@ -141,3 +141,7 @@ Each feature is a separate commit on `feature/visual-engine`. The branch starts 
 ## Voice runtime
 
 The Cartesia/SpacetimeDB voice runtime is now included alongside the text-only tutor. See [animated voice canvas integration](docs/VOICE_CANVAS.md) and [voice setup](docs/VOICE_RUNTIME.md). The voice client uses port 5175; its `?canvasPreview` route works without microphone access or API keys. Use `pnpm dev:voice` for the voice stack; `npm run dev` still starts the text-only tutor.
+
+## Abdul + voice integration branch
+
+See [the separate integration checkout guide](docs/ABDUL_VOICE_INTEGRATION.md) for the merged streaming lessons, speech-synced cut-and-slide proof, local ports, and key configuration.

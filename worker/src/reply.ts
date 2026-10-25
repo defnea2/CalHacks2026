@@ -8,7 +8,8 @@
 // while the student may still continue: its output is held in memory until release() (turn
 // became ready with the same transcript) or thrown away by discard(). Nothing reaches
 // SpacetimeDB before release(), not even beginUtterance.
-import { SentenceChunker, normalizeForSpeech, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { SentenceChunker, normalizeForSpeech, TOOL_NAMES, LEARNER_QUESTIONS, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { VISUAL_UNAVAILABLE } from './tools/visual_unavailable';
 import { buildMessages } from './prompt';
 import type { ToolResult, ToolRouter } from './router';
 import type { Transport, TurnRow } from './transport';
@@ -23,6 +24,7 @@ export interface ReplyDeps {
   system: string;
   maxToolRounds: number;
   recentTurns: number;
+  verifiedSpeech?: boolean;
   log: (msg: string) => void;
   /** Sentence status lookup (from the subscription) to tell what was actually played. */
   isDropped?: (utteranceId: bigint, idx: number) => boolean;
@@ -72,6 +74,8 @@ export class ReplyRun {
   private closed = false;
   private firstTokenAt = 0;
   private firstTokenRecorded = false;
+  private narratedCanvas = false;
+  private rejectedVisual = false;
   private readonly startedAt: number;
   private readonly now: () => number;
 
@@ -178,7 +182,18 @@ export class ReplyRun {
   }
 
   private enqueueSentence(display: string): void {
+    // In production, only the verified canvas compiler or an authored question
+    // can speak. This also closes plain-reply and tool-free fallback bypasses.
+    if (this.deps.verifiedSpeech !== false) return;
     void this.enqueue(async () => {
+      // A paired canvas owns its spoken explanation. Ignore free text that the
+      // model emitted after that tool instead of speaking the explanation twice.
+      if (!this.narratedCanvas && !this.rejectedVisual) await this.publishSentence(display);
+    }, undefined);
+  }
+
+  private async publishSentence(display: string): Promise<void> {
+      if (this.aborted) return;
       const idx = this.sent.length;
       this.sent.push(display);
       if (idx === 0) this.metric('firstSentenceAt', this.now());
@@ -193,19 +208,30 @@ export class ReplyRun {
       } catch (e) {
         this.log(`addSentence ${idx} failed: ${errText(e)}`);
       }
-    }, undefined);
   }
 
-  private enqueueTool(call: ToolResult['call']): Promise<ToolResult> {
+  private async narrateCanvas(lines: string[]): Promise<void> {
+    this.narratedCanvas = true;
+    // Already inside the ordered outbox: enqueuing here would deadlock behind
+    // this very tool. Each authored line is one audio cue, even with punctuation.
+    for (const line of lines) await this.publishSentence(line);
+  }
+
+  private enqueueTool(call: ToolResult['call'], allowed = true): Promise<ToolResult> {
     const skipped: ToolResult = { call, kind: this.deps.router.kindOf(call.name), ok: false, result: 'error: reply was interrupted' };
     return this.enqueue(async () => {
-      const r = await this.deps.router.run(call, {
+      // Check again at execution time: an earlier tool in this same streamed
+      // round may have invalidated the proposed visual.
+      allowed = allowed && (!this.rejectedVisual || call.name === TOOL_NAMES.showBoardItem || call.name === TOOL_NAMES.visualUnavailable);
+      const r: ToolResult = !allowed ? { call, ok: false, kind: 'query', result: 'error: this tool is not offered in this round. Repair the visual using show_board_item or acknowledge the missing capability using visual_unavailable.' } : await this.deps.router.run(call, {
         sessionId: this.sessionId,
         utteranceId: this.utteranceId,
         nextSentenceIdx: this.sent.length,
         transport: this.deps.transport,
+        narrate: this.narratedCanvas ? undefined : lines => this.narrateCanvas(lines),
       });
       this.toolResults.push(r);
+      if (call.name === TOOL_NAMES.showBoardItem && !r.ok) this.rejectedVisual = true;
       return r;
     }, skipped);
   }
@@ -227,15 +253,22 @@ export class ReplyRun {
         image,
       });
       let spoken = false;
+      let toolRoundLimit = this.deps.maxToolRounds;
+      let repairAvailable = true;
       for (let round = 0; ; round++) {
-        const chunker = new SentenceChunker();
+        // Canvas offsets count grammatical sentences. Merging short sentences or
+        // splitting long ones shifts every later visual cue away from its speech.
+        const chunker = new SentenceChunker({ minWords: 1, maxWords: Number.POSITIVE_INFINITY });
         let text = '';
+        let raw: unknown;
         const calls: ToolResult['call'][] = [];
         const results: Promise<ToolResult>[] = [];
         // Last allowed round: offer no tools, so the model has to speak (it otherwise tends to
         // chain tool-only rounds and the student hears nothing).
-        const last = round >= this.deps.maxToolRounds && round > 0;
-        const tools = last ? [] : this.deps.router.specs();
+        const last = round >= toolRoundLimit && round > 0;
+        if (last && (this.rejectedVisual || this.deps.verifiedSpeech !== false)) break;
+        const tools = last ? [] : this.deps.router.specs().filter(tool => !this.rejectedVisual ||
+          tool.name === TOOL_NAMES.showBoardItem || tool.name === TOOL_NAMES.visualUnavailable);
         // A round that fails before any event arrived is retried (flaky network): nothing from it
         // reached SpacetimeDB yet. Once output has started, a failure ends the reply as before.
         for (let attempt = 0; ; attempt++) {
@@ -254,7 +287,9 @@ export class ReplyRun {
                 // A finished sentence before the call belongs before it (board reveal index).
                 for (const s of chunker.flushComplete()) this.enqueueSentence(s);
                 calls.push(ev.call);
-                results.push(this.enqueueTool(ev.call));
+                results.push(this.enqueueTool(ev.call, tools.some(t => t.name === ev.call.name)));
+              } else if (ev.type === 'done') {
+                raw = ev.raw;
               }
             }
             break;
@@ -272,20 +307,36 @@ export class ReplyRun {
         if (text.trim()) spoken = true;
         this.history = [
           ...this.history,
-          { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}) },
+          { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}), ...(raw !== undefined ? { raw } : {}) },
           ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
         ];
+        // The tool supplied the actual spoken lines, so another model call would
+        // add latency and commonly repeat the same explanation verbatim.
+        if (res.some(r => r.narrated)) break;
         if (!calls.length) break;
+        // A rejected visual must have one bounded chance to repair its command,
+        // even when topic lookup already consumed a normal tool round.
+        if (!last && repairAvailable && res.some(r => !r.ok && r.kind === 'query')) {
+          toolRoundLimit++;
+          repairAvailable = false;
+        }
         // Query results must go back to the LLM; action results only if nothing was said yet.
         const again = res.some(r => r.kind === 'query') || !spoken;
         if (!again) break;
-        if (round >= this.deps.maxToolRounds) {
-          this.log(`max tool rounds (${this.deps.maxToolRounds}) reached`);
+        if (round >= toolRoundLimit) {
+          this.log(`max tool rounds (${toolRoundLimit}) reached`);
           break;
         }
       }
       this.llmActive = false;
       await this.chain;
+      // A failed demonstration never falls through to unverified model prose.
+      if (!this.aborted && this.rejectedVisual && !this.narratedCanvas) {
+        await this.deps.transport.clearBoard({ sessionId: this.sessionId });
+        await this.narrateCanvas([VISUAL_UNAVAILABLE]);
+      } else if (!this.aborted && this.deps.verifiedSpeech !== false && !this.sent.length) {
+        await this.narrateCanvas([LEARNER_QUESTIONS.clarify_step]);
+      }
       if (!this.aborted) await this.close(false);
     } catch (e) {
       this.llmActive = false;

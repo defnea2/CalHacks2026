@@ -8,6 +8,7 @@ import "katex/dist/katex.min.css";
 export function mathLatex(v: MathVisual): string | null {
   if (v.kind === "number_line") return null;
   if (v.kind === "geometry") return `A = ${v.width} \\times ${v.height}${v.shape === "right_triangle" ? " \\div 2" : ""} = ${geometryArea(v)}\\;\\text{square units}`;
+  if (v.kind === "parallelogram") return `A = b \\times h = ${v.base} \\times ${v.height} = ${v.base * v.height}\\;\\text{square units}`;
   if (v.kind === "array") {
     const { rows: r, columns: c, splitAt: s } = v;
     return s === null ? `${r} \\times ${c} = ${r*c}`

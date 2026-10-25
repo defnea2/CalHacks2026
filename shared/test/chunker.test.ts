@@ -118,8 +118,9 @@ describe('SentenceChunker', () => {
 
   it('flushComplete emits a finished sentence without waiting for the next token', () => {
     const c = new SentenceChunker();
-    expect(c.push('First we cut the pizza into equal slices. ')).toEqual([]);
-    expect(c.flushComplete()).toEqual(['First we cut the pizza into equal slices.']);
+    // Ends in a digit: push alone waits (could be a decimal), flushComplete knows it is not.
+    expect(c.push('First we cut the pizza into 8. ')).toEqual([]);
+    expect(c.flushComplete()).toEqual(['First we cut the pizza into 8.']);
     expect(c.push('Then we count how many')).toEqual([]);
     expect(c.flushComplete()).toEqual([]); // mid-sentence: keep
     expect(c.push(' slices there are, e.g. ')).toEqual([]);
@@ -131,6 +132,39 @@ describe('SentenceChunker', () => {
 
   it('collapses newlines and extra spaces inside a piece', () => {
     expect(chunk('Does that make sense?\n\nLet us see it as a picture.')).toEqual(['Does that make sense? Let us see it as a picture.']);
+  });
+
+  it('emits a sentence ending in ! ? or a plain . without waiting for the next token', () => {
+    const c = new SentenceChunker();
+    expect(c.push('How many slices do you see')).toEqual([]);
+    expect(c.push(' there?')).toEqual(['How many slices do you see there?']);
+    expect(c.push(' That is exactly right, well done!')).toEqual(['That is exactly right, well done!']);
+    expect(c.push(' Let us look at the pizza together now.')).toEqual(['Let us look at the pizza together now.']);
+    expect(c.push(' Wow?! You did it all by yourself?!')).toEqual(['Wow?! You did it all by yourself?!']);
+    expect(c.flush()).toEqual([]);
+  });
+
+  it('still waits for the next token after a digit, abbreviation, initial, ellipsis or open quote', () => {
+    const cases: [string, string, string[]][] = [
+      ['The answer to this question is 3.', '5 for sure. ', ['The answer to this question is 3.5 for sure.']],
+      ['Some fractions are equal to others, e.g.', ' halves. ', ['Some fractions are equal to others, e.g. halves.']],
+      ['We will now ask our teacher Mr.', ' Smith about it. ', ['We will now ask our teacher Mr. Smith about it.']],
+      ['This book was written by J.', ' K. Rowling herself. ', ['This book was written by J. K. Rowling herself.']],
+      ['Let me think about this for a bit...', ' then we go on. ', ['Let me think about this for a bit... then we go on.']],
+      ['You said "the bottom number tells the size.', '" Nice! ', ['You said "the bottom number tells the size."']],
+      ['We can write it as 2(x + 3.', ' 5) and simplify it now. ', ['We can write it as 2(x + 3. 5) and simplify it now.']],
+    ];
+    for (const [a, b, want] of cases) {
+      const c = new SentenceChunker();
+      expect(c.push(a), a).toEqual([]);
+      expect(c.push(b), a).toEqual(want);
+    }
+  });
+
+  it('still merges a short sentence that ends a token', () => {
+    const c = new SentenceChunker();
+    expect(c.push('Great job!')).toEqual([]);
+    expect(c.push(' You found the bottom number.')).toEqual(['Great job! You found the bottom number.']);
   });
 
   it('respects custom limits', () => {

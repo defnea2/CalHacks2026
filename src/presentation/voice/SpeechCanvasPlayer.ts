@@ -1,9 +1,7 @@
 import { VisualDirector } from '../VisualDirector';
-import { applyCanvasCommands } from '../canvasState';
-import { emptyCanvas } from '../contracts';
 import type { MathAction } from '../math/models';
 import { compileMathCommand } from '../math/compact';
-import { VoiceCanvasContentSchema } from './contracts';
+import { validateVoiceCanvasContent } from './validate';
 
 export interface SpeechCanvasItem {
   id: string;
@@ -35,18 +33,8 @@ export class SpeechCanvasPlayer {
     for (const item of [...items].sort((a, b) => a.order - b.order)) {
       if (item.order < this.lastOrder || this.failed.has(item.id)) continue;
       try {
-        const content = VoiceCanvasContentSchema.parse(item.content);
-        if (content.moments[0].sentenceOffset !== 0 || ['keep', 'update'].includes(content.moments[0].visual.kind))
-          throw new Error('Start each canvas explanation with a complete picture at sentence offset zero.');
-        let preflight = emptyCanvas();
         // Validate the entire sequence before touching the currently visible picture.
-        content.moments.forEach((m, index) => {
-          if (index && m.sentenceOffset <= content.moments[index - 1].sentenceOffset)
-            throw new Error('Canvas sentence offsets must increase.');
-          if (m.interactive && index !== content.moments.length - 1)
-            throw new Error('Only the final picture may enable learner controls.');
-          preflight = applyCanvasCommands(preflight, compileMathCommand(m.visual, preflight, { ...m, title: content.title }));
-        });
+        const content = validateVoiceCanvasContent(item.content);
         for (const [index, moment] of content.moments.entries()) {
           if (item.order === this.lastOrder && index <= this.lastMoment) continue;
           // Missing or dropped sentences never count as played, even when later audio arrives.

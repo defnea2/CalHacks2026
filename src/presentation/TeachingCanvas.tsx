@@ -117,6 +117,8 @@ function NodeContent({ node }: { node: CanvasNode }) {
 
 export interface TeachingCanvasProps {
   canvas: CanvasState;
+  /** The live lesson surface contains only the diagram and necessary notation. */
+  minimal?: boolean;
   choiceIds?: string[];
   onChoose?(id: string): void;
   interactionEnabled?: boolean;
@@ -125,6 +127,7 @@ export interface TeachingCanvasProps {
 }
 export function TeachingCanvas({
   canvas,
+  minimal = false,
   choiceIds = [],
   onChoose,
   interactionEnabled = false,
@@ -139,28 +142,31 @@ export function TeachingCanvas({
   const duration = reduced ? 0 : 0.65;
   return (
     <section className="teaching-canvas" aria-label="Tutor's visual canvas">
-      <div className="canvas-heading">
+      {!minimal && <div className="canvas-heading">
         <span>
           {canvas.math ? "Math picture" : "Picture"}
         </span>
         <span className="canvas-interaction-hint">
           {choiceIds.length ||
           (interactionEnabled &&
-            (canvas.math?.visual.interactive ||
+            // A cut or reassembled parallelogram is a finished proof; only the uncut shape slants.
+            ((canvas.math?.visual.interactive && !(canvas.math.visual.kind === "parallelogram" && canvas.math.visual.stage !== "slant")) ||
               canvas.activity?.activity.allowedInteractions.length))
             ? "You can change this picture"
             : "Look at the picture"}
         </span>
-      </div>
-      <h2>{canvas.title}</h2>
+      </div>}
+      {!minimal && <h2>{canvas.title}</h2>}
       {canvas.math ? (
         <MathWorkspace
+          minimal={minimal}
           scene={canvas.math}
           enabled={interactionEnabled}
           onAction={onMathAction}
         />
       ) : canvas.activity ? (
         <LearningWorkspace
+          minimal={minimal}
           embedded
           scene={
             interactionEnabled
@@ -327,7 +333,7 @@ export function TeachingCanvas({
               </text>
             </motion.g>
           )}
-          {!canvas.nodes.length && (
+          {!minimal && !canvas.nodes.length && (
             <g className="canvas-empty">
               <text x="500" y="270" textAnchor="middle">
                 Choose an example to begin.
@@ -339,7 +345,7 @@ export function TeachingCanvas({
           )}
         </svg>
       )}
-      {canvas.note && <div className="canvas-note" aria-live="polite">{canvas.note}</div>}
+      {!minimal && canvas.note && <div className="canvas-note" aria-live="polite">{canvas.note}</div>}
     </section>
   );
 }

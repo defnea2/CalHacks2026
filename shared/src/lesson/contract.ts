@@ -441,7 +441,8 @@ export function checkToolSpecs(pack: LessonPack): string[] {
   const topic = byName.get(TOOL_NAMES.setTopic);
   if (!phase || !board || !topic) return [...errs, 'missing set_phase, show_board_item or set_topic'];
   sameSet('set_phase.phase', phase.properties?.phase?.enum, pack.phases.map(p => p.id));
-  sameSet('show_board_item.kind', board.properties?.kind?.enum, boardKindNames(pack));
+  const generated = pack.boardKinds.filter(k => k.generationSchema).map(k => k.name);
+  sameSet('show_board_item.kind', board.properties?.kind?.enum, generated.length ? generated : boardKindNames(pack));
   sameSet('set_topic.category', topic.properties?.category?.enum, pack.taxonomy.map(c => c.key));
   sameSet('set_topic.concept', topic.properties?.concept?.enum, pack.taxonomy.flatMap(c => c.concepts.map(k => k.key)));
 
@@ -449,7 +450,7 @@ export function checkToolSpecs(pack: LessonPack): string[] {
   if (validateJson(phase, { phase: pack.finalPhase, reason: 'done' }).length) errs.push('set_phase rejects a valid phase');
   if (!validateJson(phase, { phase: '__not_a_phase__', reason: 'x' }).length) errs.push('set_phase accepts an unknown phase');
   const kind = pack.boardKinds[0];
-  if (kind && validateJson(board, { kind: kind.name, content: {} }).length) errs.push('show_board_item rejects a valid kind');
+  if (kind && validateJson(board, { kind: kind.name }).length) errs.push('show_board_item rejects a valid kind');
   if (!validateJson(board, { kind: '__not_a_kind__' }).length) errs.push('show_board_item accepts an unknown kind');
   const cat = pack.taxonomy[0];
   if (cat && validateJson(topic, { category: cat.key, ...(cat.concepts[0] ? { concept: cat.concepts[0].key } : {}) }).length)

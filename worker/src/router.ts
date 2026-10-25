@@ -1,6 +1,6 @@
 // ToolRouter: one LLM tool call -> one handler run. Never throws: bad JSON, unknown tools,
 // reducer errors and timeouts all come back as "error: ..." results the model can read.
-import type { ChatToolCall, ToolSpec } from '@tutor/shared';
+import { validateJson, type ChatToolCall, type JsonSchema, type ToolSpec } from '@tutor/shared';
 import type { ToolContext, ToolDef } from './tools/types';
 
 export interface ToolResult {
@@ -8,6 +8,7 @@ export interface ToolResult {
   kind: 'action' | 'query' | 'unknown';
   ok: boolean;
   result: string;
+  narrated?: boolean;
 }
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e));
@@ -42,6 +43,10 @@ export class ToolRouter {
     } catch (e) {
       return { call, kind: tool.kind, ok: false, result: `error: invalid arguments: ${errText(e)}` };
     }
+    // Providers may stream tool input without server-side validation (Anthropic eager input
+    // streaming), so check the arguments against the tool's own schema before running it.
+    const problems = validateJson(tool.parameters as JsonSchema, args);
+    if (problems.length) return { call, kind: tool.kind, ok: false, result: `error: invalid arguments: ${problems.slice(0, 3).join('; ')}` };
     const timeoutMs = tool.timeoutMs ?? this.defaultTimeoutMs;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -51,7 +56,9 @@ export class ToolRouter {
           timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs} ms`)), timeoutMs);
         }),
       ]);
-      return { call, kind: tool.kind, ok: true, result };
+      return typeof result === 'string'
+        ? { call, kind: tool.kind, ok: true, result }
+        : { call, kind: 'action', ok: true, result: result.text, narrated: result.narrated };
     } catch (e) {
       return { call, kind: tool.kind, ok: false, result: `error: ${errText(e)}` };
     } finally {

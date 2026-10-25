@@ -1,12 +1,18 @@
 // One reply end to end through the Agent: sentences, metrics, tool ordering and tool rounds.
 import { describe, expect, it } from 'vitest';
 import { pack, TOOL_NAMES } from '@tutor/shared';
-import { done, FakeLlm, makeAgent, session, text, tokens, tool, turn, waitFor } from './fakes';
+import { validateVoiceCanvasContent } from '../../src/presentation/voice/validate';
+import { VISUAL_UNAVAILABLE } from '../src/tools/visual_unavailable';
+import { done, FakeLlm, makeAgent, phrase, session, sleep, text, tokens, tool, turn, waitFor } from './fakes';
 
 const S = 1n;
-const kind = pack.boardKinds[0]!.name;
+const kind = pack.boardKinds.find(k => k.name === 'text')!.name;
 const phaseId = pack.phases[1]!.id;
 const category = pack.taxonomy[0]!.key;
+const narratedCanvas = validateVoiceCanvasContent({ title: 'Same amount, smaller pieces', moments: [
+  { sentenceOffset: 0, teaching: { concept: 'fraction_amount', action: 'observe' }, visual: { kind: 'bars', bars: [{ id: 'a', label: 'A', parts: 2, shaded: 1 }] } },
+  { sentenceOffset: 1, teaching: { concept: 'fraction_equivalence', action: 'conserve' }, visual: { kind: 'update', changes: [{ type: 'set_bar', barId: 'a', parts: 4, shaded: 2 }] } },
+] }, { requireGrounding: true });
 
 async function answer(llm: FakeLlm, prep?: (t: ReturnType<typeof makeAgent>['transport']) => void) {
   const m = makeAgent(llm);
@@ -18,6 +24,145 @@ async function answer(llm: FakeLlm, prep?: (t: ReturnType<typeof makeAgent>['tra
 }
 
 describe('reply', () => {
+  it('production speech cannot bypass the compiler with an ordinary response', async () => {
+    const llm = new FakeLlm([[text('This rectangle has 99 square units and is obtuse.'), done]]);
+    const { agent, transport } = makeAgent(llm, undefined, { verifiedSpeech: true });
+    agent.onSession(session(S));
+    agent.onTurn(turn(S, 0, 'Explain this picture.'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Which part feels confusing?']);
+    agent.closeAll();
+  });
+
+  it('production conversation uses authored questions without misclassifying the learner', async () => {
+    const llm = new FakeLlm([[text('That is correct!'), tool(TOOL_NAMES.askLearner, { question: 'invite_reasoning' }), done]]);
+    const { agent, transport } = makeAgent(llm, undefined, { verifiedSpeech: true });
+    agent.onSession(session(S));
+    agent.onTurn(turn(S, 0, 'I think it is five.'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Tell me how you worked that out.']);
+    agent.closeAll();
+  });
+
+  it('delivers paired narration once, keeps its cues intact, and skips redundant model rounds', async () => {
+    const llm = new FakeLlm([[
+      tool(TOOL_NAMES.setTopic, { category }),
+      tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }),
+      text('Half the bar is shaded. Now each half is split in two. Did the shaded length change?'), done,
+    ]]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(1);
+    expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(0);
+    expect(transport.of('addSentence').map(s => [s.idx, s.display])).toEqual(narratedCanvas.moments.map(m => [m.sentenceOffset, m.narration]));
+    expect(transport.of('appendTutorTurn')[0]!.text).toBe(narratedCanvas.moments.map(m => m.narration).join(' '));
+  });
+
+  it('preserves a preamble index but will not publish a second narrated canvas in the same reply', async () => {
+    const llm = new FakeLlm([[
+      text('Watch the shaded length. '),
+      tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }),
+      tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }), done,
+    ]]);
+    const { transport } = await answer(llm);
+    expect(transport.of('showBoardItem')).toHaveLength(1);
+    expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(1);
+    expect(transport.of('addSentence').map(s => s.idx)).toEqual([0, 1, 2]);
+    expect(llm.calls).toHaveLength(1);
+  });
+
+  it('rejects a partially narrated plan before any picture or speech, then repairs it', async () => {
+    const invalid = structuredClone(narratedCanvas);
+    invalid.moments[1]!.narration = '';
+    const llm = new FakeLlm([
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: invalid }), done],
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(2);
+    expect(transport.of('showBoardItem')).toHaveLength(1);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(narratedCanvas.moments.map(m => m.narration));
+  });
+
+  it('keeps both paired narration and visuals behind the preemptive gate', async () => {
+    const llm = new FakeLlm([[tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }), done]]);
+    const { agent, transport } = makeAgent(llm, undefined, { preemptive: true, preemptiveSilenceMs: 1 });
+    agent.onSession(session(S));
+    agent.onPhrase(phrase(S, 1, 0, 'done', 'Why two quarters?'));
+    agent.onTurn(turn(S, 0, 'Why two quarters?', 'open'));
+    await waitFor(() => llm.calls.length === 1);
+    await sleep(20);
+    expect(transport.names()).toEqual(['buildContext']);
+    agent.onTurn(turn(S, 0, 'Why two quarters?', 'ready'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('showBoardItem')).toHaveLength(1);
+    expect(transport.of('addSentence')).toHaveLength(2);
+  });
+
+  it('stops the remaining planned narration after interruption', async () => {
+    const llm = new FakeLlm([[tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: narratedCanvas }), done]]);
+    const { agent, transport } = makeAgent(llm);
+    transport.delayMs.addSentence = 50;
+    agent.onSession(session(S));
+    agent.onTurn(turn(S, 0, 'Why two quarters?'));
+    await waitFor(() => transport.of('addSentence').length === 1);
+    agent.onSession(session(S, { turnState: 'interrupted' }));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('addSentence')).toHaveLength(1);
+    expect(transport.of('appendTutorTurn')[0]!.interrupted).toBe(true);
+  });
+
+  it('compiles all canvas moments in one tool round after a spoken preamble', async () => {
+    const content = { title: 'Move the triangle', moments: [
+      { sentenceOffset: 0, teaching: { concept: 'area', action: 'observe' }, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'slant' } },
+      { sentenceOffset: 1, teaching: { concept: 'area_conservation', action: 'change' }, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+      { sentenceOffset: 2, teaching: { concept: 'area_conservation', action: 'change' }, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'reassembled' }] } },
+    ] };
+    const llm = new FakeLlm([
+      [text('Let us move the pieces. '), tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content }), done],
+      [text('Here is our slanted shape. Cut the triangle from the left. Slide it to the right.'), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(1);
+    expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(1);
+    expect(transport.of('addSentence').map(s => s.idx)).toEqual([0, 1, 2, 3]);
+    expect(transport.of('appendTutorTurn')[0]!.text).toContain('slides right');
+  });
+
+  it('rejects a false final claim atomically and suppresses unchecked fallback speech', async () => {
+    const invalid = structuredClone(narratedCanvas);
+    invalid.moments[1]!.visual = { kind: 'update', changes: [{ type: 'set_bar', barId: 'a', parts: 4, shaded: 1 }] };
+    const llm = new FakeLlm([
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: invalid }), done],
+      [text('It is definitely still half.'), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(transport.of('showBoardItem')).toEqual([]);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual([VISUAL_UNAVAILABLE]);
+    expect(transport.of('clearBoard')).toHaveLength(1);
+  });
+
+  it.each([false, true])('cannot escape visual repair through a conversational tool (same round: %s)', async sameRound => {
+    const invalid = structuredClone(narratedCanvas);
+    invalid.moments[1]!.visual = { kind: 'update', changes: [{ type: 'set_bar', barId: 'a', parts: 4, shaded: 1 }] };
+    const rounds = [
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: invalid }), done],
+      [tool(TOOL_NAMES.askLearner, { question: 'invite_reasoning' }), done],
+    ];
+    const llm = new FakeLlm(sameRound ? [[rounds[0][0], ...rounds[1]]] : rounds);
+    const { transport } = await answer(llm);
+    if (!sameRound) expect(llm.calls[1]!.tools.map(t => t.name).sort()).toEqual([TOOL_NAMES.showBoardItem, TOOL_NAMES.visualUnavailable].sort());
+    expect(transport.of('showBoardItem')).toEqual([]);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual([VISUAL_UNAVAILABLE]);
+  });
+
+  it('acknowledges an unsupported capability without a fake picture or another model round', async () => {
+    const llm = new FakeLlm([[tool(TOOL_NAMES.visualUnavailable, {}), done]]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(1);
+    expect(transport.of('showBoardItem')).toEqual([]);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual([VISUAL_UNAVAILABLE]);
+  });
+
   it('streams sentences, normalizes speech, appends the tutor turn and records metrics', async () => {
     const llm = new FakeLlm([[...tokens('Let us look at 3/4 of a pizza together. It is 3.5 times bigger than you think!'), done]]);
     const { transport, agent } = await answer(llm);
@@ -83,21 +228,39 @@ describe('reply', () => {
         ...tokens('First we cut the pizza into equal slices. '),
         tool(TOOL_NAMES.setPhase, { phase: phaseId, reason: 'found the gap' }),
         ...tokens('Look at the board with me for a second. '),
-        tool(TOOL_NAMES.showBoardItem, { kind, content: { text: 'pizza' } }),
+        tool(TOOL_NAMES.showBoardItem, { taskKey: 'library-example' }),
         ...tokens('Each slice is the same size as the others.'),
         done,
       ],
+      [done],
     ]);
     const { transport } = await answer(llm);
     expect(transport.names()).toEqual(['buildContext', 'beginUtterance', 'addSentence', 'setPhase', 'addSentence', 'showBoardItem', 'addSentence', 'appendTutorTurn']);
     expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(2);
-    expect(llm.calls).toHaveLength(1); // actions with spoken text: no extra LLM call
+    expect(llm.calls).toHaveLength(2); // board result returns so its narration can follow
   });
 
   it('board item before any text points at sentence 0', async () => {
-    const llm = new FakeLlm([[tool(TOOL_NAMES.showBoardItem, { kind, content: { text: 'a' } }), ...tokens('Here is a picture of our pizza for you.'), done]]);
+    const llm = new FakeLlm([[tool(TOOL_NAMES.showBoardItem, { taskKey: 'library-example' }), ...tokens('Here is a picture of our pizza for you.'), done]]);
     const { transport } = await answer(llm);
     expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(0);
+  });
+
+  it('repairs an invalid continuation after topic lookup before narrating it', async () => {
+    const llm = new FakeLlm([
+      [text('Let us look at the picture. '), tool(TOOL_NAMES.setTopic, { category }), done],
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: { title: 'Cut', moments: [
+        { sentenceOffset: 1, teaching: { concept: 'area_conservation', action: 'change' }, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+      ] } }), done],
+      [tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content: { title: 'Cut', moments: [
+        { sentenceOffset: 0, teaching: { concept: 'area', action: 'calculate' }, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'cut' } },
+      ] } }), done],
+      [text('Cut the triangle here.'), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(llm.calls.map(c => c.tools.length > 0)).toEqual([true, true, true]);
+    expect(transport.of('showBoardItem')).toHaveLength(1);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Let us look at the picture.', 'Base 6 times perpendicular height 4 gives an area of 24 square units.']);
   });
 
   it('action-only reply without text calls the LLM again with the results', async () => {
@@ -116,7 +279,7 @@ describe('reply', () => {
   });
 
   it('errors come back as tool results, not exceptions', async () => {
-    const llm = new FakeLlm([[tool(TOOL_NAMES.setPhase, { phase: 'nope', reason: 'r' }, 'p1'), done], [...tokens('Let us stay here a little bit longer then.'), done]]);
+    const llm = new FakeLlm([[tool(TOOL_NAMES.setPhase, { phase: phaseId, reason: 'r' }, 'p1'), done], [...tokens('Let us stay here a little bit longer then.'), done]]);
     const { transport } = await answer(llm, t => (t.fail.setPhase = 'invalid transition'));
     expect(llm.calls[1]!.messages.at(-1)).toMatchObject({ role: 'tool', toolCallId: 'p1', content: 'error: invalid transition' });
     expect(transport.of('appendTutorTurn')[0]!.interrupted).toBe(false);
@@ -140,7 +303,7 @@ describe('reply', () => {
     const { transport, logs } = await answer(llm);
     expect(llm.calls).toHaveLength(3); // first call + 2 tool rounds
     expect(llm.calls.map(c => c.tools.length > 0)).toEqual([true, true, false]); // last round must speak
-    expect(transport.of('setTopic')).toHaveLength(3);
+    expect(transport.of('setTopic')).toHaveLength(2); // the final round offered no tools
     expect(logs.some(l => l.includes('max tool rounds'))).toBe(true);
   });
 

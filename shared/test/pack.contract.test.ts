@@ -2,7 +2,7 @@
 // merged-in pack must pass them unchanged (swap the `pack` import to test another one).
 import { describe, expect, it } from 'vitest';
 import { pack } from '../src/lesson/index';
-import type { LessonPack, LibraryTask } from '../src/lesson/types';
+import type { LessonPack, LibraryTask, JsonSchema } from '../src/lesson/types';
 import {
   ALLOWED_PLACEHOLDERS,
   PACK_CHECKS,
@@ -175,6 +175,15 @@ describe('contract checks catch broken packs', () => {
       properties: { phase: { enum: expect.arrayContaining(['extra_phase']) } },
     });
     expect(PACK_CHECKS.toolSpecs(p)).toEqual([]);
+  });
+
+  it('offers the generation contract without dropping historical renderer kinds', () => {
+    const verified = pack.boardKinds.filter(k => k.generationSchema);
+    expect(verified.length).toBeGreaterThan(0);
+    const spec = buildToolSpecs(pack).find(s => s.name === 'show_board_item')!.parameters as JsonSchema;
+    expect(spec.properties?.kind?.enum).toEqual(verified.map(k => k.name));
+    expect(spec.properties?.content?.anyOf).toEqual(verified.map(k => k.generationSchema));
+    expect(pack.boardKinds.length).toBeGreaterThan(verified.length);
   });
 });
 

@@ -44,9 +44,9 @@ export function parseModelRequest(input: unknown) {
   const tentative = latest?.source === "unassessed" && latest.response.kind === "answer" && currentStep?.check?.kind === "explanation";
   return { ...request, context: {
     ...request.context,
-    allowedPhases: allowedPhases(currentStep, latest),
+    allowedPhases: allowedPhases(currentStep, latest, request.context.session),
     phaseOptionsAfterAssessment: tentative ? Object.fromEntries(
-      ([['supported', 'correct'], ['misconception', 'incorrect'], ['unclear', 'unclear']] as const).map(([judgement, outcome]) => [judgement, allowedPhases(currentStep, { ...latest, outcome })]),
+      ([['supported', 'correct'], ['misconception', 'incorrect'], ['unclear', 'unclear']] as const).map(([judgement, outcome]) => [judgement, allowedPhases(currentStep, { ...latest, outcome }, request.context.session)]),
     ) : null,
   } };
 }

@@ -58,20 +58,22 @@ describe('VadMachine', () => {
     expect(chunks.map(c => c.seq)).toEqual(chunks.map((_, i) => i));
     expect(chunks.at(-1)!.final).toBe(true);
     expect(chunks.slice(0, -1).every(c => !c.final)).toBe(true);
-    // first chunk carries the pre-roll (300 ms) + the confirming speech (>= 100 ms)
-    expect(chunks[0]!.pcm.length).toBeGreaterThanOrEqual(16 * 400);
+    // first chunk carries the pre-roll (300 ms) + the confirming speech (>= 50 ms)
+    expect(chunks[0]!.pcm.length).toBeGreaterThanOrEqual(16 * 350);
     // middle chunks are ~150 ms (whole frames)
     for (const c of chunks.slice(1, -1)) expect(c.pcm.length).toBeGreaterThanOrEqual(16 * 150);
 
-    // phrase end ~300 ms after speech stops, turn end ~700 ms after
+    // phrase end ~VAD_PHRASE_MS after speech stops, turn end ~VAD_TURN_MS after
     const speechEnd = (Math.round(1000 / FRAME_MS) + Math.round(800 / FRAME_MS)) * FRAME_MS;
     // `at` is the start time of the frame that produced the event; elapsed = at + one frame
     const pe = at[events.findIndex(e => e.type === 'phrase_end')]! + FRAME_MS;
     const te = at[events.findIndex(e => e.type === 'turn_end')]! + FRAME_MS;
     expect(pe - speechEnd).toBeGreaterThanOrEqual(300);
     expect(pe - speechEnd).toBeLessThanOrEqual(300 + FRAME_MS);
-    expect(te - speechEnd).toBeGreaterThanOrEqual(700);
-    expect(te - speechEnd).toBeLessThanOrEqual(700 + FRAME_MS);
+    const turnMs = cfg().VAD_TURN_MS;
+    expect(turnMs).toBe(900);
+    expect(te - speechEnd).toBeGreaterThanOrEqual(turnMs);
+    expect(te - speechEnd).toBeLessThanOrEqual(turnMs + FRAME_MS);
   });
 
   it('a pause between phrase and turn length keeps the same turn', () => {
@@ -93,10 +95,19 @@ describe('VadMachine', () => {
 
   it('short blips below VAD_MIN_SPEECH_MS are misfires, no audio sent', () => {
     const m = new VadMachine(cfg());
-    const { events } = run(m, [silence(1000), speech(64), silence(500), speech(32), silence(500)]);
+    // VAD_MIN_SPEECH_MS 50: a single 32 ms frame is a click, two frames (64 ms) start speech.
+    const { events } = run(m, [silence(1000), speech(32), silence(500), speech(32), silence(500)]);
     const t = types(events);
     expect(t).not.toContain('chunk');
     expect(t.filter(x => x === 'misfire')).toHaveLength(2);
+    const m2 = new VadMachine(cfg());
+    expect(types(run(m2, [silence(1000), speech(64), silence(1500)]).events)).toContain('speech_start');
+  });
+
+  it('a thinking pause of 600 ms stays in the turn with VAD_TURN_MS 900', () => {
+    const m = new VadMachine(cfg());
+    const { events } = run(m, [silence(1000), speech(600), silence(608), speech(600), silence(1500)]);
+    expect(types(events).filter(x => x === 'turn_end')).toHaveLength(1);
   });
 
   it('splits phrases longer than VAD_MAX_PHRASE_MS', () => {

@@ -1,0 +1,93 @@
+import { describe, expect, it } from 'vitest';
+import { validateVoiceCanvasContent } from '../voice/validate';
+import { MathVisualSchema } from './models';
+import { compileTeaching, canonicalMathVisual, resolveMathTarget } from './teaching';
+
+const visual = (fields: object) => canonicalMathVisual(MathVisualSchema.parse({ id: 'math', title: 'Untrusted title', ...fields }));
+const array = visual({ kind: 'array', rows: 3, columns: 7 });
+const plan = (moments: object[]) => ({ title: 'A misleading title', moments: moments.map((m, sentenceOffset) => ({ sentenceOffset, ...m })) });
+const strict = (input: unknown) => validateVoiceCanvasContent(input, { requireGrounding: true });
+describe('grounded teaching compiler', () => {
+  it('derives speech and neutral labels from the same state, ignoring conflicting prose', () => {
+    const result = strict(plan([{ visual: { kind: 'array', rows: 3, columns: 7 }, narration: 'There are 99 squares.', teaching: { concept: 'equal_groups', action: 'calculate' } }]));
+    expect(result.moments[0].narration).toBe('3 rows times 7 squares makes 21 squares.');
+    expect(result.title).toBe('Equal groups');
+    const bars = strict(plan([{ visual: { kind: 'bars', bars: [{ id: 'a', label: 'One half', parts: 4, shaded: 1 }] }, teaching: { concept: 'fraction_amount', action: 'calculate' } }]));
+    expect(bars.moments[0].narration).toBe('Bar A has 4 equal parts, with 1 shaded.');
+    expect(JSON.stringify(bars)).not.toContain('One half');
+  });
+  it('requires grounding for every newly generated moment and rejects unknown capabilities', () => {
+    expect(() => strict(plan([{ visual: { kind: 'array', rows: 3, columns: 7 }, narration: 'Three times seven is 99.' }]))).toThrow(/structured teaching intent/);
+    expect(() => compileTeaching({ concept: 'angle_classification', action: 'observe' }, visual({ kind: 'geometry', shape: 'right_triangle', width: 3, height: 5 }))).toThrow();
+    expect(() => compileTeaching({ concept: 'fraction_comparison', action: 'compare' }, array)).toThrow(/cannot be shown/);
+  });
+  it('computes fraction comparisons by cross multiplication, including unequal partitions', () => {
+    for (let p = 1; p <= 12; p++) for (let q = 1; q <= 12; q++) {
+      const a = Math.floor(p / 2), b = Math.ceil(q / 2);
+      const v = visual({ kind: 'bars', bars: [{ id: 'a', label: 'X', parts: p, shaded: a }, { id: 'b', label: 'Y', parts: q, shaded: b }] });
+      const s = compileTeaching({ concept: 'fraction_comparison', action: 'compare' }, v).narration;
+      expect(s).toContain(a * q === b * p ? 'the same amount as' : a * q < b * p ? 'less than' : 'more than');
+    }
+  });
+  it('resolves visible labels without guessing ambiguous references or altering quantities', () => {
+    const v = visual({ kind: 'bars', bars: [{ id: 'left', label: 'X', parts: 2, shaded: 1 }, { id: 'right', label: 'Y', parts: 4, shaded: 1 }] });
+    const selected = compileTeaching({ concept: 'fraction_amount', action: 'calculate', targets: ['B'] }, v);
+    expect(selected.intent.targets).toEqual(['right']);
+    expect(selected.narration).toBe('Bar B has 4 equal parts, with 1 shaded.');
+    const ambiguous = visual({ kind: 'bars', bars: [{ id: 'B', label: 'X', parts: 2, shaded: 1 }, { id: 'right', label: 'Y', parts: 4, shaded: 1 }] });
+    expect(() => resolveMathTarget(ambiguous, 'B')).toThrow(/ambiguous/);
+  });
+  it('rejects false conservation across independent representation families', () => {
+    expect(() => compileTeaching({ concept: 'equal_groups', action: 'conserve' }, visual({ kind: 'array', rows: 3, columns: 8 }), array)).toThrow(/squares changed/);
+    const before = visual({ kind: 'bars', bars: [{ id: 'a', label: 'A', parts: 2, shaded: 1 }] });
+    expect(() => compileTeaching({ concept: 'fraction_equivalence', action: 'conserve' }, visual({ kind: 'bars', bars: [{ id: 'a', label: 'A', parts: 4, shaded: 1 }] }), before)).toThrow(/shaded fraction/);
+    expect(compileTeaching({ concept: 'fraction_equivalence', action: 'conserve' }, visual({ kind: 'bars', bars: [{ id: 'a', label: 'A', parts: 4, shaded: 2 }] }), before).narration).toContain('same shaded amount');
+    expect(() => compileTeaching({ concept: 'area_conservation', action: 'conserve' }, visual({ kind: 'geometry', shape: 'rectangle', width: 3, height: 5 }), visual({ kind: 'geometry', shape: 'rectangle', width: 3, height: 2 }))).toThrow(/area changed/);
+  });
+  it('requires actual mathematical changes, distinct targets and valid starting states', () => {
+    expect(() => compileTeaching({ concept: 'equal_groups', action: 'change' }, array)).toThrow(/starting picture/);
+    expect(() => compileTeaching({ concept: 'equal_groups', action: 'conserve' }, { ...array, showEquation: true }, array)).toThrow(/no mathematical change/);
+    const line = visual({ kind: 'number_line', min: -5, max: 5, markers: [{ id: 'a', label: 'A', value: -2 }, { id: 'b', label: 'B', value: 3 }] });
+    expect(compileTeaching({ concept: 'number_distance', action: 'calculate' }, line).narration).toContain('5 units');
+    for (const targets of [['a', 'a'], ['a', 'missing']]) expect(() => compileTeaching({ concept: 'number_order', action: 'compare', targets }, line)).toThrow(/distinct visible targets/);
+  });
+  it('preflights the entire sequence and never mutates or silently repairs the proposal', () => {
+    const proposal = plan([
+      { visual: { kind: 'array', rows: 3, columns: 7 }, teaching: { concept: 'equal_groups', action: 'observe' } },
+      { visual: { kind: 'update', changes: [{ type: 'set_array', columns: 8 }] }, teaching: { concept: 'equal_groups', action: 'conserve' } },
+    ]);
+    const original = JSON.stringify(proposal);
+    expect(() => strict(proposal)).toThrow(/squares changed/);
+    expect(JSON.stringify(proposal)).toBe(original);
+    expect(() => strict(plan([{ visual: { kind: 'bars', bars: [{ id: 'a', label: 'A', parts: 2, shaded: 3 }] }, teaching: { concept: 'fraction_amount', action: 'observe' } }]))).toThrow(/Shading exceeds/);
+  });
+  it('keeps transformation identity, proof pieces and questions consistent with the animation', () => {
+    expect(() => strict(plan([{ visual: { kind: 'array', rows: 3, columns: 7 }, teaching: { concept: 'equal_groups', action: 'observe' } }]))).toThrow(/not a completed lesson/);
+    expect(() => strict(plan([
+      { visual: { kind: 'geometry', shape: 'rectangle', width: 3, height: 2 }, teaching: { concept: 'area', action: 'observe' } },
+      { visual: { kind: 'geometry', shape: 'rectangle', width: 6, height: 2 }, teaching: { concept: 'area', action: 'change' } },
+    ]))).toThrow(/update existing objects/);
+    expect(() => strict(plan([
+      { visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2 }, teaching: { concept: 'area', action: 'observe' } },
+      { visual: { kind: 'update', changes: [{ type: 'set_parallelogram', base: 8, stage: 'cut' }] }, teaching: { concept: 'area', action: 'change' } },
+    ]))).toThrow(/same pieces/);
+    expect(() => strict(plan([{ visual: { kind: 'array', rows: 3, columns: 7 }, teaching: { concept: 'equal_groups', action: 'question' }, showEquation: true }]))).toThrow(/Hide the answer/);
+    expect(() => strict(plan([
+      { visual: { kind: 'array', rows: 3, columns: 7 }, teaching: { concept: 'equal_groups', action: 'observe' } },
+      { visual: { kind: 'keep' }, teaching: { concept: 'equal_groups', action: 'observe' } },
+    ]))).toThrow(/redundant moment/);
+  });
+  it('can explain a prior verified transformation while holding the picture, without inventing conservation', () => {
+    const lesson = (shaded: number) => plan([
+      { visual: { kind: 'bars', bars: [{ id: 'a', label: 'A', parts: 2, shaded: 1 }] }, teaching: { concept: 'fraction_amount', action: 'observe' } },
+      { visual: { kind: 'update', changes: [{ type: 'set_bar', barId: 'a', parts: 4, shaded }] }, teaching: { concept: 'fraction_amount', action: 'change' } },
+      { visual: { kind: 'keep' }, teaching: { concept: 'fraction_equivalence', action: 'conserve' } },
+    ]);
+    expect(strict(lesson(2)).moments[2].narration).toContain('same shaded amount');
+    expect(() => strict(lesson(1))).toThrow(/changed the shaded fraction/);
+    const noEvidence = lesson(2);
+    noEvidence.moments.splice(1, 1);
+    noEvidence.moments[1].sentenceOffset = 1;
+    expect(() => strict(noEvidence)).toThrow(/no mathematical change/);
+  });
+});

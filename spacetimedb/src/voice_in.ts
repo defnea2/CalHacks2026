@@ -35,6 +35,13 @@ const STT_RETRIES = 1;
 const STT_RETRY_DELAY_S = 0.3;
 
 /** Latest student turn that still accepts phrases (open, or closing and not yet ready). */
+/** Most recent student turn in any status (the one a just-ended turn's reports belong to). */
+export function latestStudentTurn(ctx: Ctx, sessionId: bigint): TurnRow | undefined {
+  const turns = sessionTurns(ctx, sessionId);
+  for (let i = turns.length - 1; i >= 0; i--) if (turns[i]!.role === 'student') return turns[i];
+  return undefined;
+}
+
 export function liveStudentTurn(ctx: Ctx, sessionId: bigint): TurnRow | undefined {
   const turns = sessionTurns(ctx, sessionId);
   for (let i = turns.length - 1; i >= 0; i--) {

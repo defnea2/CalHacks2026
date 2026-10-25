@@ -7,7 +7,7 @@ import { FakeTransport, sleep } from './fakes';
 
 const ctx = (transport: FakeTransport) => ({ sessionId: 7n, utteranceId: 99n, nextSentenceIdx: 3, transport });
 const call = (name: string, args: unknown) => ({ id: 'c1', name, arguments: typeof args === 'string' ? args : JSON.stringify(args) });
-const kindName = pack.boardKinds[0]!.name;
+const kindName = pack.boardKinds.find(k => k.name === 'text')!.name;
 const phaseId = pack.phases[1]!.id;
 
 describe('tool registry', () => {
@@ -15,7 +15,8 @@ describe('tool registry', () => {
     const defs = createToolDefs(pack);
     expect(defs.map(d => d.name)).toEqual(buildToolSpecs(pack).map(s => s.name));
     expect(defs.find(d => d.name === TOOL_NAMES.setTopic)!.kind).toBe('query');
-    for (const n of [TOOL_NAMES.setPhase, TOOL_NAMES.showBoardItem, TOOL_NAMES.clearBoard, TOOL_NAMES.remember]) {
+    expect(defs.find(d => d.name === TOOL_NAMES.showBoardItem)!.kind).toBe('query');
+    for (const n of [TOOL_NAMES.setPhase, TOOL_NAMES.clearBoard, TOOL_NAMES.remember]) {
       expect(defs.find(d => d.name === n)!.kind).toBe('action');
     }
   });
@@ -39,16 +40,15 @@ describe('ToolRouter', () => {
     expect(tr.of('setPhase')).toEqual([{ sessionId: 7n, phase: phaseId, reason: 'ready' }]);
   });
 
-  it('show_board_item: content as JSON string, tagged with utterance and next sentence', async () => {
+  it('permits authored library tasks but rejects a generated prose bypass', async () => {
     const tr = t();
-    const content = { text: 'Hello' };
-    const ans = { form: 'number', value: '3' };
-    await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, { kind: kindName, content, expectedAnswer: ans }), ctx(tr));
-    expect(tr.of('showBoardItem')).toEqual([
-      { sessionId: 7n, utteranceId: 99n, sentenceIdx: 3, kind: kindName, content: JSON.stringify(content), taskKey: '', expectedAnswer: JSON.stringify(ans) },
-    ]);
-    await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, { kind: kindName, taskKey: 'k1' }), ctx(tr));
-    expect(tr.of('showBoardItem')[1]).toMatchObject({ content: '', taskKey: 'k1', expectedAnswer: '' });
+    const router = new ToolRouter(createToolDefs(pack), 100);
+    const bad = await router.run(call(TOOL_NAMES.showBoardItem, { kind: kindName, content: { text: 'Wrong math' } }), ctx(tr));
+    expect(bad.ok).toBe(false);
+    expect(tr.of('showBoardItem')).toEqual([]);
+    const good = await router.run(call(TOOL_NAMES.showBoardItem, { taskKey: 'k1' }), ctx(tr));
+    expect(good.ok).toBe(true);
+    expect(tr.of('showBoardItem')[0]).toMatchObject({ content: '', taskKey: 'k1', sentenceIdx: 3 });
   });
 
   it('query tools return the procedure result', async () => {
@@ -58,11 +58,47 @@ describe('ToolRouter', () => {
     expect(tr.of('setTopic')[0]).toEqual({ sessionId: 7n, category: pack.taxonomy[0]!.key, concept: '' });
   });
 
+  it('rejects arguments that violate the tool schema before running the handler', async () => {
+    const tr = new FakeTransport();
+    const router = new ToolRouter(createToolDefs(pack), 200);
+    const missing = await router.run(call(TOOL_NAMES.setPhase, { reason: 'no phase given' }), ctx(tr));
+    expect(missing.ok).toBe(false);
+    expect(missing.result).toMatch(/^error: invalid arguments: .*phase.*required/);
+    const badEnum = await router.run(call(TOOL_NAMES.setPhase, { phase: 'not-a-phase', reason: 'x' }), ctx(tr));
+    expect(badEnum.result).toMatch(/^error: invalid arguments: .*must be one of/);
+    expect(tr.of('setPhase')).toEqual([]);
+  });
+
+  it('rejects a malformed math update before publishing a board', async () => {
+    const tr = t();
+    const r = await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, {
+      kind: 'math_canvas', content: { title: 'Cut', moments: [
+        { sentenceOffset: 0, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2 } },
+        { sentenceOffset: 1, visual: { kind: 'update', stage: 'cut' } },
+      ] },
+    }), ctx(tr));
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe('query'); // error goes back for repair, even after a preamble
+    expect(tr.of('showBoardItem')).toEqual([]);
+  });
+
+  it('returns an actionable error for an update-only continuation', async () => {
+    const tr = t();
+    const r = await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, {
+      kind: 'math_canvas', content: { title: 'Cut', moments: [
+        { sentenceOffset: 1, teaching: { concept: 'area', action: 'change' }, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+      ] },
+    }), ctx(tr));
+    expect(r.ok).toBe(false);
+    expect(r.result).toContain('complete picture at sentence offset zero');
+    expect(tr.of('showBoardItem')).toEqual([]);
+  });
+
   it('errors never throw: reducer error, bad JSON, unknown tool, timeout', async () => {
     const tr = t();
     tr.fail.setPhase = 'transition not allowed';
     const router = new ToolRouter(createToolDefs(pack), 50);
-    expect((await router.run(call(TOOL_NAMES.setPhase, { phase: 'x', reason: '' }), ctx(tr))).result).toBe('error: transition not allowed');
+    expect((await router.run(call(TOOL_NAMES.setPhase, { phase: phaseId, reason: '' }), ctx(tr))).result).toBe('error: transition not allowed');
     expect((await router.run(call(TOOL_NAMES.setPhase, '{"phase":'), ctx(tr))).result).toMatch(/^error: invalid arguments/);
     expect((await router.run(call(TOOL_NAMES.setPhase, '[1]'), ctx(tr))).result).toMatch(/^error: invalid arguments/);
     expect((await router.run(call('nope', {}), ctx(tr))).result).toBe('error: unknown tool nope');

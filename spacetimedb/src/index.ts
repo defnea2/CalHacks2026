@@ -85,9 +85,10 @@ export const reportNoise = spacetimedb.reducer(
   (ctx, { sessionId, noiseDb }) => {
     const session = getActiveSession(ctx, sessionId);
     if (!Number.isFinite(noiseDb)) throw new SenderError('noiseDb must be a number');
-    const live = voiceIn.liveStudentTurn(ctx, sessionId);
-    const turnIdx = live ? live.idx : session.turnCount;
-    const m = metricsFor(ctx, sessionId, turnIdx);
+    // Sent right after endTurn: it belongs to the latest student turn, which may already be ready.
+    const turn = voiceIn.latestStudentTurn(ctx, session.id);
+    if (!turn) return;
+    const m = metricsFor(ctx, sessionId, turn.idx);
     ctx.db.turnMetrics.id.update({ ...m, noiseDb });
   }
 );

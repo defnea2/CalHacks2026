@@ -37,6 +37,12 @@ function modelValue(
     case "geometry_height":
       if (visual.kind === "geometry") return visual.height;
       break;
+    case "parallelogram_area":
+      if (visual.kind === "parallelogram") return visual.base * visual.height;
+      break;
+    case "parallelogram_shear":
+      if (visual.kind === "parallelogram") return visual.shear;
+      break;
     case "array_total":
       if (visual.kind === "array") return visual.rows * visual.columns;
       break;

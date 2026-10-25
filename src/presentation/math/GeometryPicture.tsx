@@ -5,14 +5,25 @@ import type { MathChange, MathVisual } from "./models";
 import "mafs/core.css";
 
 const snap = (n: number) => Math.max(1, Math.min(12, Math.round(n * 2) / 2));
-export function GeometryPicture({ visual: v, enabled, onChange, animateChanges = false }: {
+export function GeometryPicture({ visual: v, enabled, onChange, animateChanges = false, minimal = false }: {
   visual: Extract<MathVisual, { kind: "geometry" }>;
   enabled: boolean; onChange(change: MathChange): void; animateChanges?: boolean;
+  minimal?: boolean;
 }) {
   const reduced = useReducedMotion();
   const [drawn, setDrawn] = useState({ width: v.width, height: v.height });
   const current = useRef(drawn);
   const [previous, setPrevious] = useState<typeof drawn | null>(null);
+  const plot = useRef<HTMLDivElement>(null);
+  const [plotHeight, setPlotHeight] = useState(300);
+  useEffect(() => {
+    if (!plot.current || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setPlotHeight(Math.max(180, Math.round(entry.contentRect.height)));
+    });
+    observer.observe(plot.current);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const from = current.current, to = { width: v.width, height: v.height };
     if (!animateChanges || reduced || (from.width === to.width && from.height === to.height)) {
@@ -38,9 +49,9 @@ export function GeometryPicture({ visual: v, enabled, onChange, animateChanges =
   const point: [number, number] = [x, y];
   const corners: [number, number][] = triangle ? [[left,bottom],[x,bottom],point] : [[left,bottom],[x,bottom],point,[left,y]];
   return <div className="math-geometry">
-    <p className="math-geometry-caption">{triangle ? "A triangle inside its rectangle" : "Each grid square is one square unit."}</p>
-    <div role="group" aria-label={`${triangle ? "Right triangle" : "Rectangle"}, base ${v.width}, height ${v.height}`}>
-      <Mafs height={300} pan={false} zoom={false} viewBox={{ x: [-1,13], y: [-1,Math.max(5, v.height + 1)], padding: 0 }}>
+    <p className="math-geometry-caption">{minimal ? '1 grid square = 1 square unit' : triangle ? "A triangle inside its rectangle" : "Each grid square is one square unit."}</p>
+    <div ref={plot} role="group" aria-label={`${triangle ? "Right triangle" : "Rectangle"}, base ${v.width}, height ${v.height}`}>
+      <Mafs height={plotHeight} pan={false} zoom={false} viewBox={{ x: [-1,13], y: [-1,Math.max(5, v.height + 1)], padding: 0 }}>
         <Coordinates.Cartesian xAxis={{ labels: false, axis: false }} yAxis={{ labels: false, axis: false }} />
         {triangle && <Polygon points={[[left,bottom],[x,bottom],point,[left,y]]} color="#b8723f" fillOpacity={0.04} strokeStyle="dashed" strokeOpacity={0.45} />}
         {previous && !triangle && <Polygon points={[[left,bottom],[left+previous.width,bottom],[left+previous.width,bottom+previous.height],[left,bottom+previous.height]]} color="#b8723f" fillOpacity={0.04} strokeStyle="dashed" weight={2} />}
@@ -54,7 +65,7 @@ export function GeometryPicture({ visual: v, enabled, onChange, animateChanges =
       </Mafs>
     </div>
     {v.interactive && <fieldset className="math-controls" disabled={!enabled}>
-      <legend>Drag the corner, or adjust a length</legend>
+      <legend className={minimal ? 'lab-sr-only' : ''}>Drag the corner, or adjust a length</legend>
       {(["width","height"] as const).map(key => <label key={key}>{key === "width" ? "Base" : "Height"}
         <input aria-label={`Geometry ${key}`} type="range" min="1" max="12" step="0.5" value={v[key]}
           onChange={e => onChange({ type: "set_geometry", [key]: Number(e.target.value) })} /><output>{v[key]}</output>

@@ -112,17 +112,34 @@ describe('interrupt', () => {
     expect(sentences(h, 9n).map(x => x.status)).toEqual(['played', 'dropped', 'dropped']);
     expect(() => call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 9n, idx: 3, display: 'x', speech: 'x' })).toThrow(/not current/);
 
-    // The remaining TTS jobs run late: no HTTP call (no responder -> would throw), no audio.
+    // The remaining TTS jobs run late: the HTTP call may happen (no pre-check), but the
+    // insert transaction sees `dropped` and emits no audio (audio_out and `ready` are written
+    // together, so a sentence that stays `dropped` got none).
     h.withReducerTx(agent, ctx => {
       for (const j of jobs.slice(1)) ctx.db.ttsJob.insert({ ...j, scheduledId: 0n });
     });
-    expect(runTts(h)).toBe(2);
+    expect(runTts(h, ttsOk)).toBe(2);
     expect(sentences(h, 9n).map(x => x.status)).toEqual(['played', 'dropped', 'dropped']);
 
     call(h, agent, mod.appendTutorTurn, { sessionId: s.id, utteranceId: 9n, text: 'S0.', interrupted: true });
     const tutor = turns(h, s.id).find(t => t.role === 'tutor')!;
     expect(tutor.interrupted).toBe(true);
     expect(session(h, s.id).turnState).toBe('listening');
+  });
+
+  it('interrupt after the tutor turn was appended marks it interrupted and keeps only heard sentences', () => {
+    const { h, agent, client, s } = ready();
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 21n, replyToIdx: 0, preemptive: false });
+    for (let i = 0; i < 3; i++) call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 21n, idx: i, display: `S${i}.`, speech: `S${i}.` });
+    runTts(h, ttsOk);
+    // The LLM finished: the worker appends the full text before playback ends.
+    call(h, agent, mod.appendTutorTurn, { sessionId: s.id, utteranceId: 21n, text: 'S0. S1. S2.', interrupted: false });
+    call(h, client, mod.markPlayed, { sessionId: s.id, utteranceId: 21n, idx: 0 });
+    call(h, client, mod.interrupt, { sessionId: s.id });
+    const tutor = turns(h, s.id).find(t => t.role === 'tutor')!;
+    expect(tutor.interrupted).toBe(true);
+    expect(tutor.text).toBe('S0.');
+    expect(sentences(h, 21n).map(x => x.status)).toEqual(['played', 'dropped', 'dropped']);
   });
 
   it('a sentence dropped while TTS is in flight is not emitted', () => {

@@ -17,17 +17,45 @@ const RATE = 48000; // Chrome's fake capture resamples; 48 kHz avoids artifacts
 /** Chrome loops the fake-capture file; trailing silence keeps a test from hearing speech twice. */
 const TRAILING_SILENCE_MS = 60_000;
 
+/** |sample| below this counts as silence when trimming TTS clips (about -40 dBFS). */
+const TRIM_LEVEL = 300;
+/** Keep this much of each clip's own lead-in/tail so onsets and decays are not cut. */
+const TRIM_KEEP_MS = 20;
+
+/** Nearest directory (repo root or an ancestor, e.g. for git worktrees) that holds .env. */
+function findEnvDir(start = ROOT): string {
+  for (let dir = start; ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, '.env'))) return dir;
+    if (path.dirname(dir) === dir) return start;
+  }
+}
+
 function loadEnv(): Record<string, string> {
   const out: Record<string, string> = {};
+  if (process.env.CARTESIA_API_KEY) out.CARTESIA_API_KEY = process.env.CARTESIA_API_KEY;
+  const dir = findEnvDir();
   for (const f of ['.env', '.env.local']) {
-    const p = path.join(ROOT, f);
+    const p = path.join(dir, f);
     if (!fs.existsSync(p)) continue;
     for (const line of fs.readFileSync(p, 'utf8').split(/\r?\n/)) {
       const m = line.match(/^\s*([A-Za-z_]\w*)\s*=\s*(.*?)\s*$/);
       if (m) out[m[1]!] = m[2]!.replace(/^(['"])(.*)\1$/, '$2');
     }
   }
+  if (process.env.CARTESIA_API_KEY) out.CARTESIA_API_KEY = process.env.CARTESIA_API_KEY;
   return out;
+}
+
+/** Cartesia clips carry their own leading/trailing silence, which lengthens the scripted pauses
+ *  (a 500 ms thinking pause became > 700 ms and ended the turn). Trim it so gaps are exact. */
+function trimSilence(s: Int16Array): Int16Array {
+  let a = 0;
+  let b = s.length - 1;
+  while (a < s.length && Math.abs(s[a]!) < TRIM_LEVEL) a++;
+  while (b > a && Math.abs(s[b]!) < TRIM_LEVEL) b--;
+  if (a >= b) return s;
+  const keep = Math.round((TRIM_KEEP_MS / 1000) * RATE);
+  return s.subarray(Math.max(0, a - keep), Math.min(s.length, b + 1 + keep));
 }
 
 /** A segment is speech (text) or silence (ms). */
@@ -40,7 +68,7 @@ interface Scenario {
   description: string;
 }
 
-// Turn ends need > VAD_TURN_MS (700) of silence; phrase ends > VAD_PHRASE_MS (300).
+// Turn ends need > VAD_TURN_MS (900) of silence; phrase ends > VAD_PHRASE_MS (300).
 export const SCENARIOS: Scenario[] = [
   {
     name: 'correct-step',
@@ -73,8 +101,11 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     name: 'noisy',
-    description: 'Correct step with steady background noise.',
-    noiseDbfs: -42,
+    // Chrome's capture noise suppression removes most steady noise (-42 dBFS steady noise arrived
+    // at -52..-66 dBFS and the indicator stayed "quiet"), so the noise is louder and fluctuates
+    // like a busy room.
+    description: 'Correct step with loud, fluctuating background noise.',
+    noiseDbfs: -28,
     segments: [{ silenceMs: 2000 }, { say: 'I need to find the number to multiply by.' }, { silenceMs: 2500 }],
   },
   {
@@ -131,16 +162,19 @@ function wav(samples: Int16Array, rate: number): Buffer {
   return Buffer.concat([h, data]);
 }
 
-/** Deterministic pseudo-random noise so fixtures are reproducible. */
+/** Deterministic pseudo-random noise so fixtures are reproducible. Slowly fluctuating level
+ *  (0.3..1 of the peak), which noise suppression cannot simply subtract. */
 function mixNoise(s: Int16Array, dbfs: number): void {
   const amp = 32767 * 10 ** (dbfs / 20) * Math.SQRT2;
   let x = 12345;
   let lp = 0;
   for (let i = 0; i < s.length; i++) {
-    x = (x * 1103515245 + 12345) & 0x7fffffff;
-    const white = (x / 0x7fffffff) * 2 - 1;
+    x = (x * 1103515245 + 12345) % 2147483648;
+    const white = (x / 2147483648) * 2 - 1;
     lp = lp * 0.7 + white * 0.3; // slightly darker than white, like room/fan noise
-    s[i] = Math.max(-32768, Math.min(32767, s[i]! + lp * amp * 1.8));
+    const t = i / RATE;
+    const env = 0.65 + 0.35 * Math.sin(2 * Math.PI * 0.9 * t) * Math.sin(2 * Math.PI * 0.31 * t + 1);
+    s[i] = Math.max(-32768, Math.min(32767, s[i]! + lp * amp * 1.8 * env));
   }
 }
 
@@ -150,10 +184,10 @@ async function main(): Promise<void> {
   fs.mkdirSync(OUT, { recursive: true });
   for (const sc of SCENARIOS) {
     const parts: Int16Array[] = [];
-    const timeline: { say?: string; startMs: number; endMs: number }[] = [];
+    const timeline: { say: string; startMs: number; endMs: number }[] = [];
     let ms = 0;
     for (const seg of sc.segments) {
-      const pcm = 'say' in seg ? await tts(seg.say, env) : new Int16Array(Math.round((seg.silenceMs / 1000) * RATE));
+      const pcm = 'say' in seg ? trimSilence(await tts(seg.say, env)) : new Int16Array(Math.round((seg.silenceMs / 1000) * RATE));
       const dur = (pcm.length / RATE) * 1000;
       if ('say' in seg) timeline.push({ say: seg.say, startMs: Math.round(ms), endMs: Math.round(ms + dur) });
       parts.push(pcm);
@@ -169,11 +203,27 @@ async function main(): Promise<void> {
     padded.set(all);
     if (sc.noiseDbfs !== undefined) mixNoise(padded, sc.noiseDbfs);
     fs.writeFileSync(path.join(OUT, `${sc.name}.wav`), wav(padded, RATE));
+    // Actual pause between consecutive utterances: the scripted silence plus what is left of the
+    // clips' own lead-in/tail (at most 2 x TRIM_KEEP_MS below TRIM_LEVEL).
+    const gapsMs = timeline.slice(1).map((t, i) => t.startMs - timeline[i]!.endMs + 2 * TRIM_KEEP_MS);
     fs.writeFileSync(
       path.join(OUT, `${sc.name}.json`),
-      JSON.stringify({ name: sc.name, description: sc.description, noiseDbfs: sc.noiseDbfs ?? null, durationMs: Math.round(ms), timeline }, null, 2)
+      JSON.stringify(
+        {
+          name: sc.name,
+          description: sc.description,
+          noiseDbfs: sc.noiseDbfs ?? null,
+          durationMs: Math.round(ms),
+          text: timeline.map(t => t.say).join(' '),
+          timeline,
+          gapsMs,
+          trim: { level: TRIM_LEVEL, keepMs: TRIM_KEEP_MS },
+        },
+        null,
+        2
+      )
     );
-    console.log(`${sc.name}.wav  ${(ms / 1000).toFixed(1)} s  ${timeline.length} utterances`);
+    console.log(`${sc.name}.wav  ${(ms / 1000).toFixed(1)} s  ${timeline.length} utterances  gaps ${JSON.stringify(gapsMs)} ms`);
   }
 }
 

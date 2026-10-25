@@ -8,11 +8,12 @@ import { callReducer } from '../stdb/connection';
 import { VoiceSession, type VoiceUiState } from '../audio/VoiceSession';
 import { Board } from '../board/Board';
 import { Captions, DebugPanel, Indicators, SessionTitle, useUtteranceState } from '../components/session';
-import { Button, Card, CardHeader, ErrorNote } from '../components/ui';
+import { Button, ErrorNote } from '../components/ui';
 import { APP_CONFIG } from '../app-config';
 import { compressPhoto } from '../lib/photo';
 import { eventLog } from '../lib/debug';
-import { navigate, sessionUrl } from '../lib/format';
+import { homeUrl, navigate, sessionUrl } from '../lib/format';
+import '../studio.css';
 
 const PLAYED = 'played';
 const SPEAKING = 'speaking';
@@ -30,7 +31,8 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
   const [localLatency, setLocalLatency] = useState<Map<number, number>>(() => new Map());
   const lastTurnEnd = useRef<number | null>(null);
   const turnCounter = useRef(0);
-  const debugOpen = new URLSearchParams(window.location.search).get('debug') !== '0' && APP_CONFIG.debugOpen;
+  const debugOpen = new URLSearchParams(window.location.search).get('debug') === '1';
+  const [conversationOpen, setConversationOpen] = useState(true);
 
   const { progress, serverOver } = useUtteranceState(data, localStarted);
 
@@ -161,104 +163,62 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
     );
   }
 
+  const stateLabel = !session?.active ? 'Finished' : ui.tutorAudio ? 'Speaking' : session.turnState === 'thinking' ? 'Thinking' : voice ? 'Listening' : 'Microphone off';
   return (
-    <div data-testid="session-screen" data-session-id={sessionId.toString()} className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-2">
-          <SessionTitle data={data} />
-          <Indicators data={data} noise={{ state: ui.noise, floorDb: ui.floorDb }} />
+    <div data-testid="session-screen" data-session-id={sessionId.toString()} className={`lesson-studio ${conversationOpen ? '' : 'conversation-hidden'}`}>
+      <div className="lesson-topline">
+        <div className="lesson-question">
+          <h1 data-testid="task-display">{session?.taskText || 'What would you like to understand?'}</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <a
-            data-testid="open-observer"
-            href={sessionUrl('observe', sessionId)}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            Open observer
-          </a>
-          <Button variant="outline" size="sm" data-testid="end-session" onClick={endSession} disabled={!session?.active}>
-            End session
-          </Button>
-        </div>
+        <button className="conversation-toggle" aria-expanded={conversationOpen} aria-controls="lesson-conversation" onClick={() => setConversationOpen(v => !v)}>
+          {conversationOpen ? 'Hide conversation' : 'Show conversation'}
+        </button>
       </div>
-
       <ErrorNote>{error}</ErrorNote>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader title="Your task" />
-            <div className="flex flex-col gap-3 p-4">
-              <p data-testid="task-display" className="whitespace-pre-wrap">
-                {session?.taskText || <span className="text-muted-foreground">No task text.</span>}
-              </p>
-              <PhotoUpload conn={conn} sessionId={sessionId} hasImage={!!session?.hasImage} />
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex flex-col items-center gap-3 p-6">
-              {!voice ? (
-                <Button size="lg" data-testid="start-talking" onClick={startTalking} disabled={starting || !session?.active}>
-                  {starting ? 'Starting…' : APP_CONFIG.startButtonText}
-                </Button>
-              ) : (
-                <div className="flex flex-col items-center gap-3">
-                  <MicMeter ui={ui} />
-                  <Button variant="secondary" data-testid="stop-talking" onClick={stopTalking}>
-                    {APP_CONFIG.stopButtonText}
-                  </Button>
-                </div>
-              )}
-              <p data-testid="headphones-hint" className="text-center text-xs text-muted-foreground">
-                {APP_CONFIG.headphonesHint}
-              </p>
-              {ui.noise === 'noisy' ? (
-                <p data-testid="noise-hint" className="rounded-lg bg-amber-100 px-3 py-2 text-center text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
-                  {APP_CONFIG.noisyHint}
-                </p>
-              ) : null}
-            </div>
-          </Card>
-
-          <Card>
-            <CardHeader title="Conversation" />
-            <Captions data={data} tutorShown={tutorShown} />
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader title="Board" />
-          <div className="p-4">
+      <div className="lesson-layout">
+        <section className="lesson-stage" aria-label="Learning canvas">
+          <div className="lesson-picture">
             <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} allowCanvasInteraction={!!session?.active && session.turnState === 'listening' && !ui.tutorAudio} />
           </div>
-        </Card>
+          <footer className="stage-controls">
+            <div className="voice-control">
+              {session && !session.active ? <Button size="lg" onClick={() => navigate(homeUrl())}>Start another question</Button> : !voice ? <Button size="lg" data-testid="start-talking" onClick={startTalking} disabled={starting || !session?.active}>
+                <MicIcon />{starting ? 'Starting…' : APP_CONFIG.startButtonText}
+              </Button> : <Button size="lg" variant="outline" data-testid="stop-talking" onClick={stopTalking}><MicIcon />Pause microphone</Button>}
+              {voice && <MicMeter ui={ui} />}
+            </div>
+            <span className="stage-status" role="status"><i data-active={!!voice} />{stateLabel}</span>
+            {ui.noise === 'noisy' && <p role="status">{APP_CONFIG.noisyHint}</p>}
+          </footer>
+        </section>
+        <aside id="lesson-conversation" className="lesson-conversation" hidden={!conversationOpen} aria-label="Conversation">
+          <div className="conversation-heading"><h2>Conversation</h2><span>{data.learner?.name || 'You'} + tutor</span></div>
+          <Captions data={data} tutorShown={tutorShown} />
+          <details className="lesson-details">
+            <summary>Lesson details</summary>
+            <div className="lesson-details-content">
+              <SessionTitle data={data} />
+              <PhotoUpload conn={conn} sessionId={sessionId} hasImage={!!session?.hasImage} />
+              <a data-testid="open-observer" href={sessionUrl('observe', sessionId)} target="_blank" rel="noreferrer">Open observer</a>
+              <Button variant="ghost" size="sm" data-testid="end-session" onClick={endSession} disabled={!session?.active}>Finish session</Button>
+            </div>
+          </details>
+        </aside>
       </div>
-
-      {debugOpen ? <DebugPanel data={data} localLatency={localLatency} /> : null}
-      {session && !session.active ? (
-        <Button variant="outline" onClick={() => navigate(window.location.pathname)}>
-          Back to learners
-        </Button>
-      ) : null}
+      {debugOpen && <><Indicators data={data} noise={{ state: ui.noise, floorDb: ui.floorDb }} /><DebugPanel data={data} localLatency={localLatency} /></>}
     </div>
   );
 }
 
+function MicIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" /></svg>;
+}
+
 function MicMeter({ ui }: { ui: VoiceUiState }) {
   const pct = Math.max(0, Math.min(100, ((ui.levelDb + 70) / 60) * 100));
-  return (
-    <div className="flex flex-col items-center gap-2" data-testid="mic-state" data-listening={ui.listening} data-speaking={ui.speaking} data-tutor-audio={ui.tutorAudio}>
-      <div className={`flex size-16 items-center justify-center rounded-full border-2 transition-colors ${ui.speaking ? 'border-emerald-500 bg-emerald-500/10' : ui.tutorAudio ? 'border-sky-500 bg-sky-500/10' : 'border-border'}`}>
-        <span className="text-xs font-medium">{ui.speaking ? 'You' : ui.tutorAudio ? 'Tutor' : ui.listening ? 'Listening' : '…'}</span>
-      </div>
-      <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted">
-        <div className="h-full bg-foreground/60 transition-[width] duration-100" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
+  return <div className="studio-mic" data-testid="mic-state" data-listening={ui.listening} data-speaking={ui.speaking} data-tutor-audio={ui.tutorAudio} aria-label={ui.speaking ? 'You are speaking' : 'Microphone on'}>
+    <span style={{ width: `${pct}%` }} />
+  </div>;
 }
 
 function PhotoUpload({ conn, sessionId, hasImage }: { conn: DbConnection; sessionId: bigint; hasImage: boolean }) {

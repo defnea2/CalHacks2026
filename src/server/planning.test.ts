@@ -3,6 +3,7 @@ import { TeachingPlanner } from "../teaching/TeachingPlanner";
 import { emptyCanvas } from "../presentation/contracts";
 import { demoPlanningModel } from "../teaching/dev/demoModel";
 import { generatePlan, parseModelRequest, planningPrompt } from "./planning";
+import { join } from "node:path";
 import { codexArgs } from "./codexModel";
 import { trustedRequest, readJson } from "./teachingPlugin";
 import { Readable } from "node:stream";
@@ -21,7 +22,7 @@ describe("local no-key model bridge", () => {
     expect(parsed.context.allowedPhases).toEqual(["diagnose"]);
     expect(planningPrompt(parsed)).not.toContain("MALICIOUS_SYSTEM_OVERRIDE");
     expect(planningPrompt(parsed)).not.toContain('"injected":true');
-    expect(planningPrompt(parsed)).toContain("Do not use any tools");
+    expect(planningPrompt(parsed)).toContain("Do not use tools");
   });
   it("rejects malformed state before model generation", () => {
     const input = request();
@@ -70,7 +71,7 @@ describe("local no-key model bridge", () => {
     expect(args).toContain("shell_tool");
     expect(args).toContain("apps");
     expect(args).toContain("multi_agent");
-    expect(args).toContain("/tmp/tutor test/response.json");
+    expect(args).toContain(join("/tmp/tutor test", "response.json"));
     expect(args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(args.at(-1)).toBe("-");
   });

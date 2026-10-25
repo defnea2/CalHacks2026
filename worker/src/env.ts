@@ -21,11 +21,11 @@ function readEnvFile(file: string): Record<string, string> {
   return fs.existsSync(file) ? parseEnv(fs.readFileSync(file, 'utf8')) : {};
 }
 
-/** Directory holding .env: the repo root, else the nearest ancestor with one (worktrees). */
+/** Directory holding .env or .env.local: prefer this checkout before searching ancestors. */
 export function findEnvDir(start = REPO_ROOT): string {
   let dir = start;
   for (;;) {
-    if (fs.existsSync(path.join(dir, '.env'))) return dir;
+    if (fs.existsSync(path.join(dir, '.env')) || fs.existsSync(path.join(dir, '.env.local'))) return dir;
     const up = path.dirname(dir);
     if (up === dir) return start;
     dir = up;
@@ -36,6 +36,12 @@ export interface WorkerConfig {
   spacetimeUri: string;
   spacetimeDb: string;
   agentSecret: string;
+  /** `anthropic` (default when ANTHROPIC_API_KEY is set) or `openrouter`. */
+  llmProvider: 'anthropic' | 'openrouter';
+  anthropicApiKey: string;
+  anthropicModel: string;
+  anthropicEffort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  anthropicThinking: 'adaptive' | 'disabled';
   openrouterApiKey: string;
   openrouterModel: string;
   reasoningEffort: string;
@@ -60,8 +66,14 @@ export function loadConfig(): WorkerConfig {
   };
   return {
     spacetimeUri: env.SPACETIME_URI || 'ws://127.0.0.1:3000',
-    spacetimeDb: env.SPACETIME_DB || 'tutor',
+    spacetimeDb: env.SPACETIME_DB || 'voice-tutor',
     agentSecret: env.AGENT_SECRET ?? '',
+    llmProvider: (env.LLM_PROVIDER || (env.ANTHROPIC_API_KEY ? 'anthropic' : 'openrouter')) === 'openrouter' ? 'openrouter' : 'anthropic',
+    anthropicApiKey: env.ANTHROPIC_API_KEY ?? '',
+    anthropicModel: env.ANTHROPIC_MODEL || 'claude-haiku-5-5',
+    anthropicEffort: (env.ANTHROPIC_EFFORT as WorkerConfig['anthropicEffort']) || 'medium',
+    // Thinking off measured 0.3-0.5 s faster to first token on Haiku 5.5 at effort low; tool calls still work.
+    anthropicThinking: env.ANTHROPIC_THINKING === 'adaptive' ? 'adaptive' : 'disabled',
     openrouterApiKey: env.OPENROUTER_API_KEY ?? '',
     openrouterModel: env.OPENROUTER_MODEL ?? '',
     reasoningEffort: env.LLM_REASONING_EFFORT || WORKER_DEFAULTS.LLM_REASONING_EFFORT,

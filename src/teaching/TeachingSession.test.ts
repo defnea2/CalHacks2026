@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TeachingSession } from "./TeachingSession";
 import { demoPlanningModel, demoTopics } from "./dev/demoModel";
+import { preparedLessons, preparedPlanningModel } from "./preparedLessons";
 import type { PlanningModel } from "./TeachingPlanner";
 
 const session = (model: PlanningModel = demoPlanningModel, topic: typeof demoTopics[number] = demoTopics[0]) =>
@@ -106,5 +107,48 @@ describe("planner and latest canvas integration", () => {
     expect(second.getSnapshot().error).toMatch(/Stale teaching plan/);
     expect(await second.plan()).toBe(true);
     expect(second.planner.getSnapshot().step?.phase).toBe("diagnose");
+  });
+});
+
+describe("prepared lesson flow", () => {
+  const prepared = (i = 0) => new TeachingSession({ sessionId: crypto.randomUUID(), topic: preparedLessons[i].topic, lessonStyle: "mini_lesson" }, preparedPlanningModel);
+  it("plays at least four beats before asking, then re-teaches after a wrong answer with a new check", async () => {
+    const s = prepared();
+    await s.plan();
+    const intro = s.planner.getSnapshot().step!;
+    expect(intro.beats.length).toBeGreaterThanOrEqual(4);
+    expect(s.planner.getSnapshot().status).toBe("presenting");
+    while (s.presentNext());
+    expect(s.planner.getSnapshot().status).toBe("awaiting_response");
+    await s.respond({ kind: "choice", optionId: "b" });
+    const again = s.planner.getSnapshot();
+    expect(again.evidence[0].outcome).toBe("incorrect");
+    expect(again.step!.id).not.toBe(intro.id);
+    expect(again.step!.approach).toBe("change_representation");
+    expect(again.step!.beats.length).toBeGreaterThanOrEqual(3);
+    expect(again.status).toBe("presenting");
+    while (s.presentNext());
+    expect(s.planner.getSnapshot().status).toBe("awaiting_response");
+    expect(s.planner.getSnapshot().step!.check).toBeTruthy();
+  });
+  it("skips to the final beat and then asks the question", async () => {
+    const s = prepared(2);
+    await s.plan();
+    expect(s.skipToEnd()).toBe(true);
+    expect(s.getSnapshot().beatIndex).toBe(s.planner.getSnapshot().step!.beats.length - 1);
+    expect(s.planner.getSnapshot().status).toBe("awaiting_response");
+  });
+  it("lets a learner interrupt mid-lesson with a help request", async () => {
+    const s = prepared(1);
+    await s.plan();
+    const first = s.planner.getSnapshot().step!;
+    expect(s.planner.getSnapshot().status).toBe("presenting");
+    expect(await s.respond({ kind: "help", request: "simpler" })).toBe(true);
+    const now = s.planner.getSnapshot();
+    expect(now.evidence.at(-1)?.response).toEqual({ kind: "help", request: "simpler" });
+    expect(now.step!.id).not.toBe(first.id);
+    expect(now.status).toBe("presenting");
+    expect(s.getSnapshot().error).toBeNull();
+    expect(s.getSnapshot().beatIndex).toBe(0);
   });
 });

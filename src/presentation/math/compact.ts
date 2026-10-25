@@ -3,10 +3,10 @@ import type { CanvasState, CommandInput } from "../contracts";
 import { MathChangeSchema, MathVisualSchema } from "./models";
 
 // The wire vocabulary describes quantities, never pixels, colors, code or TeX.
-const [array, bars, geometry, line] = MathVisualSchema.options;
+const [array, bars, geometry, parallelogram, line] = MathVisualSchema.options;
 const strip = { id: true, title: true, interactive: true, showEquation: true, focus: true } as const;
 export const CompactMathCommandSchema = z.discriminatedUnion("kind", [
-  array.omit(strip), bars.omit(strip), geometry.omit(strip), line.omit(strip),
+  array.omit(strip), bars.omit(strip), geometry.omit(strip), parallelogram.omit(strip), line.omit(strip),
   z.object({ kind: z.literal("update"), changes: z.array(MathChangeSchema).min(1).max(6) }).strict(),
   z.object({ kind: z.literal("keep") }).strict(),
 ]);

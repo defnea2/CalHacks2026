@@ -13,6 +13,7 @@ import { assessResponse } from "./checks";
 import { allowedPhases } from "./policy";
 import { TEACHING_INSTRUCTIONS } from "./prompts";
 import { validateTeachingStep } from "./validateStep";
+import type { PlanningProgressHandler } from "./streaming";
 
 export interface PlannerState {
   config: SessionConfig;
@@ -45,6 +46,7 @@ export interface PlanningRequest {
 export type PlanningModel = (
   request: PlanningRequest,
   signal?: AbortSignal,
+  onProgress?: PlanningProgressHandler,
 ) => Promise<unknown>;
 /** Teaching state only. The host remains authoritative for visuals, audio and room context. */
 export class TeachingPlanner {
@@ -99,15 +101,15 @@ export class TeachingPlanner {
           supported: allowedPhases(this.state.step, {
             ...latest,
             outcome: "correct",
-          }),
+          }, this.state.config),
           misconception: allowedPhases(this.state.step, {
             ...latest,
             outcome: "incorrect",
-          }),
+          }, this.state.config),
           unclear: allowedPhases(this.state.step, {
             ...latest,
             outcome: "unclear",
-          }),
+          }, this.state.config),
         }
       : null;
     const request: PlanningRequest = {
@@ -127,7 +129,7 @@ export class TeachingPlanner {
           s.exampleProblem ? [s.exampleProblem] : [],
         ),
         evidence: this.state.evidence.slice(-20),
-        allowedPhases: allowedPhases(this.state.step, this.latestEvidence()),
+        allowedPhases: allowedPhases(this.state.step, this.latestEvidence(), this.state.config),
         phaseOptionsAfterAssessment,
         canvas,
       },
@@ -200,7 +202,8 @@ export class TeachingPlanner {
     if (
       !step ||
       event.stepId !== step.id ||
-      this.state.status !== "awaiting_response"
+      (this.state.status !== "awaiting_response" &&
+        !(this.state.status === "presenting" && event.response.kind === "help"))
     )
       throw new Error(
         "Response belongs to an inactive or unfinished teaching step.",
@@ -238,6 +241,13 @@ export class TeachingPlanner {
     const output = await model(request, signal);
     if (signal?.aborted) throw new Error("Planning cancelled.");
     return this.accept(request.requestId, output, getCurrentCanvas());
+  }
+  /** Unscored user context from a spoken interruption; never invent learner evidence. */
+  recordUtterance(text: string) {
+    if (this.state.status !== "needs_plan") throw new Error("Interrupt the current lesson before recording a new turn.");
+    const utterance = z.string().trim().min(1).max(2000).parse(text);
+    this.publish({ config: { ...this.state.config, context: [...this.state.config.context.slice(-11),
+      { id: crypto.randomUUID(), text: utterance, source: "learner speech" }] } });
   }
   recap() {
     const evidence = structuredClone(this.state.evidence);

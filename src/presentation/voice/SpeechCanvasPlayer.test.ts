@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { VoiceCanvasContentSchema } from './contracts';
+import { VoiceCanvasContentSchema, VoiceCanvasGenerationSchema } from './contracts';
 import { SpeechCanvasPlayer, type SpeechCanvasItem } from './SpeechCanvasPlayer';
 import schema from '../../../shared/src/lesson/pack/mathCanvas.schema.json';
+import generationSchema from '../../../shared/src/lesson/pack/mathCanvasGeneration.schema.json';
 import { validateJson } from '../../../shared/src/lesson/api';
+import { validateVoiceCanvasContent } from './validate';
 import type { JsonSchema } from '../../../shared/src/lesson/types';
 
 const content = { title: 'Four rows of eight', moments: [
@@ -16,6 +18,14 @@ const heard = (...indices: number[]) => new Map([['7', indices]]);
 const visual = (p: SpeechCanvasPlayer) => p.director.getSnapshot().canvas.math?.visual;
 
 describe('speech canvas', () => {
+  it('requires a complete contiguous narration plan while still accepting legacy cues', () => {
+    expect(() => validateVoiceCanvasContent(content)).not.toThrow();
+    const plan = { ...content, moments: content.moments.map(m => ({ ...m, narration: 'Look at this part.' })) };
+    expect(() => validateVoiceCanvasContent(plan)).not.toThrow();
+    expect(() => validateVoiceCanvasContent({ ...plan, moments: [plan.moments[0], { ...plan.moments[1], sentenceOffset: 2 }] })).toThrow(/contiguous/);
+    expect(() => validateVoiceCanvasContent({ ...plan, moments: [plan.moments[0], content.moments[1]] })).toThrow(/narration on every/);
+  });
+
   it('waits for actual audio, changes the same picture, and deduplicates repeated subscriptions', () => {
     const p = new SpeechCanvasPlayer();
     p.sync([item], heard(), false);
@@ -70,8 +80,29 @@ describe('speech canvas', () => {
     p.sync([], heard(), false);
     expect(visual(p)).toBeUndefined();
   });
+  it('plays Abdul’s cut-and-slide proof from speech and keeps the equation hidden until the final sentence', () => {
+    const p = new SpeechCanvasPlayer();
+    const proof = { ...item, content: { title: 'Same pieces, same area', moments: [
+      { sentenceOffset: 0, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'slant' } },
+      { sentenceOffset: 1, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+      { sentenceOffset: 2, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'reassembled' }] } },
+      { sentenceOffset: 3, visual: { kind: 'keep' }, showEquation: true },
+    ] } };
+    p.sync([proof], heard(1), false);
+    expect(visual(p)).toMatchObject({ kind: 'parallelogram', stage: 'slant', base: 6, height: 4, showEquation: false });
+    p.sync([proof], heard(1, 2), false);
+    expect(visual(p)).toMatchObject({ stage: 'cut', showEquation: false });
+    p.sync([proof], heard(1, 2, 3), false);
+    expect(visual(p)).toMatchObject({ stage: 'reassembled', base: 6, height: 4, showEquation: false });
+    p.sync([proof], heard(1, 2, 3, 4), true);
+    expect(visual(p)).toMatchObject({ stage: 'reassembled', showEquation: true });
+    expect(p.error).toBeNull();
+  });
+
   it('the voice database schema matches the canonical canvas schema', () => {
     expect(schema).toEqual(z.toJSONSchema(VoiceCanvasContentSchema, { io: 'input' }));
+    expect(generationSchema).toEqual(z.toJSONSchema(VoiceCanvasGenerationSchema, { io: 'input' }));
+    expect(validateJson(generationSchema as unknown as JsonSchema, content).length).toBeGreaterThan(0);
     expect(validateJson(schema as unknown as JsonSchema, content)).toEqual([]);
     expect(validateJson(schema as unknown as JsonSchema, { ...content, title: '' })).not.toEqual([]);
     expect(validateJson(schema as unknown as JsonSchema, { title: 'X', moments: [{ sentenceOffset: 0, visual: { kind: 'execute', code: 'bad' } }] })).not.toEqual([]);

@@ -17,6 +17,7 @@ import "./visuals.css";
 export interface LearningWorkspaceProps {
   scene: SceneState;
   embedded?: boolean;
+  minimal?: boolean;
   showComparisonControl?: boolean;
   onAction(action: LearnerAction): void;
 }
@@ -32,6 +33,7 @@ function ValidWorkspace({
   scene,
   onAction,
   embedded = false,
+  minimal = false,
   showComparisonControl = true,
 }: LearningWorkspaceProps) {
   const activity = scene.activity;
@@ -82,6 +84,7 @@ function ValidWorkspace({
           {activity.kind === "bars_number_line" &&
             (activity.mode === "bars" ? (
               <BarsActivity
+                minimal={minimal}
                 showComparisonControl={showComparisonControl}
                 scene={scene}
                 emit={emit}
@@ -90,6 +93,7 @@ function ValidWorkspace({
               />
             ) : (
               <NumberLineActivity
+                minimal={minimal}
                 scene={scene}
                 emit={emit}
                 announce={setNotice}
