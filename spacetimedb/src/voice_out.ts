@@ -1,0 +1,259 @@
+// Voice output: utterances, sentences, TTS jobs, playback state, interrupts, tutor turns.
+import { SenderError } from 'spacetimedb/server';
+import type { SentenceStatus, TurnState, TurnStatus } from '../../shared/src/types';
+import {
+  type Ctx,
+  type PCtx,
+  type SessionRow,
+  dueIn,
+  findSentence,
+  findTurn,
+  getActiveSession,
+  metricsFor,
+  metricsForUtterance,
+  sessionTurns,
+  truncate,
+  updateSession,
+  utteranceSentences,
+} from './ctx';
+import { onTurnAppended } from './memory';
+import { ProviderError, synthesize, ttsRequest } from './providers';
+
+const PENDING: SentenceStatus = 'pending';
+const READY: SentenceStatus = 'ready';
+const PLAYED: SentenceStatus = 'played';
+const DROPPED: SentenceStatus = 'dropped';
+const LISTENING: TurnState = 'listening';
+const THINKING: TurnState = 'thinking';
+const SPEAKING: TurnState = 'speaking';
+const INTERRUPTED: TurnState = 'interrupted';
+const T_OPEN: TurnStatus = 'open';
+const T_CLOSING: TurnStatus = 'closing';
+const T_READY: TurnStatus = 'ready';
+const T_DONE: TurnStatus = 'done';
+
+const SENTENCE_MAX = 600;
+const TTS_RETRIES = 1;
+
+export function beginUtterance(
+  ctx: Ctx,
+  args: { sessionId: bigint; utteranceId: bigint; replyToIdx: number; preemptive: boolean }
+): void {
+  const session = getActiveSession(ctx, args.sessionId);
+  if (args.utteranceId === 0n) throw new SenderError('utteranceId must be non-zero');
+  if (findSentence(ctx, args.utteranceId, 0) || metricsForUtterance(ctx, args.sessionId, args.utteranceId)) {
+    throw new SenderError(`utterance ${args.utteranceId} already exists`);
+  }
+  const target = findTurn(ctx, args.sessionId, args.replyToIdx);
+  if (!target || target.role !== 'student') throw new SenderError(`no student turn ${args.replyToIdx}`);
+  const m = metricsFor(ctx, args.sessionId, args.replyToIdx);
+  // Another reply to this turn is already speaking (e.g. a second worker): keep the first one.
+  if (m.utteranceId !== 0n && m.utteranceId !== args.utteranceId && session.currentUtteranceId === m.utteranceId) {
+    throw new SenderError(`turn ${args.replyToIdx} is already being answered by utterance ${m.utteranceId}`);
+  }
+  updateSession(ctx, session, { currentUtteranceId: args.utteranceId });
+  ctx.db.turnMetrics.id.update({ ...m, utteranceId: args.utteranceId, preemptive: args.preemptive });
+}
+
+export function addSentence(
+  ctx: Ctx,
+  args: { sessionId: bigint; utteranceId: bigint; idx: number; display: string; speech: string }
+): void {
+  const session = getActiveSession(ctx, args.sessionId);
+  if (args.utteranceId === 0n || session.currentUtteranceId !== args.utteranceId) {
+    throw new SenderError(`utterance ${args.utteranceId} is not current (stale or interrupted)`);
+  }
+  const speech = args.speech.trim();
+  if (!speech) throw new SenderError('empty sentence');
+  if (speech.length > SENTENCE_MAX || args.display.length > SENTENCE_MAX) throw new SenderError('sentence too long');
+  if (findSentence(ctx, args.utteranceId, args.idx)) throw new SenderError(`sentence ${args.idx} already exists`);
+  const row = ctx.db.replySentence.insert({
+    id: 0n,
+    sessionId: args.sessionId,
+    utteranceId: args.utteranceId,
+    idx: args.idx,
+    display: truncate(args.display, SENTENCE_MAX),
+    speech,
+    status: PENDING,
+    createdAt: ctx.timestamp,
+  });
+  ctx.db.ttsJob.insert({
+    scheduledId: 0n,
+    scheduledAt: dueIn(ctx),
+    sessionId: args.sessionId,
+    sentenceId: row.id,
+    utteranceId: args.utteranceId,
+    idx: args.idx,
+    speech,
+  });
+  if (args.idx === 0) {
+    const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
+    if (m && !m.firstSentenceAt) ctx.db.turnMetrics.id.update({ ...m, firstSentenceAt: ctx.timestamp });
+  }
+}
+
+/** Scheduled: one sentence -> audio_out. Skips sentences dropped by an interrupt. */
+export function synthesizeSentence(
+  ctx: PCtx,
+  job: { sessionId: bigint; sentenceId: bigint; utteranceId: bigint; idx: number; speech: string },
+  attempt = 0
+): void {
+  const live = ctx.withTx(tx => {
+    const s = tx.db.replySentence.id.find(job.sentenceId);
+    return !!s && s.status === PENDING;
+  });
+  if (!live) return;
+
+  let audio;
+  try {
+    audio = synthesize(ctx, ttsRequest(ctx, job.speech));
+  } catch (e) {
+    if (!(e instanceof ProviderError)) throw e;
+    console.warn(`synthesizeSentence utterance ${job.utteranceId} idx ${job.idx} attempt ${attempt}: ${e.message}`);
+    if (attempt < TTS_RETRIES) return synthesizeSentence(ctx, job, attempt + 1);
+    // Give up: mark dropped so playback (strictly by index) can skip it.
+    ctx.withTx(tx => {
+      const s = tx.db.replySentence.id.find(job.sentenceId);
+      if (s && s.status === PENDING) tx.db.replySentence.id.update({ ...s, status: DROPPED });
+      maybeFinishSpeaking(tx, job.sessionId, job.utteranceId);
+    });
+    return;
+  }
+
+  ctx.withTx(tx => {
+    const s = tx.db.replySentence.id.find(job.sentenceId);
+    if (!s || s.status !== PENDING) return; // dropped while synthesizing
+    tx.db.audioOut.insert({
+      sessionId: job.sessionId,
+      utteranceId: job.utteranceId,
+      idx: job.idx,
+      pcm: audio.pcm,
+      sampleRate: audio.sampleRate,
+    });
+    tx.db.replySentence.id.update({ ...s, status: READY });
+    const session = tx.db.session.id.find(job.sessionId);
+    if (session && session.currentUtteranceId === job.utteranceId && session.turnState !== INTERRUPTED && session.turnState !== SPEAKING) {
+      updateSession(tx, session, { turnState: SPEAKING });
+    }
+    if (job.idx === 0) {
+      const m = metricsForUtterance(tx, job.sessionId, job.utteranceId);
+      if (m && !m.firstAudioAt) tx.db.turnMetrics.id.update({ ...m, firstAudioAt: tx.timestamp });
+    }
+  });
+}
+
+export function markPlayed(ctx: Ctx, args: { sessionId: bigint; utteranceId: bigint; idx: number }): void {
+  const s = findSentence(ctx, args.utteranceId, args.idx);
+  if (!s || s.sessionId !== args.sessionId) return;
+  if (s.status === READY) ctx.db.replySentence.id.update({ ...s, status: PLAYED });
+  if (args.idx === 0) {
+    const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
+    if (m && !m.firstPlaybackAt) ctx.db.turnMetrics.id.update({ ...m, firstPlaybackAt: ctx.timestamp });
+  }
+  maybeFinishSpeaking(ctx, args.sessionId, args.utteranceId);
+}
+
+function tutorTurnFor(ctx: Ctx, sessionId: bigint, utteranceId: bigint) {
+  for (const t of ctx.db.turn.sessionId.filter(sessionId)) if (t.role === 'tutor' && t.utteranceId === utteranceId) return t;
+  return undefined;
+}
+
+/** Tutor turn appended and every sentence played (or dropped) -> listening. */
+function maybeFinishSpeaking(ctx: Ctx, sessionId: bigint, utteranceId: bigint): void {
+  const session = ctx.db.session.id.find(sessionId);
+  if (!session || session.currentUtteranceId !== utteranceId) return;
+  if (!tutorTurnFor(ctx, sessionId, utteranceId)) return;
+  if (utteranceSentences(ctx, sessionId, utteranceId).some(s => s.status === PENDING || s.status === READY)) return;
+  finishUtterance(ctx, session);
+}
+
+function finishUtterance(ctx: Ctx, session: SessionRow): void {
+  const turnState = session.turnState === SPEAKING || session.turnState === THINKING || session.turnState === INTERRUPTED ? LISTENING : session.turnState;
+  updateSession(ctx, session, { currentUtteranceId: 0n, turnState });
+}
+
+export function interrupt(ctx: Ctx, sessionId: bigint): void {
+  const session = getActiveSession(ctx, sessionId);
+  const utteranceId = session.currentUtteranceId;
+  if (utteranceId === 0n && session.turnState === LISTENING) return; // nothing to interrupt
+  if (utteranceId !== 0n) {
+    for (const s of utteranceSentences(ctx, sessionId, utteranceId)) {
+      if (s.status === PENDING || s.status === READY) ctx.db.replySentence.id.update({ ...s, status: DROPPED });
+    }
+  }
+  ctx.db.playbackFlush.insert({ sessionId, utteranceId });
+  updateSession(ctx, session, { turnState: INTERRUPTED, currentUtteranceId: 0n });
+}
+
+/**
+ * Appends the tutor turn (what was actually spoken). A student turn that started while this
+ * utterance was playing (barge-in) and isn't ready yet is moved behind the tutor turn, so turn
+ * order matches what was said.
+ */
+export function appendTutorTurn(
+  ctx: Ctx,
+  args: { sessionId: bigint; utteranceId: bigint; text: string; interrupted: boolean }
+): void {
+  let session = getActiveSession(ctx, args.sessionId);
+  if (args.utteranceId === 0n) throw new SenderError('utteranceId must be non-zero');
+  if (tutorTurnFor(ctx, args.sessionId, args.utteranceId)) throw new SenderError(`tutor turn for utterance ${args.utteranceId} exists`);
+  const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
+  const replyToIdx = m ? m.turnIdx : -1;
+  const text = args.text.trim();
+
+  if (m) {
+    const answered = findTurn(ctx, args.sessionId, m.turnIdx);
+    if (answered && answered.status === T_READY) ctx.db.turn.id.update({ ...answered, status: T_DONE });
+  }
+
+  if (text) {
+    // Student turns opened during this utterance and not yet ready move one slot back.
+    const later = sessionTurns(ctx, args.sessionId).filter(t => t.idx > replyToIdx);
+    let idx = session.turnCount;
+    const firstLive = later.findIndex(t => t.role === 'student' && (t.status === T_OPEN || t.status === T_CLOSING));
+    if (firstLive >= 0 && later.slice(firstLive).every(t => t.role === 'student' && (t.status === T_OPEN || t.status === T_CLOSING))) {
+      const moving = later.slice(firstLive).sort((a, b) => b.idx - a.idx);
+      idx = moving[moving.length - 1]!.idx;
+      for (const t of moving) shiftStudentTurn(ctx, t.sessionId, t.idx, t.idx + 1);
+    }
+    ctx.db.turn.insert({
+      id: 0n,
+      sessionId: args.sessionId,
+      idx,
+      role: 'tutor',
+      text,
+      status: T_DONE,
+      pendingPhrases: 0,
+      utteranceId: args.utteranceId,
+      interrupted: args.interrupted,
+      createdAt: ctx.timestamp,
+      closedAt: ctx.timestamp,
+    });
+    session = updateSession(ctx, session, { turnCount: session.turnCount + 1 });
+    onTurnAppended(ctx, args.sessionId);
+    session = ctx.db.session.id.find(args.sessionId)!;
+  }
+
+  if (session.currentUtteranceId !== args.utteranceId) {
+    // Interrupted (or superseded) earlier: leave the barge-in state once the tutor side is closed.
+    if (session.turnState === INTERRUPTED) updateSession(ctx, session, { turnState: LISTENING });
+    return;
+  }
+  const unplayed = utteranceSentences(ctx, args.sessionId, args.utteranceId).some(s => s.status === PENDING || s.status === READY);
+  if (!text || !unplayed) finishUtterance(ctx, session);
+}
+
+/** Moves a not-yet-ready student turn to a new idx (phrases and metrics follow). */
+function shiftStudentTurn(ctx: Ctx, sessionId: bigint, from: number, to: number): void {
+  const t = findTurn(ctx, sessionId, from);
+  if (!t) return;
+  ctx.db.turn.id.update({ ...t, idx: to });
+  for (const p of [...ctx.db.phrase.sessionId.filter(sessionId)]) if (p.turnIdx === from) ctx.db.phrase.id.update({ ...p, turnIdx: to });
+  for (const m of [...ctx.db.turnMetrics.bySessionTurn.filter([sessionId, from])]) ctx.db.turnMetrics.id.update({ ...m, turnIdx: to });
+}
+
+export function setTurnState(ctx: Ctx, sessionId: bigint, state: string, allowed: readonly string[]): void {
+  if (!allowed.includes(state)) throw new SenderError(`unknown turn state ${state}`);
+  const session = getActiveSession(ctx, sessionId);
+  updateSession(ctx, session, { turnState: state });
+}

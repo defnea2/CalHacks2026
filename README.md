@@ -137,3 +137,7 @@ Automated coverage includes transactional mathematical updates, derived quantiti
 ## Scope and GitHub traceability
 
 Each feature is a separate commit on `feature/visual-engine`. The branch starts from `main`; the earlier `scaffold/shared-contracts` branch is separate and is not required. Voice, teaching/model orchestration, backend, accounts, and the other members' product work remain independent.
+
+## Voice runtime
+
+The Cartesia/SpacetimeDB voice runtime is now included alongside the text-only tutor. See [voice setup](docs/VOICE_RUNTIME.md). Use `pnpm dev:voice` for the voice stack; `npm run dev` still starts the text-only tutor.

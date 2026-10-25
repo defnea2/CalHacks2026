@@ -11,3 +11,14 @@ test-results/
 playwright-report/
 
 dist-teaching/
+.idea/
+# agent identity token
+worker/.agent-token
+# recordings of real people never go in the repo
+recordings/
+# holds module env secrets in plain bytes; do not push to the public repo
+.spacetime-data/
+# agent worktrees
+.claude/
+# generated E2E speech (regenerate with pnpm --filter e2e gen-speech)
+e2e/fixtures/

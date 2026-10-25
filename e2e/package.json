@@ -1,0 +1,18 @@
+{
+  "name": "e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen-speech": "tsx gen-speech.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@tutor/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "puppeteer-core": "^24",
+    "tsx": "^4.20.6",
+    "typescript": "~5.6.2"
+  }
+}

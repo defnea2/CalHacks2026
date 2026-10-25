@@ -1,0 +1,8 @@
+{
+  "name": "@tutor/shared",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./*": "./src/*.ts" },
+  "scripts": { "test": "vitest run", "typecheck": "tsc -p ." },
+  "devDependencies": { "@types/node": "^24.9.1", "typescript": "~5.6.2", "vitest": "^3.2.4" }
+}

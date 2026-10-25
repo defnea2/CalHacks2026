@@ -19,7 +19,16 @@
     "dev:teaching": "vite --config vite.teaching.config.ts",
     "build:teaching": "tsc --noEmit && vite build --config vite.teaching.config.ts",
     "test:teaching": "vitest run src/teaching",
-    "test:live-model": "node scripts/smoke-model.mjs"
+    "test:live-model": "node scripts/smoke-model.mjs",
+    "dev:voice": "node scripts/dev.mjs",
+    "stdb:start": "NO_PROXY=127.0.0.1,localhost spacetime start --data-dir ./.spacetime-data",
+    "stdb:publish": "node scripts/publish.mjs",
+    "stdb:generate": "NO_PROXY=127.0.0.1,localhost spacetime generate --lang typescript --out-dir client/src/module_bindings --module-path spacetimedb && NO_PROXY=127.0.0.1,localhost spacetime generate --lang typescript --out-dir worker/src/module_bindings --module-path spacetimedb",
+    "stt-proxy": "pnpm --filter stt-proxy start",
+    "worker": "pnpm --filter worker start",
+    "client": "pnpm --filter client dev",
+    "test:voice": "pnpm -r --if-present test",
+    "typecheck:voice": "pnpm -r --if-present typecheck"
   },
   "dependencies": {
     "katex": "0.19.1",
@@ -40,5 +49,6 @@
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "4.1.12"
-  }
+  },
+  "packageManager": "pnpm@9.15.9"
 }
