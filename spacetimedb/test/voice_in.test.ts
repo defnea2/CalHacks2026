@@ -140,7 +140,7 @@ describe('turn closing', () => {
 
   it('discards too-short phrases without an STT call and drops a turn without text', () => {
     const { h, client, s } = start();
-    call(h, client, mod.pushAudio, { sessionId: s.id, phraseId: 1, seq: 0, pcm: pcm(50), final: true }); // 50 ms < 100 ms
+    call(h, client, mod.pushAudio, { sessionId: s.id, phraseId: 1, seq: 0, pcm: pcm(30), final: true }); // 30 ms < VAD_MIN_SPEECH_MS (50)
     call(h, client, mod.endTurn, { sessionId: s.id });
     expect(turns(h, s.id)[0]!.status).toBe('closing');
     runStt(h); // no responder: an HTTP call would throw
