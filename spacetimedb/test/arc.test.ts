@@ -100,6 +100,9 @@ describe('demo2min arc', () => {
     say(e, 'five');
     expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ outcome: 'incorrect' });
     expect(request(e).request.context.allowedPhases).toEqual(['return_to_problem']);
+    // A wrong answer is named kindly at once (authored), and the planner is told it was said.
+    expect(request(e).say).toEqual(['You said five. Not quite.']);
+    expect(JSON.stringify(request(e).request.context.session.context)).toContain('The tutor already said');
     step(e, 300n, demoHandBackMeta, demoHandBackMoments);
     expect(lesson(e).stage).toBe('completed');
   });
@@ -157,7 +160,7 @@ describe('push back, then let the learner decide', () => {
     step(e, 100n, demoMeta, demoMoments);
     say(e, 'say it again slower');
     expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ response: { kind: 'help', request: 'repeat' } });
-    expect(request(e).say).toBeUndefined();
+    expect(request(e).say).toEqual(['Sure, here it is again, slowly.']); // authored acknowledgement, the step follows
   });
 });
 

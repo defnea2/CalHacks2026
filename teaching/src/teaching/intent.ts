@@ -119,6 +119,22 @@ export interface TurnDecision {
    *  with `record` (pending cleared) and, for small requests, `help`. */
   handled: boolean;
   help?: "repeat" | "another_way" | "simpler";
+  /** Authored first line for the help step (spoken while the step is planned). */
+  ack?: string[];
+}
+
+const ACK = { repeat: "Sure, here it is again, slowly.", another_picture: "Sure, here's another picture.", simpler: "Okay, let's take a smaller step." };
+
+/**
+ * Authored first line after an assessed answer under an arc (spoken at once, while the next step
+ * is planned): a wrong answer is named kindly ("You said ninety nine. Not quite."), "I don't know"
+ * gets "That's okay.", anything else unclear "Hmm, not quite.". The planner is told it was said, so it does not repeat it.
+ */
+export function feedbackLine(outcome: string, text: string): string | null {
+  const said = text.trim().replace(/[.!?]+$/, "");
+  if (outcome === "incorrect") return said && said.split(/\s+/).length <= 6 ? `You said ${said}. Not quite.` : "Not quite.";
+  if (outcome === "unclear") return /\b(don'?t know|not sure|no idea|dunno|don'?t get)\b/i.test(said) ? "That's okay." : "Hmm, not quite.";
+  return null;
 }
 
 const bump = (r: LessonRecord, patch: Partial<LessonRecord>): LessonRecord => ({ ...r, ...patch, revision: r.revision + 1 });
@@ -180,7 +196,7 @@ export function decideTurn(record: LessonRecord, text: string, turnId: string): 
   // "Give me a task" while the task is already open: just ask it again.
   if (intent === "skip" && open) return say(base, ["Here is your task.", open], true);
   if (intent === "repeat" || intent === "another_picture" || intent === "simpler")
-    return { record: base, handled: false, help: intent === "another_picture" ? "another_way" : intent };
+    return { record: base, handled: false, help: intent === "another_picture" ? "another_way" : intent, ack: [ACK[intent]] };
   return { record: base, handled: false };
 }
 

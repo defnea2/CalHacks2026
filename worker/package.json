@@ -9,7 +9,8 @@
     "test": "vitest run",
     "typecheck": "tsc -p .",
     "smoke:lesson": "tsx src/smoke-lesson.ts",
-    "smoke:session": "NO_PROXY=127.0.0.1,localhost tsx src/smoke-session.ts"
+    "smoke:session": "NO_PROXY=127.0.0.1,localhost tsx src/smoke-session.ts",
+    "pushback": "NO_PROXY=127.0.0.1,localhost tsx src/pushback-harness.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

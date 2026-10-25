@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { arcs } from "../../shared/src/lesson/pack/arcs";
 import { arcPhases, LessonArcSchema, type LessonArc } from "../src/teaching/arc";
-import { classifyIntent, decideTurn, flowSensitive, PUSHBACK } from "../src/teaching/intent";
+import { classifyIntent, decideTurn, feedbackLine, flowSensitive, PUSHBACK } from "../src/teaching/intent";
 import { acceptStep, newLessonRecord, type LessonRecord } from "../src/teaching/lessonFlow";
 import type { TeachingStep } from "../src/teaching/contracts";
 
@@ -105,8 +105,16 @@ describe("decideTurn", () => {
     expect(b.record.reply?.sayOnly).toBe(true);
   });
 
+  it("feedback line: a wrong answer is named kindly, a long one is not quoted", () => {
+    expect(feedbackLine("incorrect", "ninety nine.")).toBe("You said ninety nine. Not quite.");
+    expect(feedbackLine("incorrect", "I think it is maybe seven or eight twelfths")).toBe("Not quite.");
+    expect(feedbackLine("unclear", "I don't know")).toBe("That's okay.");
+    expect(feedbackLine("unclear", "ninety nine")).toBe("Hmm, not quite.");
+    expect(feedbackLine("correct", "8")).toBeNull();
+  });
+
   it("small requests are done without a confirmation", () => {
-    expect(decideTurn(awaiting(), "say it again slower", "t1")).toMatchObject({ handled: false, help: "repeat" });
+    expect(decideTurn(awaiting(), "say it again slower", "t1")).toMatchObject({ handled: false, help: "repeat", ack: ["Sure, here it is again, slowly."] });
     expect(decideTurn(awaiting(), "another picture", "t1")).toMatchObject({ handled: false, help: "another_way" });
     expect(decideTurn(awaiting(), "Give me a task", "t1").record.reply?.lines).toEqual(["Here is your task.", "What is 1/2 in quarters?"]);
   });

@@ -40,7 +40,7 @@ import {
   type LessonRecord,
 } from '../../teaching/src/teaching/lessonFlow';
 import { arcMoment, LessonArcSchema, type LessonArc } from '../../teaching/src/teaching/arc';
-import { decideTurn } from '../../teaching/src/teaching/intent';
+import { decideTurn, feedbackLine } from '../../teaching/src/teaching/intent';
 import { choiceProblem, homeworkRepeat, visibleAnswer } from '../../teaching/src/teaching/checkGuards';
 import { splitKeyframes } from '../../teaching/src/teaching/keyframes';
 import { ADAPTIVE_ARC, conceptMaterial, DEFAULT_ARC, guessTopic, pack } from '../../shared/src/lesson/index';
@@ -403,18 +403,32 @@ export function onStudentTurnReady(ctx: Ctx, turn: TurnRow, opts: { assessed?: b
   let record = loadRecord(ctx, session);
   const eventId = `turn-${turn.id}`;
   let help: 'another_way' | 'simpler' | 'explain' | 'repeat' | undefined = HELP[turn.intent];
+  let first: string[] | undefined;
   try {
     // Push back on significant changes, let the learner decide on the next turn (arc lessons, spoken/typed turns).
     if (record.config.arc && !turn.intent) {
       const d = decideTurn(record, truncate(turn.text, 2000), eventId);
       record = d.record;
       if (d.handled) return saveRecord(ctx, session.id, record);
-      if (d.help && record.step) help = d.help;
+      if (d.help && record.step) [help, first] = [d.help, d.ack];
     }
     if (record.step && help) record = respond(record, eventId, { kind: 'help', request: help }, sceneOf(canvasRow(ctx, session.id))).record;
     else if (turn.intent === 'continue') return;
-    else if (record.step && record.status === 'awaiting_response') record = respond(record, eventId, answerResponse(record.step.check, truncate(turn.text, 2000)), sceneOf(canvasRow(ctx, session.id))).record;
-    else record = recordUtterance(record, eventId, turn.text);
+    else if (record.step && record.status === 'awaiting_response') {
+      const r = respond(record, eventId, answerResponse(record.step.check, truncate(turn.text, 2000)), sceneOf(canvasRow(ctx, session.id)));
+      record = r.record;
+      const line = record.config.arc ? feedbackLine(r.evidence.outcome, truncate(turn.text, 200)) : null;
+      if (line) first = [line];
+    } else record = recordUtterance(record, eventId, turn.text);
+    // Authored first line (spoken at once while the step is planned); the planner knows it was said.
+    if (first?.length) {
+      const said = first.join(' ');
+      record = {
+        ...record,
+        reply: { turnId: eventId, lines: first, sayOnly: false },
+        config: { ...record.config, context: [...record.config.context.slice(-11), { id: `${eventId}-said`, text: `The tutor already said: "${said}" Do not repeat it; go straight on.`, source: 'tutor' }] },
+      };
+    }
   } catch (e) {
     console.warn(`lesson: turn ${turn.idx} of session ${turn.sessionId} not recorded: ${validatorMessage(e)}`);
     return;
