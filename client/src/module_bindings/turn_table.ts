@@ -22,6 +22,4 @@ export default __t.row({
   interrupted: __t.bool(),
   createdAt: __t.timestamp().name("created_at"),
   closedAt: __t.option(__t.timestamp()).name("closed_at"),
-  source: __t.string(),
-  intent: __t.string(),
 });

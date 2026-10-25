@@ -246,7 +246,7 @@ export function appendTutorTurn(
       utteranceId: args.utteranceId,
       interrupted: args.interrupted,
       createdAt: ctx.timestamp,
-      closedAt: ctx.timestamp, source: "voice", intent: "",
+      closedAt: ctx.timestamp,
     });
     session = updateSession(ctx, session, { turnCount: session.turnCount + 1 });
     onTurnAppended(ctx, args.sessionId);
