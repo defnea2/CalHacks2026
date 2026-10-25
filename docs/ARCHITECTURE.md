@@ -73,8 +73,10 @@ read them) can see them; **event** = rows are broadcast to subscribers at commit
 | Table | Kind | Purpose |
 | --- | --- | --- |
 | `learner` | public | Students (name, age, grade, learning style). `isSimulated` / `simRank` mark the 20 simulation users |
-| `session` | public | One tutoring session: `turnState` (listening / thinking / speaking / interrupted), `phase`, topic (`category`, `concept`), `currentUtteranceId`, `voice` (false = text mode), `classSessionId` (0 = ad-hoc) |
+| `session` | public | One tutoring session: `turnState` (listening / thinking / speaking / interrupted), `phase`, topic (`category`, `concept`), `currentUtteranceId`, `voice` (false = text mode), `classSessionId` (0 = ad-hoc), `pendingPhoto` (a turn photo waits for the next turn; no bytes) |
 | `session_image` | private | Task photo (≤ 1 MB, compressed in the browser); read by the worker via `getSessionImage` |
+| `turn_image` | private | Photos taken during the session ("take a picture at any time", ≤ 1 MB JPEG): `bound` false = pending (at most one per session), then `turnIdx` / `usedAt` of the student turn it went out with; read by the worker via `getTurnImage` |
+| `session_owner` | private | Identity that started an ad-hoc session (`startSession`); only it may attach turn photos |
 | `role` | private | Identity → `agent`; written by `registerAgent` with the shared `AGENT_SECRET` |
 
 ### Voice input
@@ -84,7 +86,7 @@ read them) can see them; **event** = rows are broadcast to subscribers at commit
 | `audio_in` | private | Buffered 16 kHz PCM16 chunks of a phrase, joined by `seq` and deleted after transcription |
 | `speech_activity` | **event** | "The student is speaking" pings (no audio) so the worker can abort a preemptive reply |
 | `phrase` | public | One phrase between short pauses: status streaming → transcribing → done / discarded, transcript text |
-| `turn` | public | Conversation turns (student and tutor): status open → closing → ready → done, `pendingPhrases`, `source` (voice / text / sim), `intent` (lesson buttons), `interrupted` |
+| `turn` | public | Conversation turns (student and tutor): status open → closing → ready → done, `pendingPhrases`, `source` (voice / text / sim), `intent` (lesson buttons), `interrupted`, `hasPhoto` (a turn photo was sent with this student turn) |
 
 ### Voice output
 
@@ -171,6 +173,8 @@ checks the caller's identity in the private `role` table.
 | `createTestUser` | client | `sessions.ts` | New learner |
 | `startSession(learnerId, taskText)` | client | `sessions.ts` | Ends the learner's active session, starts a new one |
 | `uploadPhoto` | client | `sessions.ts` | Task photo (jpeg/png/webp/gif, ≤ 1 MB) |
+| `attachImage(sessionId, mime, data)` | client (session owner) | `turn_photo.ts` | Photo taken during the session (jpeg/png/webp/gif, ≤ 1 MB); replaces a still-pending one, sets `session.pendingPhoto`. Completing the learner's next student turn (`completeTurn`) binds it to that turn (`turn.hasPhoto`). Owner = the identity that started the session, or for class sessions the connection holding the learner's `presence` |
+| `removePendingImage(sessionId)` | client (session owner) | `turn_photo.ts` | Drops the pending photo |
 | `endSession` | client | `sessions.ts` | Closes turns, drops unplayed sentences, schedules final memory extraction + summary |
 | `startConversation` | client (module for sims) | `opening.ts` | "Start talking": tutor speaks first (turnState thinking) |
 | `pushAudio(sessionId, phraseId, seq, pcm, final)` | client | `voice_in.ts` | Buffers a 160 ms chunk; `final` closes the phrase and inserts an `stt_job` due now; emits `speech_activity` |
@@ -195,6 +199,7 @@ checks the caller's identity in the private `role` table.
 | `buildLessonRequest(sessionId, requestId) → string` | agent (procedure) | `pipeline.ts` | The team `ModelRequest` for the current lesson state |
 | `setTopic(...) → string` | agent (procedure) | `lesson.ts` | Validates + stores the topic, returns the library material |
 | `getSessionImage(sessionId) → string` | agent (procedure) | `index.ts` | Task photo (or the class's image document) as a data URL |
+| `getTurnImage(sessionId, turnIdx) → string` | agent (procedure) | `turn_photo.ts` | Photo sent with that turn (or the pending one while that turn is still open, for a preemptive reply) as a data URL. The lesson planner puts it into that turn's user message as an image block with "The learner sent a photo with this turn: look at it." (never the system prompt: the cache prefix stays stable) |
 | `transcribePhrase` | scheduled (`stt_job`) | `voice_in.ts` | Joins the phrase's chunks, `POST {STT_BASE_URL}/stt`, writes the text, lowers `pendingPhrases` |
 | `synthesizeSentence` | scheduled (`tts_job`) | `voice_out.ts` | Cartesia `/tts/sse` → `audio_out` event + sentence `ready` |
 | `finishTextSentence` | scheduled (`text_play_job`) | `text_mode.ts` | Text mode: sentence counts as played |
@@ -474,7 +479,9 @@ Procedures are the module's only way out: STT, TTS and all non-streaming LLM cal
   are all validated in transactions; a rejection is a `SenderError` the worker turns into a repair
   round. The worker holds no authority.
 - **Private tables hide what clients must not see:** answer keys (`board_answer`, `lesson_record`),
-  memory, raw audio, photos, agent roles.
+  memory, raw audio, photos, agent roles. Photos (task photo and turn photos) are never visible to
+  other students; observer/teacher views only see the `turn.hasPhoto` / `session.pendingPhoto` flags.
+  A photo is sent to Anthropic (Claude Haiku) as part of the planner request of its turn.
 - **Event tables for streams.** Audio (`audio_out`), flushes and speech pings are event rows: delivered
   to subscribers at commit, never stored, no cleanup.
 - **Scheduled tables instead of external queues.** STT, TTS, reading delays, memory windows, simulated

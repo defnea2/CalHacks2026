@@ -178,6 +178,7 @@ opening), so keep it as concrete fractions/decimals like above.
    - pieces appearing on the canvas **at the word** the tutor says;
    - the check question at the end (choice buttons or "check my picture").
 6. Answer by voice (or click a choice). Optionally interrupt the tutor mid-sentence to show barge-in.
+   Optional: tap the camera button next to the controls, snap a photo of written work ("Will be sent with your next answer"), then answer: the tutor's next reply looks at the photo.
 
 > "Everything you saw went through SpacetimeDB: audio chunks up as reducer calls, speech-to-text and
 > text-to-speech run in scheduled procedures, every picture is compiled and validated by a reducer

@@ -26,3 +26,4 @@
 .turn-photo-sheet footer .primary:hover { background: #213e2e; }
 .turn-photo-sheet footer .primary:disabled { opacity: .55; }
 .turn-photo-sheet footer .secondary { background: transparent; color: #2c4e3c; border: 1px solid #c9d2c4; }
+.caption-photo { font-size: 11px; font-style: italic; opacity: .8; }
