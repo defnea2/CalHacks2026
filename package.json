@@ -11,7 +11,8 @@
     "worker": "pnpm --filter worker start",
     "client": "pnpm --filter client dev",
     "test": "pnpm -r --if-present test",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test:e2e": "pnpm --filter e2e test:e2e"
   },
   "packageManager": "pnpm@9.15.9"
 }
