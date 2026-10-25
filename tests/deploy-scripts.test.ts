@@ -25,7 +25,9 @@ describe('publish.mjs', () => {
     expect(r.status).toBe(0);
     expect(r.out).toContain('target: server=maincloud db=fibonacci-demo  [REMOTE]');
     expect(r.out).toContain(`[dry-run] (cd ${ROOT} && ${BIN} publish fibonacci-demo --server maincloud --module-path spacetimedb --yes)`);
-    expect(r.out).toMatch(/module env: CARTESIA_API_KEY, AGENT_SECRET, STT_BASE_URL, CARTESIA_STT_MODEL, INSIGHTS_KEY, ANTHROPIC_API_KEY/);
+    // The developer's own .env may add optional keys (e.g. OpenRouter), so check names, not the exact list.
+    const envLine = r.out.split('\n').find(l => l.includes('module env:')) ?? '';
+    for (const key of ['CARTESIA_API_KEY', 'AGENT_SECRET', 'STT_BASE_URL', 'CARTESIA_STT_MODEL', 'INSIGHTS_KEY', 'ANTHROPIC_API_KEY']) expect(envLine).toContain(key);
     expect(r.out).not.toContain('cloud-secret');
     expect(r.out).not.toContain('test-cartesia');
   });
