@@ -135,7 +135,10 @@ describe('inline marker reveal', () => {
     expect(revealState(item, playing, { now: 9000, markerAt: 1500 }).revealed).toBe(true);
     // a later sentence started, utterance over, or no local timing (observer/reload) -> shown
     expect(revealState(item, { maxStarted: 2, over: false }, { now: 0, markerAt: 1500 }).revealed).toBe(true);
-    expect(revealState(item, { maxStarted: 1, over: true }, { now: 0, markerAt: 1500 }).revealed).toBe(true);
+    // the last sentence of a finished reply is still playing: its marker word still counts
+    expect(revealState(item, { maxStarted: 1, over: true }, { now: 0, markerAt: 1500 }).revealAt).toBe(1500);
+    expect(revealState(item, { maxStarted: 1, over: true }, { now: 1600, markerAt: 1500 }).revealed).toBe(true);
+    expect(revealState(item, { maxStarted: -1, over: true }, { now: 0, markerAt: 1500 }).revealed).toBe(true);
     expect(revealState(item, playing, { now: 0 }).revealed).toBe(true);
     // no marker: sentence start as before
     expect(revealState({ ...item, markerPos: -1 }, playing, { now: 0, markerAt: 1500 }).revealed).toBe(true);

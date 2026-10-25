@@ -55,11 +55,14 @@ export function Board({ items, progress, serverOver, onSubmitAnswer, markerAt }:
       }
       if (!states[i]!.revealed || logged.current.has(k)) return;
       logged.current.add(k);
+      const at = item.markerPos >= 0 ? markerAt?.(item) : undefined;
       eventLog.log('board.reveal', {
         id: k,
         utteranceId: item.utteranceId.toString(),
         sentenceIdx: item.sentenceIdx,
         markerPos: item.markerPos,
+        // When the marker word plays (performance.now() clock), if known on this tab.
+        markerAt: at === undefined ? null : Math.round(at),
       });
     });
   });

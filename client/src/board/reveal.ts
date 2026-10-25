@@ -28,14 +28,15 @@ export interface RevealOptions {
 export function revealState(item: RevealInput, progress: UtteranceProgress | undefined, opts: RevealOptions = {}): RevealState {
   if (item.utteranceId === 0n) return { revealed: true, progress: Infinity };
   if (!progress) return { revealed: false, progress: 0 };
-  if (progress.over) return { revealed: true, progress: Infinity };
   const n = progress.maxStarted - item.sentenceIdx + 1;
-  if (n <= 0) return { revealed: false, progress: 0 };
   // Marker inside the sentence that is playing now: wait for its word (a later sentence
-  // having started means the word was said).
+  // having started means the word was said). Checked before `over`: the utterance counts as
+  // over as soon as its last sentence *starts* (markPlayed), while that sentence still plays.
   if (n === 1 && (item.markerPos ?? -1) >= 0 && opts.markerAt !== undefined && (opts.now ?? 0) < opts.markerAt) {
     return { revealed: false, progress: 0, revealAt: opts.markerAt };
   }
+  if (progress.over) return { revealed: true, progress: Infinity };
+  if (n <= 0) return { revealed: false, progress: 0 };
   return { revealed: true, progress: n };
 }
 
