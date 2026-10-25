@@ -1,7 +1,7 @@
 // Worker entry: LLM streaming and tool routing for every active session.
 // `pnpm --filter worker start`
 import { pack } from '@tutor/shared';
-import { Agent } from './agent';
+import { Agent, unhandledRejectionLogger } from './agent';
 import { loadConfig } from './env';
 import { createLessonLlm, createLlm } from './providers';
 import { TutorRequests } from './tutorRequests';
@@ -25,6 +25,9 @@ if (missing.length) {
 
 const ts = () => new Date().toISOString().slice(11, 23);
 const log = (m: string) => console.log(`${ts()} ${m}`);
+
+// A stray rejected promise (network blip, closed connection) must not kill the worker mid-demo.
+process.on('unhandledRejection', unhandledRejectionLogger(log));
 
 const { llm, info: modelInfo } = createLlm(cfg);
 const link = new StdbLink({

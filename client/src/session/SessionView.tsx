@@ -485,6 +485,11 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
                   </Button>
                 )}
                 {listening && <MicMeter ui={ui} phrase={livePhrase} />}
+                {active && voice && ui.audioBlocked && (
+                  <Button size="sm" variant="outline" data-testid="tap-for-sound" onClick={() => voice.resumeAudio()}>
+                    Tap for sound
+                  </Button>
+                )}
               </div>
               {active && (
                 <form

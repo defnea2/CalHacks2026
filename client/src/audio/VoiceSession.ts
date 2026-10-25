@@ -5,6 +5,7 @@ import type { AudioOut, PlaybackFlush } from '../module_bindings/types';
 import type { AppSettings } from '../config';
 import { AudioCapture } from './AudioCapture';
 import { PlaybackQueue } from './PlaybackQueue';
+import { AudioUnlock } from './audioUnlock';
 import { floatToPcm16 } from './pcm';
 import type { VadEvent } from './vadMachine';
 import type { NoiseState } from './noise';
@@ -20,6 +21,8 @@ export interface VoiceUiState {
   floorDb: number | null;
   levelDb: number;
   prob: number;
+  /** AudioContext still not running after a resume attempt (autoplay blocked): show "Tap for sound". */
+  audioBlocked?: boolean;
 }
 
 export interface VoiceSessionOptions {
@@ -40,8 +43,10 @@ export class VoiceSession {
   private serverUtterance = 0n;
   private lastUiFrame = 0;
   private stopped = false;
+  private readonly unlock: AudioUnlock;
   private readonly onAudio = (_c: unknown, row: AudioOut) => {
     if (row.sessionId !== this.o.sessionId) return;
+    this.unlock.poke(); // a suspended context would stall playback forever
     this.playback.push({
       utteranceId: row.utteranceId,
       idx: row.idx,
@@ -59,7 +64,11 @@ export class VoiceSession {
   constructor(private readonly o: VoiceSessionOptions) {
     // Must run inside the click handler (autoplay policy).
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
-    void this.ctx.resume();
+    this.unlock = new AudioUnlock(this.ctx, blocked => {
+      eventLog.log('audio.blocked', { blocked, state: this.ctx.state });
+      o.onUi({ audioBlocked: blocked });
+    });
+    this.unlock.poke();
     eventLog.log('audio.context', { sampleRate: this.ctx.sampleRate, state: this.ctx.state });
     this.playback = new PlaybackQueue(this.ctx, o.settings.playback, o.settings.client, {
       onSentenceStart: (u, idx, timing) => {
@@ -164,6 +173,11 @@ export class VoiceSession {
     }
   }
 
+  /** "Tap for sound": resume the AudioContext from a user gesture. */
+  resumeAudio(): void {
+    this.unlock.poke();
+  }
+
   get capturing(): boolean {
     return this.capture !== null;
   }
@@ -183,6 +197,7 @@ export class VoiceSession {
     this.o.conn.db.audioOut.removeOnInsert(this.onAudio);
     this.o.conn.db.playbackFlush.removeOnInsert(this.onFlush);
     this.playback.destroy();
+    this.unlock.destroy();
     await this.ctx.close().catch(() => {});
     this.o.onUi({ listening: false, speaking: false, tutorAudio: false });
   }

@@ -12,7 +12,7 @@ import { ScheduleAt } from 'spacetimedb';
 import { MODULE_DEFAULTS } from '../../shared/src/config';
 import { INTENT_TEXT, SOURCE_TEXT, TURN_INTENTS, type SentenceStatus, type TurnIntent, type TurnState } from '../../shared/src/types';
 import { type Ctx, type SentenceRow, type SessionRow, getActiveSession, metricsFor, metricsForUtterance, nowMicros, updateSession } from './ctx';
-import { completeTurn, liveStudentTurn, openStudentTurn } from './voice_in';
+import { completeTurn, finalizeOrphanPhrases, liveStudentTurn, openStudentTurn } from './voice_in';
 import { appendTutorTurn, heardText, interrupt, maybeFinishSpeaking, tutorTurnFor } from './voice_out';
 
 const READY: SentenceStatus = 'ready';
@@ -77,6 +77,8 @@ export function submitTextTurn(ctx: Ctx, args: { sessionId: bigint; text: string
   let session = getActiveSession(ctx, args.sessionId);
 
   // A spoken turn still waiting for transcription would interleave with the typed one.
+  // A phrase orphaned by a reload / dropped connection (no final chunk) must not block typing.
+  finalizeOrphanPhrases(ctx, session.id, { staleOnly: true, discard: true });
   let turn = liveStudentTurn(ctx, session.id);
   if (turn) {
     const streaming = [...ctx.db.phrase.sessionId.filter(session.id)].some(p => p.turnIdx === turn!.idx && (p.status === 'streaming' || p.status === 'transcribing'));

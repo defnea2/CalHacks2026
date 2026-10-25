@@ -5,6 +5,7 @@ import type { PhraseStatus, TurnStatus, TurnState } from '../../shared/src/types
 import {
   type Ctx,
   type PCtx,
+  type PhraseRow,
   type SessionRow,
   type TurnRow,
   dueIn,
@@ -12,6 +13,7 @@ import {
   findTurn,
   getActiveSession,
   metricsFor,
+  nowMicros,
   sessionTurns,
   updateSession,
 } from './ctx';
@@ -88,6 +90,9 @@ export function pushAudio(
   }
 
   if (!phrase) {
+    // The VAD streams one phrase at a time: another still-streaming phrase lost its final chunk
+    // (reload, tab close, websocket drop) and would block its turn forever.
+    finalizeOrphanPhrases(ctx, sessionId, { exceptPhraseId: phraseId });
     let turn = liveStudentTurn(ctx, sessionId);
     if (!turn) turn = openStudentTurn(ctx, session);
     else if (turn.status === T_CLOSING) turn = ctx.db.turn.id.update({ ...turn, status: T_OPEN }); // spoke again before ready
@@ -114,12 +119,53 @@ export function pushAudio(
     bytes: phrase.bytes + pcm.length,
   });
 
-  if (final && phrase.status === P_STREAMING) {
-    ctx.db.phrase.id.update({ ...phrase, status: P_TRANSCRIBING, finalAt: ctx.timestamp });
-    const turn = findTurn(ctx, sessionId, phrase.turnIdx);
-    if (turn) ctx.db.turn.id.update({ ...turn, pendingPhrases: turn.pendingPhrases + 1 });
-    ctx.db.sttJob.insert({ scheduledId: 0n, scheduledAt: dueIn(ctx), sessionId, phraseId, attempt: 0 });
+  if (final && phrase.status === P_STREAMING) scheduleTranscription(ctx, phrase);
+}
+
+/** Phrase end: the phrase waits for STT and its turn for one more transcription. */
+function scheduleTranscription(ctx: Ctx, phrase: PhraseRow): void {
+  ctx.db.phrase.id.update({ ...phrase, status: P_TRANSCRIBING, finalAt: ctx.timestamp });
+  const turn = findTurn(ctx, phrase.sessionId, phrase.turnIdx);
+  if (turn) ctx.db.turn.id.update({ ...turn, pendingPhrases: turn.pendingPhrases + 1 });
+  ctx.db.sttJob.insert({ scheduledId: 0n, scheduledAt: dueIn(ctx), sessionId: phrase.sessionId, phraseId: phrase.phraseId, attempt: 0 });
+}
+
+/** A streaming phrase whose chunks stopped arriving this long ago (audio is sent in real time). */
+export const ORPHAN_PHRASE_GRACE_MS = 3000;
+
+/**
+ * Ends `streaming` phrases of a session that will never get their final chunk (reload, tab close,
+ * websocket drop while the student spoke). `exceptPhraseId`: every other streaming phrase is an
+ * orphan (the VAD streams one phrase at a time). `staleOnly`: only phrases whose audio should have
+ * ended ORPHAN_PHRASE_GRACE_MS ago. `discard`: drop them instead of transcribing (typed turns);
+ * else phrases with audio are transcribed like a normal phrase end. Returns how many were ended.
+ */
+export function finalizeOrphanPhrases(
+  ctx: Ctx,
+  sessionId: bigint,
+  opts: { exceptPhraseId?: number; staleOnly?: boolean; discard?: boolean } = {}
+): number {
+  const now = nowMicros(ctx);
+  let n = 0;
+  for (const p of [...ctx.db.phrase.sessionId.filter(sessionId)]) {
+    if (p.status !== P_STREAMING || p.phraseId === opts.exceptPhraseId) continue;
+    const expectedEnd = p.startedAt.microsSinceUnixEpoch + BigInt(Math.round((p.bytes / BYTES_PER_MS + ORPHAN_PHRASE_GRACE_MS) * 1000));
+    if (opts.staleOnly && now < expectedEnd) continue;
+    n++;
+    if (p.bytes > 0 && !opts.discard) {
+      scheduleTranscription(ctx, p);
+      continue;
+    }
+    ctx.db.phrase.id.update({ ...p, status: P_DISCARDED, finalAt: ctx.timestamp, transcribedAt: ctx.timestamp });
+    for (const c of [...ctx.db.audioIn.bySessionPhrase.filter([sessionId, p.phraseId])]) ctx.db.audioIn.id.delete(c.id);
+    const turn = opts.discard ? undefined : findTurn(ctx, sessionId, p.turnIdx); // typed turns absorb the turn
+    if (turn && turn.status === T_CLOSING && turn.pendingPhrases === 0 && !hasStreaming(ctx, sessionId, turn.idx)) completeTurn(ctx, turn);
   }
+  return n;
+}
+
+function hasStreaming(ctx: Ctx, sessionId: bigint, turnIdx: number): boolean {
+  return [...ctx.db.phrase.sessionId.filter(sessionId)].some(p => p.turnIdx === turnIdx && p.status === P_STREAMING);
 }
 
 /** Rebuilds a turn's text from its transcribed phrases, in phrase order. */

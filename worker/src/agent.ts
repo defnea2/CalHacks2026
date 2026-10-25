@@ -117,6 +117,9 @@ export class Agent {
 
   onSession(row: SessionRow): void {
     if (!row.active) return this.onSessionGone(row.id);
+    // Same id, different session (ids restart at 1 after `--clear` / a republished database).
+    const prev = this.sessions.get(row.id)?.row?.startedAt?.microsSinceUnixEpoch;
+    if (prev !== undefined && row.startedAt && prev !== row.startedAt.microsSinceUnixEpoch) this.onSessionGone(row.id);
     this.session(row.id).setSession(row);
   }
 
@@ -159,10 +162,17 @@ export class Agent {
     this.sessions.get(sessionId)?.playbackFlush(utteranceId);
   }
 
-  /** Abort everything (shutdown). */
+  /** Abort everything (shutdown, and on every (re)connect: the subscription re-delivers all rows). */
   closeAll(): void {
     for (const id of [...this.sessions.keys()]) this.onSessionGone(id);
   }
+}
+
+const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** process 'unhandledRejection' listener: log instead of Node's default (exit the process). */
+export function unhandledRejectionLogger(log: (m: string) => void): (reason: unknown) => void {
+  return reason => log(`worker: unhandled rejection: ${reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)}`);
 }
 
 export class SessionAgent {
@@ -369,12 +379,12 @@ export class SessionAgent {
 
   private startOpening(): void {
     this.openingStarted = true;
-    if ((this.agent.deps.opts.replyMode ?? 'lesson') === 'lesson') void this.ensureTopic();
+    if ((this.agent.deps.opts.replyMode ?? 'lesson') === 'lesson') void this.ensureTopic().catch(e => this.log(`topic prefetch failed: ${errText(e)}`));
     this.clearPreemptTimer();
     const run = this.newRun({ idx: OPENING_TURN_IDX, text: '' }, false, true);
     this.log(`opening -> u${run.utteranceId}`);
     if (run.imageIncluded) this.imageSent = true;
-    else void run.done.then(() => run.imageIncluded && (this.imageSent = true));
+    else void run.done.then(() => run.imageIncluded && (this.imageSent = true)).catch(e => this.log(`run u${run.utteranceId} failed: ${errText(e)}`));
     this.live = run;
   }
 
@@ -402,7 +412,7 @@ export class SessionAgent {
       this.log(`t${turn.idx} ready "${clip(turn.text)}" -> u${run.utteranceId}`);
     }
     if (run.imageIncluded) this.imageSent = true;
-    else void run.done.then(() => run.imageIncluded && (this.imageSent = true));
+    else void run.done.then(() => run.imageIncluded && (this.imageSent = true)).catch(e => this.log(`run u${run.utteranceId} failed: ${errText(e)}`));
     this.live = run;
     this.armStallWatchdog(turn);
   }

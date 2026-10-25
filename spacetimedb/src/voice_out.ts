@@ -55,7 +55,16 @@ export function beginUtterance(
     throw new SenderError(`turn ${args.replyToIdx} is already being answered by utterance ${m.utteranceId}`);
   }
   // A reply still marked current is superseded: its lesson (if any) ends as interrupted.
-  if (session.currentUtteranceId !== 0n && session.currentUtteranceId !== args.utteranceId) onUtteranceEnd(ctx, session.id, session.currentUtteranceId, 'interrupted');
+  // Its unsynthesized/unplayed sentences are dropped (no more TTS for them) and clients flush it,
+  // so a late block of the old reply can never play over (or flush) the new one.
+  if (session.currentUtteranceId !== 0n && session.currentUtteranceId !== args.utteranceId) {
+    const old = session.currentUtteranceId;
+    onUtteranceEnd(ctx, session.id, old, 'interrupted');
+    for (const s of utteranceSentences(ctx, session.id, old)) {
+      if (s.status === PENDING || s.status === READY) ctx.db.replySentence.id.update({ ...s, status: DROPPED });
+    }
+    ctx.db.playbackFlush.insert({ sessionId: session.id, utteranceId: old });
+  }
   updateSession(ctx, ctx.db.session.id.find(session.id)!, { currentUtteranceId: args.utteranceId });
   ctx.db.turnMetrics.id.update({ ...m, utteranceId: args.utteranceId, preemptive: args.preemptive });
 }
@@ -205,6 +214,7 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
   if (utteranceId === 0n && session.turnState === LISTENING) return; // nothing to interrupt
   // Before unplayed sentences are dropped: the lesson keeps what the learner already saw.
   onUtteranceEnd(ctx, sessionId, utteranceId, 'interrupted');
+  let tutorSideClosed = false;
   if (utteranceId !== 0n) {
     const sentences = utteranceSentences(ctx, sessionId, utteranceId);
     for (const s of sentences) {
@@ -214,9 +224,12 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
     // ends. Then the turn must be corrected to what the student actually heard.
     const tutorTurn = tutorTurnFor(ctx, sessionId, utteranceId);
     if (tutorTurn) ctx.db.turn.id.update({ ...tutorTurn, interrupted: true, text: heardText(ctx, sessionId, utteranceId) });
+    tutorSideClosed = !!tutorTurn;
   }
   ctx.db.playbackFlush.insert({ sessionId, utteranceId });
-  updateSession(ctx, session, { turnState: INTERRUPTED, currentUtteranceId: 0n });
+  // Tutor turn already appended: no appendTutorTurn will follow to leave `interrupted`, so the
+  // session listens at once (the task canvas only unlocks while `listening`).
+  updateSession(ctx, session, { turnState: tutorSideClosed ? LISTENING : INTERRUPTED, currentUtteranceId: 0n });
 }
 
 /**
@@ -252,8 +265,12 @@ export function appendTutorTurn(
   let session = getActiveSession(ctx, args.sessionId);
   if (args.utteranceId === 0n) throw new SenderError('utteranceId must be non-zero');
   const existing = tutorTurnFor(ctx, args.sessionId, args.utteranceId);
-  // Closed by the module already (a typed turn interrupted this reply): nothing left to record.
-  if (existing?.interrupted) return;
+  // Closed by the module already (a typed turn interrupted this reply): nothing left to record,
+  // but a session still in the barge-in state for it must not stay `interrupted`.
+  if (existing?.interrupted) {
+    if (session.currentUtteranceId === 0n && session.turnState === INTERRUPTED) updateSession(ctx, session, { turnState: LISTENING });
+    return;
+  }
   if (existing) throw new SenderError(`tutor turn for utterance ${args.utteranceId} exists`);
   const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
   // The opening reply (OPENING_TURN_IDX) answers no student turn: it goes before all of them.
