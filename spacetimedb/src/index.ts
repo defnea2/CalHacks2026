@@ -3,7 +3,7 @@
 // this one; only registered reducers/procedures are named exports here.
 import './polyfills';
 import { t, SenderError } from 'spacetimedb/server';
-import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob } from './schema';
+import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob, retentionJob } from './schema';
 import { dashboardJob, simTurnJob } from './schema_classroom';
 import * as classroom from './classroom';
 import { textPlayJob } from './schema_pipeline';
@@ -21,6 +21,7 @@ import * as sessions from './sessions';
 import * as textMode from './text_mode';
 import * as turnPhoto from './turn_photo';
 import * as pipeline from './pipeline';
+import { ensureRetentionJob, sweepRetention } from './retention';
 import * as voiceIn from './voice_in';
 import * as voiceOut from './voice_out';
 
@@ -31,12 +32,16 @@ export default spacetimedb;
 export const init = spacetimedb.init(ctx => {
   ensureLibrary(ctx);
   classroom.ensureSimProfiles(ctx);
+  ensureRetentionJob(ctx);
+  classroom.backfillClusterMembers(ctx);
 });
 
 /** init only runs when the database is created; a republished pack reloads on the next connect. */
 export const onConnect = spacetimedb.clientConnected(ctx => {
   ensureLibrary(ctx);
   classroom.ensureSimProfiles(ctx);
+  ensureRetentionJob(ctx);
+  classroom.backfillClusterMembers(ctx);
 });
 /** Marks the connection's (real) learners offline in `presence`. */
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
@@ -150,7 +155,9 @@ export const submitInteraction = spacetimedb.reducer(
     )
 );
 
-/** Replaces /api/teaching/shear-feedback: kind 'shear_feedback', payload = the slant lesson state JSON. */
+/** UNUSED: no screen calls it and the worker no longer subscribes to tutor_request (the slant
+ *  lesson's tutor feedback, which replaced /api/teaching/shear-feedback, has no UI caller). Kept so
+ *  published clients and the module tests keep their contract; kind 'shear_feedback'. */
 export const requestTutor = spacetimedb.reducer({ sessionId: t.u64(), kind: t.string(), payload: t.string() }, (ctx, args) =>
   pipeline.requestTutor(ctx, args)
 );
@@ -383,8 +390,21 @@ export const synthesizeSentence = spacetimedb.procedure(
 
 /** Scheduled: a text-mode sentence was read (its reading delay passed) -> played. */
 export const finishTextSentence = spacetimedb.reducer({ onSchedule: textPlayJob }, { job: textPlayJob.rowType }, (ctx, { job }) => {
+  // Not redundant: scheduled reducers stay client-callable in 2.13 (a CLI call reaches the body),
+  // so every scheduled reducer checks that the scheduler (the module identity) called it.
   if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
   textMode.finishTextSentence(ctx, job);
+});
+
+/** Scheduled every RETENTION_SWEEP_S: photo bytes / old lesson JSON of ended sessions (retention.ts). */
+export const runRetention = spacetimedb.reducer({ onSchedule: retentionJob }, { job: retentionJob.rowType }, ctx => {
+  // Scheduled reducers stay client-callable in 2.13 (verified: a CLI call reaches the body), so
+  // every scheduled reducer checks that the scheduler (the module identity) called it.
+  if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
+  const r = sweepRetention(ctx);
+  if (r.turnImages + r.sessionImages + r.classDocuments + r.lessonSessions > 0) {
+    console.log(`retention: ${r.turnImages} turn photos, ${r.sessionImages} task photos, ${r.classDocuments} class documents, lesson JSON of ${r.lessonSessions} sessions`);
+  }
 });
 
 export const extractMemory = spacetimedb.procedure(
@@ -458,11 +478,26 @@ export const setImpersonation = spacetimedb.reducer({ classSessionId: t.u64(), l
   classroom.setImpersonation(ctx, classSessionId, learnerId)
 );
 
-/** Refresh button: one Haiku call -> class_summary + student_cluster. Returns JSON
- *  {ok, skipped?, error?, repaired?, repairs?, clusters?}. Skipped while impersonating. */
-export const refreshDashboard = spacetimedb.procedure({ classSessionId: t.u64() }, t.string(), (ctx, { classSessionId }) =>
-  JSON.stringify(classroom.refreshDashboard(ctx, classSessionId, false))
-);
+/** Typed result of refreshDashboard ('' / false / 0 = not set). */
+const RefreshDashboardResult = t.object('RefreshDashboardResult', {
+  ok: t.bool(),
+  /** Why nothing ran ('impersonating', 'already running', 'class session ended', ...). */
+  skipped: t.string(),
+  /** Provider error of a failed LLM call. */
+  error: t.string(),
+  /** The cluster answer had to be repaired (size rule, unknown ids). */
+  repaired: t.bool(),
+  repairs: t.array(t.string()),
+  clusters: t.u32(),
+});
+
+/** Refresh button: one Haiku call -> class_summary + student_cluster. Skipped while impersonating.
+ *  Error convention (ARCHITECTURE §3): a skip or a provider failure is a result ({ok: false}), not a
+ *  SenderError, because the button shows it as a note. */
+export const refreshDashboard = spacetimedb.procedure({ classSessionId: t.u64() }, RefreshDashboardResult, (ctx, { classSessionId }) => {
+  const r = classroom.refreshDashboard(ctx, classSessionId, false);
+  return { ok: r.ok, skipped: r.skipped ?? '', error: r.error ?? '', repaired: r.repaired ?? false, repairs: r.repairs ?? [], clusters: r.clusters ?? 0 };
+});
 
 /** Teacher dashboard student profile (long-term memory, mastery, past sessions). Returns JSON
  *  LearnerInsightsResult (shared/src/insights.ts). Gated by an existing teacher id and, when

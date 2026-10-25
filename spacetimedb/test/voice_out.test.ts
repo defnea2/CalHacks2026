@@ -176,17 +176,89 @@ describe('interrupt', () => {
     expect(session(h, s.id).turnCount).toBe(3);
   });
 
-  it('TTS failure retries once, then marks the sentence dropped', () => {
+  it('TTS failure retries once as a new tts_job row (attempt 1), then marks the sentence dropped', () => {
     const { h, agent, s } = ready();
     call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 8n, replyToIdx: 0, preemptive: false });
     call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 8n, idx: 0, display: 'A.', speech: 'A.' });
+    expect([...h.db.ttsJob.iter()].map(j => j.attempt)).toEqual([0]);
     let calls = 0;
-    runTts(h, () => {
+    const fail = () => {
       calls++;
       return { status: 500, body: 'nope' };
-    });
+    };
+    expect(runTts(h, fail)).toBe(1);
+    expect(calls).toBe(1);
+    const retry = [...h.db.ttsJob.iter()];
+    expect(retry.map(j => [j.attempt, j.sentenceId, j.idx])).toEqual([[1, sentences(h, 8n)[0]!.id, 0]]);
+    expect(sentences(h, 8n)[0]!.status).toBe('pending');
+    expect(runTts(h, fail)).toBe(1);
     expect(calls).toBe(2);
+    expect([...h.db.ttsJob.iter()]).toHaveLength(0);
     expect(sentences(h, 8n)[0]!.status).toBe('dropped');
+  });
+
+  it('a failed TTS call whose retry succeeds plays; a barge-in cancels a scheduled retry', () => {
+    const { h, agent, client, s } = ready();
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 9n, replyToIdx: 0, preemptive: false });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 9n, idx: 0, display: 'A.', speech: 'A.' });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 9n, idx: 1, display: 'B.', speech: 'B.' });
+    let n = 0;
+    runTts(h, req => (n++ === 0 ? { status: 503, body: 'busy' } : ttsOk(req)));
+    expect(sentences(h, 9n).map(x => x.status)).toEqual(['pending', 'ready']);
+    runTts(h, ttsOk);
+    expect(sentences(h, 9n).map(x => x.status)).toEqual(['ready', 'ready']);
+
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 9n, idx: 2, display: 'C.', speech: 'C.' });
+    runTts(h, () => ({ status: 500, body: 'nope' }));
+    expect([...h.db.ttsJob.iter()].map(j => j.attempt)).toEqual([1]);
+    call(h, client, mod.interrupt, { sessionId: s.id });
+    expect([...h.db.ttsJob.iter()]).toHaveLength(0);
+  });
+});
+
+describe('cancelled replies delete their pending tts_job rows (no Cartesia call for dropped sentences)', () => {
+  const jobsOf = (h: ReturnType<typeof setup>['h'], utteranceId: bigint) => [...h.db.ttsJob.iter()].filter(j => j.utteranceId === utteranceId);
+
+  it('barge-in (interrupt / interruptUtterance)', () => {
+    for (const reducer of [mod.interrupt, mod.interruptUtterance]) {
+      const { h, agent, client, s } = ready();
+      call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 41n, replyToIdx: 0, preemptive: false });
+      for (let i = 0; i < 3; i++) call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 41n, idx: i, display: `S${i}.`, speech: `S${i}.` });
+      expect(jobsOf(h, 41n)).toHaveLength(3);
+      call(h, client, reducer, { sessionId: s.id, utteranceId: 41n });
+      expect(jobsOf(h, 41n)).toHaveLength(0);
+      let calls = 0;
+      runTts(h, req => {
+        calls++;
+        return ttsOk(req);
+      });
+      expect(calls).toBe(0);
+      expect(sentences(h, 41n).map(x => x.status)).toEqual(['dropped', 'dropped', 'dropped']);
+    }
+  });
+
+  it("supersede by a newer reply keeps only the new reply's jobs", () => {
+    const { h, agent, client, s } = ready();
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 42n, replyToIdx: 0, preemptive: false });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 42n, idx: 0, display: 'Old.', speech: 'Old.' });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 42n, idx: 1, display: 'Old2.', speech: 'Old2.' });
+    studentSays(h, client, s.id, 'wait, another question');
+    const latest = turns(h, s.id).filter(t => t.role === 'student').at(-1)!;
+    expect(session(h, s.id).currentUtteranceId).toBe(42n);
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 43n, replyToIdx: latest.idx, preemptive: false });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 43n, idx: 0, display: 'New.', speech: 'New.' });
+    expect(jobsOf(h, 42n)).toHaveLength(0);
+    expect(jobsOf(h, 43n)).toHaveLength(1);
+    expect(sentences(h, 42n).map(x => x.status)).toEqual(['dropped', 'dropped']);
+  });
+
+  it('endSession deletes every pending job of the session', () => {
+    const { h, agent, client, s } = ready();
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 44n, replyToIdx: 0, preemptive: false });
+    for (let i = 0; i < 2; i++) call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 44n, idx: i, display: `S${i}.`, speech: `S${i}.` });
+    call(h, client, mod.endSession, { sessionId: s.id });
+    expect([...h.db.ttsJob.iter()].filter(j => j.sessionId === s.id)).toHaveLength(0);
+    expect(runTts(h, ttsOk)).toBe(0);
   });
 });
 

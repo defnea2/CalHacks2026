@@ -17,17 +17,25 @@ export interface StdbOptions {
   log?: (msg: string) => void;
 }
 
-/** Everything the worker reads. All sessions: the worker serves them concurrently. */
+/** Rows of a per-session table, limited to active sessions (a JOIN subscription: SpacetimeDB 2.13
+ *  maintains it incrementally, so rows enter when a session starts and leave when it ends; the
+ *  join columns are indexed, which subscription joins require). */
+const ofActive = (table: string, alias: string) => `SELECT ${alias}.* FROM ${table} ${alias} JOIN session s ON ${alias}.session_id = s.id WHERE s.active = true`;
+
+/** Everything the worker reads: the active sessions (it serves them concurrently) and their rows.
+ *  The history of ended sessions never reaches the worker. */
 export const SUBSCRIPTIONS = [
   'SELECT * FROM session WHERE active = true',
-  'SELECT * FROM turn',
-  'SELECT * FROM phrase',
-  'SELECT * FROM reply_sentence',
-  'SELECT * FROM board_item',
-  'SELECT * FROM learner',
+  ofActive('turn', 't'),
+  ofActive('phrase', 'p'),
+  ofActive('reply_sentence', 'r'),
+  ofActive('board_item', 'b'),
+  'SELECT l.* FROM learner l JOIN session s ON l.id = s.learner_id WHERE s.active = true',
+  // Event tables: no stored rows, so no initial size; each event names its session.
   'SELECT * FROM speech_activity',
   'SELECT * FROM playback_flush',
-  "SELECT * FROM tutor_request WHERE status = 'pending'",
+  // tutor_request is not subscribed: requestTutor has no UI caller (index.ts). TutorRequests stays
+  // wired below so re-adding "SELECT * FROM tutor_request WHERE status = 'pending'" revives it.
 ];
 
 function readToken(file: string): string | undefined {
@@ -173,6 +181,8 @@ export class StdbLink {
         // Fresh per-session state: after a reconnect or a cleared database (session ids restart
         // at 1) a reused SessionAgent would hold stale turns/utterances and stay silent.
         agent.closeAll();
+        // The subscription is `session WHERE active = true`: the cache holds exactly the live sessions.
+        agent.isActiveSession = id => conn.db.session.id.find(id)?.active === true;
         this.wire(conn, agent);
       })
       .onConnectError((_ctx, err) => {

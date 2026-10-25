@@ -13,7 +13,7 @@ import type { ClassSession, ClassSummary, DashboardState, Learner, LessonState, 
 import { callReducer, subscribe } from '../stdb/connection';
 import { useRows } from '../stdb/useRows';
 import { navigate, phaseLabel, routeUrl, tsMs } from '../lib/format';
-import { agoLabel, clusterRows, nextLabel, observeOrder, parseLearnerIds, stepObserve, ungroupedIds, type ClusterBlock } from '../lib/dashboard';
+import { agoLabel, clusterRows, nextLabel, observeOrder, clusterMemberIds, stepObserve, ungroupedIds, type ClusterBlock, refreshResult } from '../lib/dashboard';
 import { eventLog } from '../lib/debug';
 import { parseNotes } from '@tutor/visual/teaching/spacetimeModel';
 import { typedTurnText } from '../components/session';
@@ -56,8 +56,9 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
         `SELECT * FROM student_cluster WHERE class_session_id = ${cid}`,
         `SELECT * FROM dashboard_state WHERE class_session_id = ${cid}`,
         `SELECT * FROM session WHERE class_session_id = ${cid}`,
-        'SELECT * FROM learner',
-        'SELECT * FROM teacher',
+        // Only the learners of this class's sessions and its teacher (JOIN subscriptions).
+        `SELECT l.* FROM learner l JOIN session s ON l.id = s.learner_id WHERE s.class_session_id = ${cid}`,
+        `SELECT t.* FROM teacher t JOIN class_session c ON t.id = c.teacher_id WHERE c.id = ${cid}`,
       ],
       `dashboard ${cid}`
     );
@@ -143,7 +144,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
   const rows = useMemo(
     () =>
       clusterRows(
-        clusterRowsRaw.map(c => ({ id: c.id.toString(), position: c.position, name: c.name, description: c.description, learnerIds: parseLearnerIds(c.learnerIds).filter(id => students.has(id)) })).filter(c => c.learnerIds.length > 0)
+        clusterRowsRaw.map(c => ({ id: c.id.toString(), position: c.position, name: c.name, description: c.description, learnerIds: clusterMemberIds(c).filter(id => students.has(id)) })).filter(c => c.learnerIds.length > 0)
       ),
     [clusterRowsRaw, students]
   );
@@ -195,7 +196,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
     eventLog.log('procedure.call', { name: 'refreshDashboard' });
     try {
       const out = await conn.procedures.refreshDashboard({ classSessionId });
-      const r = JSON.parse(out || '{}') as { ok?: boolean; skipped?: string; error?: string };
+      const r = refreshResult(out);
       eventLog.log('procedure.ok', { name: 'refreshDashboard', result: out });
       if (!r.ok) setRefreshNote(r.skipped ? `Skipped (${r.skipped.replace(/_/g, ' ')})` : `Update failed${r.error ? `: ${r.error}` : ''}`);
     } catch (err) {
