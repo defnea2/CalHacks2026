@@ -279,13 +279,13 @@ export function setTopic(ctx: Ctx, args: { sessionId: bigint; category: string; 
 
 const PREFERENCE_KIND: MemoryKind = 'preference';
 
-function describeLearner(ctx: Ctx, session: SessionRow): string {
+export function describeLearner(ctx: Ctx, session: SessionRow): string {
   const l = ctx.db.learner.id.find(session.learnerId);
   if (!l) return 'unknown learner';
   return `${l.name}, age ${l.age}, grade ${l.grade}.${l.style ? ` Learning style: ${l.style}.` : ''}`;
 }
 
-function describeMemory(ctx: Ctx, session: SessionRow): string {
+export function describeMemory(ctx: Ctx, session: SessionRow): string {
   const lines: string[] = [];
   const notes = [...ctx.db.memoryNote.learnerId.filter(session.learnerId)].sort((a, b) => (a.updatedAt.microsSinceUnixEpoch < b.updatedAt.microsSinceUnixEpoch ? 1 : -1));
   for (const n of notes) {

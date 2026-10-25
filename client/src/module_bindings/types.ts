@@ -10,6 +10,15 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AgentStatus = __t.object("AgentStatus", {
+  id: __t.u32(),
+  model: __t.string(),
+  provider: __t.string(),
+  busySessions: __t.u32(),
+  lastSeen: __t.timestamp(),
+});
+export type AgentStatus = __Infer<typeof AgentStatus>;
+
 export const AudioIn = __t.object("AudioIn", {
   id: __t.u64(),
   sessionId: __t.u64(),
@@ -30,6 +39,19 @@ export const AudioOut = __t.object("AudioOut", {
   wordEndsMs: __t.array(__t.u32()),
 });
 export type AudioOut = __Infer<typeof AudioOut>;
+
+export const Beat = __t.object("Beat", {
+  id: __t.u64(),
+  sessionId: __t.u64(),
+  utteranceId: __t.u64(),
+  idx: __t.u32(),
+  visual: __t.string(),
+  narration: __t.string(),
+  sentenceIdx: __t.i32(),
+  canvasVersion: __t.u32(),
+  createdAt: __t.timestamp(),
+});
+export type Beat = __Infer<typeof Beat>;
 
 export const BoardAnswer = __t.object("BoardAnswer", {
   boardItemId: __t.u64(),
@@ -54,6 +76,14 @@ export const BoardItem = __t.object("BoardItem", {
   markerPos: __t.i32(),
 });
 export type BoardItem = __Infer<typeof BoardItem>;
+
+export const CanvasState = __t.object("CanvasState", {
+  sessionId: __t.u64(),
+  version: __t.u32(),
+  scene: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type CanvasState = __Infer<typeof CanvasState>;
 
 export const Category = __t.object("Category", {
   key: __t.string(),
@@ -119,6 +149,46 @@ export const Learner = __t.object("Learner", {
   createdAt: __t.timestamp(),
 });
 export type Learner = __Infer<typeof Learner>;
+
+export const LearnerEvent = __t.object("LearnerEvent", {
+  id: __t.u64(),
+  sessionId: __t.u64(),
+  kind: __t.string(),
+  payload: __t.string(),
+  accepted: __t.bool(),
+  evidence: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type LearnerEvent = __Infer<typeof LearnerEvent>;
+
+export const LessonPlan = __t.object("LessonPlan", {
+  utteranceId: __t.u64(),
+  sessionId: __t.u64(),
+  request: __t.string(),
+  meta: __t.string(),
+  beats: __t.string(),
+  scenes: __t.string(),
+  version: __t.u32(),
+  final: __t.bool(),
+});
+export type LessonPlan = __Infer<typeof LessonPlan>;
+
+export const LessonRecord = __t.object("LessonRecord", {
+  sessionId: __t.u64(),
+  data: __t.string(),
+});
+export type LessonRecord = __Infer<typeof LessonRecord>;
+
+export const LessonState = __t.object("LessonState", {
+  sessionId: __t.u64(),
+  stage: __t.string(),
+  awaitingResponse: __t.bool(),
+  checkPrompt: __t.string(),
+  evidence: __t.string(),
+  notes: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type LessonState = __Infer<typeof LessonState>;
 
 export const LibraryMeta = __t.object("LibraryMeta", {
   id: __t.u32(),
@@ -338,4 +408,23 @@ export const TurnMetrics = __t.object("TurnMetrics", {
   preemptive: __t.bool(),
 });
 export type TurnMetrics = __Infer<typeof TurnMetrics>;
+
+export const TutorRequest = __t.object("TutorRequest", {
+  id: __t.u64(),
+  sessionId: __t.u64(),
+  kind: __t.string(),
+  payload: __t.string(),
+  status: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type TutorRequest = __Infer<typeof TutorRequest>;
+
+export const TutorResult = __t.object("TutorResult", {
+  requestId: __t.u64(),
+  sessionId: __t.u64(),
+  ok: __t.bool(),
+  result: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type TutorResult = __Infer<typeof TutorResult>;
 

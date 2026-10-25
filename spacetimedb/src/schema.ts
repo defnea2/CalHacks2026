@@ -7,7 +7,7 @@
 // - List/JSON fields are JSON strings (spec "Content library").
 // - Every lookup column is indexed.
 import { schema, table, t } from 'spacetimedb/server';
-import { textPlayJob, textPlayback } from './schema_pipeline';
+import { textPlayJob, textPlayback, canvasState, beat, learnerEvent, lessonState, lessonRecord, lessonPlan, agentStatus, tutorRequest, tutorResult } from './schema_pipeline';
 
 // ---------------------------------------------------------------- learners & sessions
 
@@ -488,6 +488,15 @@ const spacetimedb = schema(
     libraryMeta,
     textPlayJob,
     textPlayback,
+    canvasState,
+    beat,
+    learnerEvent,
+    lessonState,
+    lessonRecord,
+    lessonPlan,
+    agentStatus,
+    tutorRequest,
+    tutorResult,
   },
   {
     env: {

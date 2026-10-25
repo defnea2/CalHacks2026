@@ -6,8 +6,11 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AddBeatReducer from "../add_beat_reducer";
 import AddSentenceReducer from "../add_sentence_reducer";
+import AgentHeartbeatReducer from "../agent_heartbeat_reducer";
 import AppendTutorTurnReducer from "../append_tutor_turn_reducer";
+import BeginLessonReducer from "../begin_lesson_reducer";
 import BeginOpeningReducer from "../begin_opening_reducer";
 import BeginUtteranceReducer from "../begin_utterance_reducer";
 import ClearBoardReducer from "../clear_board_reducer";
@@ -21,6 +24,7 @@ import RecordMetricReducer from "../record_metric_reducer";
 import RegisterAgentReducer from "../register_agent_reducer";
 import RememberReducer from "../remember_reducer";
 import ReportNoiseReducer from "../report_noise_reducer";
+import RequestTutorReducer from "../request_tutor_reducer";
 import SetPhaseReducer from "../set_phase_reducer";
 import SetSessionVoiceReducer from "../set_session_voice_reducer";
 import SetTurnStateReducer from "../set_turn_state_reducer";
@@ -28,11 +32,16 @@ import ShowBoardItemReducer from "../show_board_item_reducer";
 import StartConversationReducer from "../start_conversation_reducer";
 import StartSessionReducer from "../start_session_reducer";
 import SubmitGapAnswerReducer from "../submit_gap_answer_reducer";
+import SubmitInteractionReducer from "../submit_interaction_reducer";
 import SubmitTextTurnReducer from "../submit_text_turn_reducer";
+import SubmitTutorResultReducer from "../submit_tutor_result_reducer";
 import UploadPhotoReducer from "../upload_photo_reducer";
 
+export type AddBeatParams = __Infer<typeof AddBeatReducer>;
 export type AddSentenceParams = __Infer<typeof AddSentenceReducer>;
+export type AgentHeartbeatParams = __Infer<typeof AgentHeartbeatReducer>;
 export type AppendTutorTurnParams = __Infer<typeof AppendTutorTurnReducer>;
+export type BeginLessonParams = __Infer<typeof BeginLessonReducer>;
 export type BeginOpeningParams = __Infer<typeof BeginOpeningReducer>;
 export type BeginUtteranceParams = __Infer<typeof BeginUtteranceReducer>;
 export type ClearBoardParams = __Infer<typeof ClearBoardReducer>;
@@ -46,6 +55,7 @@ export type RecordMetricParams = __Infer<typeof RecordMetricReducer>;
 export type RegisterAgentParams = __Infer<typeof RegisterAgentReducer>;
 export type RememberParams = __Infer<typeof RememberReducer>;
 export type ReportNoiseParams = __Infer<typeof ReportNoiseReducer>;
+export type RequestTutorParams = __Infer<typeof RequestTutorReducer>;
 export type SetPhaseParams = __Infer<typeof SetPhaseReducer>;
 export type SetSessionVoiceParams = __Infer<typeof SetSessionVoiceReducer>;
 export type SetTurnStateParams = __Infer<typeof SetTurnStateReducer>;
@@ -53,6 +63,8 @@ export type ShowBoardItemParams = __Infer<typeof ShowBoardItemReducer>;
 export type StartConversationParams = __Infer<typeof StartConversationReducer>;
 export type StartSessionParams = __Infer<typeof StartSessionReducer>;
 export type SubmitGapAnswerParams = __Infer<typeof SubmitGapAnswerReducer>;
+export type SubmitInteractionParams = __Infer<typeof SubmitInteractionReducer>;
 export type SubmitTextTurnParams = __Infer<typeof SubmitTextTurnReducer>;
+export type SubmitTutorResultParams = __Infer<typeof SubmitTutorResultReducer>;
 export type UploadPhotoParams = __Infer<typeof UploadPhotoReducer>;
 

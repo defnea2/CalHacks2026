@@ -16,6 +16,7 @@ import {
   updateSession,
 } from './ctx';
 import { onTurnAppended } from './memory';
+import { onStudentTurnReady } from './pipeline';
 import { concatBytes, ProviderError, transcribe } from './providers';
 
 const T_OPEN: TurnStatus = 'open';
@@ -131,7 +132,7 @@ function turnText(ctx: Ctx, sessionId: bigint, turnIdx: number): string {
 }
 
 /** Student turn complete: ready for the worker, or dropped if it has no text. */
-export function completeTurn(ctx: Ctx, turn: TurnRow): void {
+export function completeTurn(ctx: Ctx, turn: TurnRow, opts: { assessed?: boolean } = {}): void {
   const session = ctx.db.session.id.find(turn.sessionId);
   if (!turn.text.trim()) {
     dropTurn(ctx, turn);
@@ -142,6 +143,7 @@ export function completeTurn(ctx: Ctx, turn: TurnRow): void {
   ctx.db.turnMetrics.id.update({ ...m, sttDoneAt: ctx.timestamp });
   if (session) {
     updateSession(ctx, session, { turnState: S_THINKING });
+    onStudentTurnReady(ctx, ctx.db.turn.id.find(turn.id)!, opts);
     onTurnAppended(ctx, turn.sessionId);
   }
 }

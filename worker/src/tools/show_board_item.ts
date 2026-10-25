@@ -1,6 +1,6 @@
 import { TOOL_NAMES } from '@tutor/shared';
 import { str, type ToolModule } from './types';
-import { validateVoiceCanvasContent } from '../../../src/presentation/voice/validate';
+import { validateVoiceCanvasContent } from '@tutor/teaching/presentation/voice/validate';
 
 const json = (v: unknown): string => {
   if (v === undefined || v === null || v === '') return '';

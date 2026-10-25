@@ -15,7 +15,7 @@
      * and should not be modified
      */
     "target": "ESNext",
-    "lib": ["ES2021", "dom"],
+    "lib": ["ES2022", "dom"],
     "module": "ESNext",
     "isolatedModules": true,
     "noEmit": true
