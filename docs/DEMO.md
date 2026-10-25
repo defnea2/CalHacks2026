@@ -199,6 +199,7 @@ opening), so keep it as concrete fractions/decimals like above.
 
 6. Hover a student card → **Observe**: the student's live screen (transcript + canvas). **Next →** to
    jump to the next student; **Stop observing** (Esc).
+   **Profile** on a student card shows what the tutor knows about that student (misconceptions, what helps, mastery, past sessions).
 
 > "Observing costs us nothing: it is the same component subscribed to the same rows as the student's
 > own tab. While the teacher watches, the dashboard pauses its refresh."

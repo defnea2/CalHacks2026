@@ -17,6 +17,7 @@ import { typedTurnText } from '../components/session';
 import { SessionView } from '../session/SessionView';
 import { STAGE_LABELS } from '../session/stages';
 import { Initial } from './StudentHome';
+import { ProfileDrawer } from '../insights/ProfileDrawer';
 
 interface Student {
   id: string;
@@ -176,6 +177,8 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
   };
 
   const [tab, setTab] = useState<'groups' | 'all'>('groups');
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const closeProfile = useCallback(() => setProfileId(null), []);
 
   useEffect(() => {
     window.__tutor.state.dashboard = {
@@ -252,7 +255,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
           {rows.map((row, i) => (
             <div key={i} className="db-row" data-testid="cluster-row" data-sizes={row.map(c => c.learnerIds.length).join('+')}>
               {row.map(c => (
-                <Cluster key={c.id} cluster={c} students={students} onObserve={observe} />
+                <Cluster key={c.id} cluster={c} students={students} onObserve={observe} onProfile={setProfileId} />
               ))}
             </div>
           ))}
@@ -261,20 +264,22 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
               {rows.length > 0 && <p className="db-ungrouped-title">Not grouped yet</p>}
               <div className="db-row" data-testid="ungrouped">
                 {ungrouped.map(id => (
-                  <StudentCard key={id} s={students.get(id)!} onObserve={observe} />
+                  <StudentCard key={id} s={students.get(id)!} onObserve={observe} onProfile={setProfileId} />
                 ))}
               </div>
             </>
           )}
         </div>
       ) : (
-        <AllSessions order={order} students={students} clusterOf={clusterOf} onObserve={observe} />
+        <AllSessions order={order} students={students} clusterOf={clusterOf} onObserve={observe} onProfile={setProfileId} />
       )}
 
       <footer className="db-footer">
         <span>Groups always have two or four students. The summary updates every 30 s and pauses while you observe a student.</span>
         {state?.lastError ? <span data-testid="dashboard-error">Last update failed: {state.lastError}</span> : null}
       </footer>
+
+      {profileId && <ProfileDrawer conn={conn} learnerId={BigInt(profileId)} teacherId={cls.teacherId} name={students.get(profileId)?.learner?.name} onClose={closeProfile} />}
 
       {observing && (
         <ObserveFrame
@@ -294,7 +299,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
   );
 }
 
-function Cluster({ cluster, students, onObserve }: { cluster: ClusterBlock; students: Map<string, Student>; onObserve: (id: string) => void }) {
+function Cluster({ cluster, students, onObserve, onProfile }: { cluster: ClusterBlock; students: Map<string, Student>; onObserve: (id: string) => void; onProfile: (id: string) => void }) {
   return (
     <section className="db-cluster" data-testid="cluster" data-slots={cluster.slots} data-size={cluster.learnerIds.length} aria-label={cluster.name}>
       <div className="db-cluster-head">
@@ -304,14 +309,14 @@ function Cluster({ cluster, students, onObserve }: { cluster: ClusterBlock; stud
       <div className="db-cards">
         {cluster.learnerIds.map(id => {
           const s = students.get(id);
-          return s ? <StudentCard key={id} s={s} cluster={cluster.name} onObserve={onObserve} /> : null;
+          return s ? <StudentCard key={id} s={s} cluster={cluster.name} onObserve={onObserve} onProfile={onProfile} /> : null;
         })}
       </div>
     </section>
   );
 }
 
-function StudentCard({ s, cluster, onObserve }: { s: Student; cluster?: string; onObserve: (id: string) => void }) {
+function StudentCard({ s, cluster, onObserve, onProfile }: { s: Student; cluster?: string; onObserve: (id: string) => void; onProfile: (id: string) => void }) {
   const name = s.learner?.name ?? `Student ${s.id}`;
   const out = s.lastOut ? { k: 'out', who: 'Tutor', text: s.lastOut } : null;
   const inp = s.lastIn ? { k: 'in', who: name.split(' ')[0]!, text: s.lastIn } : null;
@@ -333,14 +338,17 @@ function StudentCard({ s, cluster, onObserve }: { s: Student; cluster?: string; 
           </p>
         ))}
       </div>
-      <button className="pr-primary db-observe" data-testid="observe-student" data-learner-id={s.id} onClick={() => onObserve(s.id)}>
-        <span>Observe</span>
-      </button>
+      <div className="db-card-actions">
+        <button className="pr-secondary db-profile" data-testid="open-profile" data-learner-id={s.id} onClick={() => onProfile(s.id)}>Profile</button>
+        <button className="pr-primary db-observe" data-testid="observe-student" data-learner-id={s.id} onClick={() => onObserve(s.id)}>
+          <span>Observe</span>
+        </button>
+      </div>
     </article>
   );
 }
 
-function AllSessions({ order, students, clusterOf, onObserve }: { order: string[]; students: Map<string, Student>; clusterOf: (id: string) => ClusterBlock | undefined; onObserve: (id: string) => void }) {
+function AllSessions({ order, students, clusterOf, onObserve, onProfile }: { order: string[]; students: Map<string, Student>; clusterOf: (id: string) => ClusterBlock | undefined; onObserve: (id: string) => void; onProfile: (id: string) => void }) {
   return (
     <table className="db-table" data-testid="all-sessions">
       <thead>
@@ -367,6 +375,7 @@ function AllSessions({ order, students, clusterOf, onObserve }: { order: string[
               <td>{s.turns}</td>
               <td className="db-last"><span>{s.lastIn || s.lastOut || '—'}</span></td>
               <td style={{ textAlign: 'right' }}>
+                <button className="pr-secondary" data-testid="open-profile-row" onClick={() => onProfile(id)} style={{ marginRight: 6 }}>Profile</button>
                 <button className="pr-secondary" data-testid="observe-student-row" onClick={() => onObserve(id)}>Observe</button>
               </td>
             </tr>
