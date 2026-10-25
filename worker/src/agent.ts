@@ -224,6 +224,11 @@ export class SessionAgent {
       this.contextChanged();
     }
     if (row.turnState === INTERRUPTED && prev?.turnState !== INTERRUPTED) this.live?.interrupt('barge-in');
+    // A photo attached while a preemptive reply is held: that reply would not see it.
+    if (this.held && row.pendingPhoto && !prev?.pendingPhoto && !this.held.turnPhoto) {
+      this.held.discard('turn photo changed');
+      this.held = undefined;
+    }
     this.evaluate();
   }
 
@@ -402,7 +407,7 @@ export class SessionAgent {
     const held = this.held;
     this.held = undefined;
     let run: Run;
-    if (held && held.open && held.turnIdx === turn.idx && held.transcript === turn.text) {
+    if (held && held.open && held.turnIdx === turn.idx && held.transcript === turn.text && !!held.turnPhoto === !!turn.hasPhoto) {
       run = held;
       run.release(true);
       this.log(`t${turn.idx} ready "${clip(turn.text)}" -> u${run.utteranceId} (preemptive, flushing held output)`);
@@ -463,6 +468,13 @@ export class SessionAgent {
     }, wait);
   }
 
+  /** The turn carries a photo, or one is pending while the turn is still open (preemptive run). */
+  private wantsTurnPhoto(idx: number): boolean {
+    const t = this.turns.get(idx);
+    if (!t || t.role !== STUDENT) return false;
+    return !!t.hasPhoto || (!!this.row?.pendingPhoto && OPEN_STATUSES.includes(t.status as TurnStatus));
+  }
+
   private clearPreemptTimer(): void {
     if (this.preemptTimer) clearTimeout(this.preemptTimer);
     this.preemptTimer = undefined;
@@ -489,6 +501,7 @@ export class SessionAgent {
           transcript: turn.text,
           utteranceId: a.nextUtteranceId(),
           wantImage: !this.imageSent && !!this.row?.hasImage,
+          turnPhoto: this.wantsTurnPhoto(turn.idx),
           held,
           prelude: lessonOpening ? openingLines(leadIn!, task) : undefined,
           // Only the opening waits (its lead-in covers it); later turns never wait on the critical path.
