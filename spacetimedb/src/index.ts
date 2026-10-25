@@ -11,6 +11,7 @@ import { METRIC_NAMES, TURN_STATES, type MetricName } from '../../shared/src/typ
 import { AGENT_ROLE, getActiveSession, getSession, metricsFor, requireAgent, ts } from './ctx';
 import { settings } from './env';
 import { ensureLibrary } from './library';
+import * as insights from './insights';
 import * as lesson from './lesson';
 import * as memory from './memory';
 import * as opening from './opening';
@@ -441,6 +442,13 @@ export const setImpersonation = spacetimedb.reducer({ classSessionId: t.u64(), l
  *  {ok, skipped?, error?, repaired?, repairs?, clusters?}. Skipped while impersonating. */
 export const refreshDashboard = spacetimedb.procedure({ classSessionId: t.u64() }, t.string(), (ctx, { classSessionId }) =>
   JSON.stringify(classroom.refreshDashboard(ctx, classSessionId, false))
+);
+
+/** Teacher dashboard student profile (long-term memory, mastery, past sessions). Returns JSON
+ *  LearnerInsightsResult (shared/src/insights.ts). Gated by an existing teacher id and, when
+ *  the module env INSIGHTS_KEY is set, a matching key; the only read path of the memory tables. */
+export const learnerInsights = spacetimedb.procedure({ learnerId: t.u64(), teacherId: t.u64(), key: t.string() }, t.string(), (ctx, a) =>
+  JSON.stringify(insights.learnerInsights(ctx, a))
 );
 
 /** Scheduled every DASHBOARD_INTERVAL_S per active class session. */

@@ -9,6 +9,7 @@ import { type Infer as __Infer } from "spacetimedb";
 import * as BuildContextProcedure from "../build_context_procedure";
 import * as BuildLessonRequestProcedure from "../build_lesson_request_procedure";
 import * as GetSessionImageProcedure from "../get_session_image_procedure";
+import * as LearnerInsightsProcedure from "../learner_insights_procedure";
 import * as PrefetchTopicProcedure from "../prefetch_topic_procedure";
 import * as RefreshDashboardProcedure from "../refresh_dashboard_procedure";
 import * as SetTopicProcedure from "../set_topic_procedure";
@@ -19,6 +20,8 @@ export type BuildLessonRequestArgs = __Infer<typeof BuildLessonRequestProcedure.
 export type BuildLessonRequestResult = __Infer<typeof BuildLessonRequestProcedure.returnType>;
 export type GetSessionImageArgs = __Infer<typeof GetSessionImageProcedure.params>;
 export type GetSessionImageResult = __Infer<typeof GetSessionImageProcedure.returnType>;
+export type LearnerInsightsArgs = __Infer<typeof LearnerInsightsProcedure.params>;
+export type LearnerInsightsResult = __Infer<typeof LearnerInsightsProcedure.returnType>;
 export type PrefetchTopicArgs = __Infer<typeof PrefetchTopicProcedure.params>;
 export type PrefetchTopicResult = __Infer<typeof PrefetchTopicProcedure.returnType>;
 export type RefreshDashboardArgs = __Infer<typeof RefreshDashboardProcedure.params>;

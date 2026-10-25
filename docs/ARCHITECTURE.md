@@ -205,6 +205,7 @@ checks the caller's identity in the private `role` table.
 | `endClassSession` | client | `classroom.ts` | Ends linked sessions; real students back to `waiting` |
 | `setImpersonation(classSessionId, learnerId)` | client | `classroom.ts` | Teacher observes a student (0 = stop; an overdue refresh then runs at once) |
 | `refreshDashboard(classSessionId) → string` | client (procedure) | `classroom.ts` | Refresh button: one Haiku call → summary + clusters |
+| `learnerInsights(learnerId, teacherId, key) → string` | client (procedure) | `insights.ts` | Teacher's student profile: memory notes, mastery, last 5 summaries (JSON `LearnerInsightsResult`, `shared/src/insights.ts`) |
 | `dashboardTick`, `simStudentTurn` | scheduled | `classroom.ts` | 30 s dashboard cadence; next simulated student message |
 
 ## 4. Voice turn, end to end
@@ -371,6 +372,24 @@ Known limits: word budgets are prompted (the model often exceeds them: explain 1
   students start with 3–6 seed notes each.
 - Background only: none of this is on the turn's critical path. Measured: extraction 2.1–4.6 s,
   summary 3.2 s.
+- **Read path for teachers.** The memory tables stay private (no subscription path). The only
+  client read path is the procedure `learnerInsights(learnerId, teacherId, key)` (`insights.ts`),
+  opened from the teacher dashboard's student profile. One `withTx` read, returns
+  `JSON.stringify(LearnerInsightsResult)` (`shared/src/insights.ts`): learner (+ sim persona,
+  session count, first/last seen), up to 60 notes ordered misconception → strategy → mnemonic →
+  quote → understood → preference, then newest first, each with concept title, the last 2
+  evidence rows (quotes ≤ 200 chars) and `seeded` (no evidence = simulation seed note, or only
+  evidence on the reserved seed pseudo session of `seedMemory`, `seed.ts`; pseudo session ids are
+  sent as `''`, also for the seed summary, which has task text / topic `''`); concept
+  mastery with concept + category titles; the last 5 session summaries with task text and topic.
+  u64 ids are strings, times are Unix ms. Errors: `locked` (module env `INSIGHTS_KEY` is set and
+  the key does not match; checked first), `unknown_teacher`, `unknown_learner`.
+- **Privacy trade-off.** The gate is an existing teacher id plus the optional `INSIGHTS_KEY`.
+  There is no authentication (test users only), so without `INSIGHTS_KEY` anyone who knows a
+  teacher id (small autoincrement numbers) can read any learner's profile. Acceptable for the test
+  users of this build; the real fix is teacher identities (teacher row bound to `ctx.sender`) and a
+  per-sender view or procedure check that only returns learners of that teacher's classes. Set
+  `INSIGHTS_KEY` (publish passes `INSIGHTS_*`) for any shared deployment.
 
 ## 9. Classroom
 
