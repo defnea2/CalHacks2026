@@ -307,41 +307,45 @@ function retireSimUser(ctx: Ctx, l: LearnerRow): void {
 
 function clearSimJobs(ctx: Ctx, sessionId: bigint): void {
   for (const j of [...ctx.db.simTurnJob.sessionId.filter(sessionId)]) ctx.db.simTurnJob.scheduledId.delete(j.scheduledId);
-  if (ctx.db.simRunning.sessionId.find(sessionId)) ctx.db.simRunning.sessionId.delete(sessionId);
+  ctx.db.simRunning.sessionId.delete(sessionId);
 }
 
-/** Tables keyed by sessionId that other branches add (text pipeline). Deleted when present. */
-const EXTRA_SESSION_TABLES = ['canvasState', 'beat', 'lessonState', 'learnerEvent', 'tutorRequest', 'tutorResult'];
-
-function deleteSessionData(ctx: Ctx, sessionId: bigint): void {
+/** Deletes a session and every row keyed by it (all through typed index deletes). Used when a
+ *  simulation user is reset. `seed_session` rows are not session rows (pseudo ids of the seeded
+ *  past) and go with the learner in deleteLearner. */
+export function deleteSessionData(ctx: Ctx, sessionId: bigint): void {
   const db = ctx.db;
-  for (const r of [...db.turn.sessionId.filter(sessionId)]) db.turn.id.delete(r.id);
-  for (const r of [...db.phrase.sessionId.filter(sessionId)]) db.phrase.id.delete(r.id);
-  for (const r of [...db.replySentence.sessionId.filter(sessionId)]) db.replySentence.id.delete(r.id);
-  for (const r of [...db.boardItem.sessionId.filter(sessionId)]) {
-    if (db.boardAnswer.boardItemId.find(r.id)) db.boardAnswer.boardItemId.delete(r.id);
-    db.boardItem.id.delete(r.id);
-  }
-  for (const r of [...db.turnMetrics.sessionId.filter(sessionId)]) db.turnMetrics.id.delete(r.id);
-  for (const r of [...db.audioIn.sessionId.filter(sessionId)]) db.audioIn.id.delete(r.id);
-  if (db.sessionImage.sessionId.find(sessionId)) db.sessionImage.sessionId.delete(sessionId);
-  if (db.extractionCursor.sessionId.find(sessionId)) db.extractionCursor.sessionId.delete(sessionId);
-  if (db.sessionSummary.sessionId.find(sessionId)) db.sessionSummary.sessionId.delete(sessionId);
+  // Voice / text pipeline.
+  db.turn.sessionId.delete(sessionId);
+  db.phrase.sessionId.delete(sessionId);
+  db.audioIn.sessionId.delete(sessionId);
+  db.replySentence.sessionId.delete(sessionId);
+  db.turnMetrics.sessionId.delete(sessionId);
+  for (const r of [...db.boardItem.sessionId.filter(sessionId)]) db.boardAnswer.boardItemId.delete(r.id);
+  db.boardItem.sessionId.delete(sessionId);
+  db.sessionImage.sessionId.delete(sessionId);
+  db.turnImage.sessionId.delete(sessionId);
+  db.sessionOwner.sessionId.delete(sessionId);
+  db.textPlayback.sessionId.delete(sessionId);
+  // Lesson planner.
+  db.canvasState.sessionId.delete(sessionId);
+  db.beat.sessionId.delete(sessionId);
+  db.lessonState.sessionId.delete(sessionId);
+  db.lessonRecord.sessionId.delete(sessionId);
+  db.lessonPlan.sessionId.delete(sessionId);
+  db.learnerEvent.sessionId.delete(sessionId);
+  db.tutorRequest.sessionId.delete(sessionId);
+  db.tutorResult.sessionId.delete(sessionId);
+  // Memory bookkeeping (the learner's notes are deleted by deleteLearner).
+  db.extractionCursor.sessionId.delete(sessionId);
+  db.sessionSummary.sessionId.delete(sessionId);
+  // Scheduled jobs.
+  db.sttJob.sessionId.delete(sessionId);
+  db.ttsJob.sessionId.delete(sessionId);
+  db.textPlayJob.sessionId.delete(sessionId);
   db.extractionJob.sessionId.delete(sessionId);
   db.summaryJob.sessionId.delete(sessionId);
-  db.ttsJob.sessionId.delete(sessionId);
-  db.sttJob.sessionId.delete(sessionId);
   clearSimJobs(ctx, sessionId);
-  const anyDb = db as unknown as Record<string, { iter?: () => Iterable<Record<string, unknown>>; sessionId?: { delete?: (k: bigint) => void }; id?: { delete?: (k: bigint) => void } }>;
-  for (const name of EXTRA_SESSION_TABLES) {
-    const t = anyDb[name];
-    if (!t?.iter) continue;
-    for (const r of [...t.iter()]) {
-      if (r.sessionId !== sessionId) continue;
-      if (t.id?.delete && typeof r.id === 'bigint') t.id.delete(r.id);
-      else t.sessionId?.delete?.(sessionId);
-    }
-  }
   db.session.id.delete(sessionId);
 }
 
@@ -435,16 +439,14 @@ interface SimInput {
 }
 
 function lessonStateText(ctx: Ctx, sessionId: bigint): string {
-  const t = (ctx.db as unknown as Record<string, { sessionId?: { find?: (k: bigint) => Record<string, unknown> | undefined } }>).lessonState;
-  const row = t?.sessionId?.find?.(sessionId);
+  const row = ctx.db.lessonState.sessionId.find(sessionId);
   if (!row) return '';
   return truncate(JSON.stringify({ stage: row.stage, awaitingResponse: row.awaitingResponse, checkPrompt: row.checkPrompt }), 400);
 }
 
 function canvasText(ctx: Ctx, sessionId: bigint, max: number): string {
-  const t = (ctx.db as unknown as Record<string, { sessionId?: { find?: (k: bigint) => Record<string, unknown> | undefined } }>).canvasState;
-  const row = t?.sessionId?.find?.(sessionId);
-  return row && typeof row.scene === 'string' ? truncate(row.scene, max) : '';
+  const row = ctx.db.canvasState.sessionId.find(sessionId);
+  return row ? truncate(row.scene, max) : '';
 }
 
 function transcriptLines(turns: TurnRow[], you: string, tutor: string, max: number): string {
