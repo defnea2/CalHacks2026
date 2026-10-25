@@ -60,7 +60,8 @@ export const boardKinds: BoardKindDef[] = [
   {
     name: 'visual',
     description:
-      'A picture: number_line {min,max,marks[],highlight?}, fraction_bar {parts,shaded,label?}, area_grid {rows,cols,shaded}, groups {groups,perGroup,item?}.',
+      'A picture. content.visual names it: "number_line" {min,max,marks[],highlight?}, "fraction_bar" {parts,shaded,label?}, ' +
+      '"area_grid" {rows,cols,shaded}, "groups" {groups,perGroup,item?}. Example content: {"visual":"fraction_bar","parts":3,"shaded":2,"label":"two thirds"}.',
     contentSchema: {
       type: 'object',
       properties: {
