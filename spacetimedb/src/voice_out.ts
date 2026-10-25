@@ -205,6 +205,7 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
   if (utteranceId === 0n && session.turnState === LISTENING) return; // nothing to interrupt
   // Before unplayed sentences are dropped: the lesson keeps what the learner already saw.
   onUtteranceEnd(ctx, sessionId, utteranceId, 'interrupted');
+  let tutorSideClosed = false;
   if (utteranceId !== 0n) {
     const sentences = utteranceSentences(ctx, sessionId, utteranceId);
     for (const s of sentences) {
@@ -214,9 +215,12 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
     // ends. Then the turn must be corrected to what the student actually heard.
     const tutorTurn = tutorTurnFor(ctx, sessionId, utteranceId);
     if (tutorTurn) ctx.db.turn.id.update({ ...tutorTurn, interrupted: true, text: heardText(ctx, sessionId, utteranceId) });
+    tutorSideClosed = !!tutorTurn;
   }
   ctx.db.playbackFlush.insert({ sessionId, utteranceId });
-  updateSession(ctx, session, { turnState: INTERRUPTED, currentUtteranceId: 0n });
+  // Tutor turn already appended: no appendTutorTurn will follow to leave `interrupted`, so the
+  // session listens at once (the task canvas only unlocks while `listening`).
+  updateSession(ctx, session, { turnState: tutorSideClosed ? LISTENING : INTERRUPTED, currentUtteranceId: 0n });
 }
 
 /**
@@ -252,8 +256,12 @@ export function appendTutorTurn(
   let session = getActiveSession(ctx, args.sessionId);
   if (args.utteranceId === 0n) throw new SenderError('utteranceId must be non-zero');
   const existing = tutorTurnFor(ctx, args.sessionId, args.utteranceId);
-  // Closed by the module already (a typed turn interrupted this reply): nothing left to record.
-  if (existing?.interrupted) return;
+  // Closed by the module already (a typed turn interrupted this reply): nothing left to record,
+  // but a session still in the barge-in state for it must not stay `interrupted`.
+  if (existing?.interrupted) {
+    if (session.currentUtteranceId === 0n && session.turnState === INTERRUPTED) updateSession(ctx, session, { turnState: LISTENING });
+    return;
+  }
   if (existing) throw new SenderError(`tutor turn for utterance ${args.utteranceId} exists`);
   const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
   // The opening reply (OPENING_TURN_IDX) answers no student turn: it goes before all of them.
