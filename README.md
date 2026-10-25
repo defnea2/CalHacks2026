@@ -1,6 +1,12 @@
-# Voice math tutor on SpacetimeDB
+<p><img src="docs/brand/fibonacci-mark-280.svg" width="96" height="96" alt="Fibonacci golden spiral logo" /></p>
+
+# Fibonacci
+
+A voice math tutor on SpacetimeDB.
 
 ## For judges
+
+**Fibonacci — a voice math tutor for children aged 8–12 who are stuck on fractions homework.**
 
 **Who and what.** For children aged 8–12 (3rd–6th grade) who are stuck on fractions or decimals
 homework and have nobody at home who can explain *why* (why 1/4 + 2/4 is not 3/8). The child talks
@@ -138,7 +144,7 @@ inventory: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §2–3, §10–11.
 
 ## About the project
 
-A voice math tutor for children aged 8–12. A student talks (or types) about the task they are stuck
+Fibonacci is a voice math tutor for children aged 8–12. A student talks (or types) about the task they are stuck
 on, optionally with a photo, and the tutor explains it with moving pictures that change exactly when
 the tutor says the matching words: first an intuitive picture, then the formal notation, then a task
 the student solves themselves. Teachers can run a whole class: every online student joins a live

@@ -1,6 +1,8 @@
 > Integrated canvas: see [VOICE_CANVAS.md](../docs/VOICE_CANVAS.md). Open `http://127.0.0.1:5175/?canvasPreview` for a database-free test.
 
-# Client
+# Client (Fibonacci)
+
+Brand: `src/brand/Logo.tsx` (`LogoMark` picks the 20/32/48/56 px or gridded large variant; `Wordmark` is mark + "fibonacci" in Fredoka 600, loaded from Google Fonts in `index.html` and used only by the wordmark). SVGs: `docs/brand/`.
 
 Local web client: Vite + React + TypeScript + Tailwind v4 (neutral oklch tokens as in the neoknow test client). It talks only to SpacetimeDB, through the generated bindings in `src/module_bindings/`, and builds to static files (`pnpm --filter client build` → `dist/`; no server endpoints).
 

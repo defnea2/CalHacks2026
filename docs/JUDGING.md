@@ -1,4 +1,6 @@
-# Judging index
+# Judging index: Fibonacci
+
+Fibonacci is a voice math tutor for children aged 8–12 with a live classroom view for teachers.
 
 For reviewers and reviewer agents: each track's criteria mapped to evidence (file:line, route,
 screenshot, measured number with its source). Short version: [README "For judges"](../README.md#for-judges).

@@ -1,4 +1,4 @@
-# Two-minute demo
+# Two-minute demo: Fibonacci
 
 Goal: show a child learning by voice with a canvas that moves with the tutor's words, then the
 teacher's classroom with simulated students, AI groups and live observation, and say why it is all

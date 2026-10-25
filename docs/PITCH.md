@@ -1,4 +1,4 @@
-# Pitch: voice math tutor on SpacetimeDB
+# Pitch: Fibonacci, a voice math tutor on SpacetimeDB
 
 Material for the CalHacks judging (SpacetimeDB track). Spoken parts are in plain language; every
 number has a source. The live demo script is [DEMO.md](DEMO.md); the full design is
@@ -14,7 +14,7 @@ number has a source. The live demo script is [DEMO.md](DEMO.md); the full design
 > The arithmetic is usually fine. "Why is a quarter plus two quarters not three eighths?" A parent
 > or a video can't always answer that question at the moment the child asks it.
 >
-> Our tutor talks with the child. The child says what they tried, by voice or by typing, and can add
+> Fibonacci is our tutor, and it talks with the child. The child says what they tried, by voice or by typing, and can add
 > a photo of the task. The tutor explains with a picture that moves exactly when it says the
 > matching words. It goes in the order teachers use: first an intuitive picture, then the notation,
 > then a new task the child solves alone. At the end the child gets their own homework back. The

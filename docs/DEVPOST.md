@@ -8,11 +8,11 @@ sources when pasting if Devpost formatting needs it.
 
 ## Title
 
-Voice math tutor on SpacetimeDB
+Fibonacci
 
 ## Tagline
 
-A voice tutor that helps kids aged 8–12 understand their fractions homework with pictures that
+Fibonacci: a voice math tutor that helps kids aged 8–12 understand their fractions homework with pictures that
 move as it speaks, plus a live classroom view for teachers.
 
 ## Inspiration

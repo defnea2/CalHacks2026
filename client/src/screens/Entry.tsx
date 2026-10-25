@@ -1,6 +1,6 @@
 // Entry page: choose a role. No accounts: students and teachers are picked or created freely.
 import { navigate, routeUrl } from '../lib/format';
-import { TutorAvatar } from '../components/TutorAvatar';
+import { LogoMark, Wordmark } from '../brand/Logo';
 
 export function Entry() {
   const go = (k: 'student' | 'teacher') => (e: React.MouseEvent) => {
@@ -11,11 +11,12 @@ export function Entry() {
     <div data-testid="entry-screen">
       <section className="pr-intro" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24 }}>
         <div>
-          <span className="pr-eyebrow">Math tutor for ages 8–12</span>
+          <Wordmark size={44} mark={false} className="pr-hero-wordmark" />
+          <span className="pr-eyebrow" style={{ display: 'block', marginTop: 14 }}>Voice math tutor for ages 8–12</span>
           <h1>Let's think it through,<br />one picture at a time.</h1>
           <p>Talk or type with a tutor that explains with moving pictures. Teachers can run a whole class and watch every student learn.</p>
         </div>
-        <TutorAvatar state="idle" size={92} label="The tutor says hello" />
+        <LogoMark size={148} title="Fibonacci golden spiral" className="pr-hero-mark" />
       </section>
       <div className="pr-options" role="list">
         <a role="listitem" className="pr-option" href={routeUrl({ student: '' })} onClick={go('student')} data-testid="role-student">

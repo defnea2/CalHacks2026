@@ -11,6 +11,13 @@
   --pr-bg: #f3f4ef;
   --pr-warm: #b8723f;
   --pr-soft: #eef2ea;
+  /* Fibonacci brand ("01 Golden spiral"); used only where the brand appears. */
+  --brand-navy: #1B2340;
+  --brand-navy-hover: #2E3A5C;
+  --brand-gold: #F5B83D;
+  --brand-coral: #EF6F5B;
+  --brand-bg: #F4F6FB;
+  --brand-muted: #4F586B;
 }
 
 body:has(.pr-app) { background: var(--pr-bg); }
@@ -21,8 +28,9 @@ body:has(.pr-app) { background: var(--pr-bg); }
 /* ---- header (team product header) ---- */
 .pr-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 30px; border-bottom: 1px solid var(--pr-rule); background: var(--pr-bg); position: sticky; top: 0; z-index: 20; }
 .pr-identity { display: flex; align-items: center; gap: 12px; color: var(--pr-ink); text-decoration: none; }
-.pr-monogram { display: grid; place-items: center; border: 1px solid var(--pr-accent); width: 30px; height: 30px; font-family: Georgia, serif; font-size: 20px; color: var(--pr-accent); }
-.pr-identity strong { font-size: 15px; font-weight: 650; }
+.pr-identity .pr-wordmark { transition: opacity .15s; }
+.pr-identity:hover .pr-wordmark { opacity: .82; }
+.pr-hero-mark { filter: drop-shadow(0 10px 24px rgba(27, 35, 64, .18)); }
 .pr-identity small { font-size: 11px; color: var(--pr-muted); border-left: 1px solid var(--pr-rule); padding-left: 12px; }
 .pr-nav { display: flex; align-items: center; gap: 18px; font-size: 12px; }
 .pr-nav a { color: var(--pr-muted); text-decoration: none; }
@@ -284,6 +292,7 @@ body:has(.pr-app) { background: var(--pr-bg); }
   .pr-setup-side { position: static; }
 }
 @media (max-width: 700px) {
+  .pr-hero-mark { display: none !important; }
   .pr-header { padding: 12px 16px; } .pr-identity small { display: none; } .pr-nav a { display: none; }
   .pr-main { padding: 0 16px 48px; }
   .pr-options { grid-template-columns: 1fr; } .pr-option { border-right: 0; border-bottom: 1px solid var(--pr-rule); } .pr-option:last-child { border-bottom: 0; }
