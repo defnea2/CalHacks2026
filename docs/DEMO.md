@@ -17,7 +17,10 @@ SpacetimeDB. Architecture background: [ARCHITECTURE.md](ARCHITECTURE.md).
       "Connected to claude-haiku-5-5" (`agent_status` heartbeat).
 - [ ] stt-proxy only if you use the PHP/public proxy (`curl https://<host>/stt-proxy.php/health`).
 - [ ] Prepare: one student ("Mia", 9, grade 4) and one teacher ("Ms. Park") already created, so the
-      demo does not start with forms.
+      demo does not start with forms. Note: the simulated students include **Mia Hoffmann** and
+      **Leo Schneider**; if your real student joins the class too, the dashboard summary then talks
+      about "Mia" ambiguously ("Leo (grade 4)" vs "the grade 6 Leo" in the rehearsal). A name that is
+      not in the seed list (e.g. "Ben") avoids that.
 - [ ] Warm-up: one short voice turn in a throwaway session (first procedure runs after a publish are
       slower; Smart Turn loads after the mic starts).
 - [ ] **Headphones on** (the tutor's voice in the laptop mic can trigger barge-in). Chrome, microphone permission granted for 127.0.0.1:5175.
@@ -38,7 +41,9 @@ SpacetimeDB. Architecture background: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 1. `/` → **I'm a student** → pick **Mia** → **On my own · Learn by myself**.
 2. Task: `Why is 1/4 + 2/4 not 3/8?` (optionally attach a photo of the task) → **Start my lesson**.
-3. **Start talking**. The tutor greets her and names the task (authored opening, ~0.5 s).
+3. **Start talking** (the big button in the middle of the canvas). The tutor greets her and names
+   the task (authored lead-in; first audio ~1.7 s after the click in the rehearsal). The canvas stays
+   on "Your picture will appear here" during the lead-in; the first picture comes ~11 s after the click.
 4. Say: *"I added the tops and the bottoms and got three eighths."*
 5. While it answers, point at:
    - the avatar thinking (dots) while Claude plans, then speaking with the audio;
@@ -99,5 +104,5 @@ SpacetimeDB. Architecture background: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) sections 1 (data path), 4 (voice turn diagram), 9 (classroom),
   11 (why SpacetimeDB-idiomatic).
-- Debug panel in the session (hide with `?debug=0`): per-turn latency table from `turn_metrics`.
+- Debug panel in the session (off by default, open with `?debug=1`): per-turn latency table from `turn_metrics`.
 - `spacetime logs --server local voice-tutor` for live procedure logs (LLM latency and tokens per call).
