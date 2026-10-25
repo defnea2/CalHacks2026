@@ -19,7 +19,7 @@
 // Verified speech (team, default on): only the verified canvas compiler (show_board_item with a
 // self-narrated math_canvas) or an authored question (ask_learner) speaks. Free model text is
 // dropped; `verifiedSpeech: false` re-enables free text (with inline markers) for tests/dev.
-import { SentenceChunker, LEARNER_QUESTIONS, markerReminder, prepareSentence, stripMarkers, TOOL_NAMES, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { openingLines, SentenceChunker, LEARNER_QUESTIONS, markerReminder, prepareSentence, stripMarkers, TOOL_NAMES, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
 import { MarkerAnchors } from './markers';
 import { VISUAL_UNAVAILABLE } from './tools/visual_unavailable';
 import { buildMessages } from './prompt';
@@ -487,16 +487,7 @@ export class ReplyRun {
   }
 }
 
-/** Authored opening lines: one per row; rows with {{task}} are skipped when there is no task. */
-export function openingLines(script: string, taskText: string): string[] {
-  const task = taskText.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
-  const short = task.split(' ').slice(0, 30).join(' ');
-  return script
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l && (short || !l.includes('{{task}}')))
-    .map(l => l.replace('{{task}}', short));
-}
+export { openingLines } from '@tutor/shared';
 
 /** The spoken reply ends with a question for the student (the prompt's "next step"). */
 export function endsWithNextStep(said: string): boolean {

@@ -21,7 +21,7 @@ const clear = argv.includes('--clear');
 
 const fileEnv = loadEnv();
 // Shell variables override .env (e.g. STT_BASE_URL=https://host/stt-proxy.php node scripts/publish.mjs).
-const PASS = /^(CARTESIA_|OPENROUTER_|ANTHROPIC_|STT_|TTS_|MEMORY_|SIM_|DASHBOARD_|LESSON_|INSIGHTS_|AGENT_SECRET$|SPACETIME_DB$|SPACETIME_SERVER$)/;
+const PASS = /^(CARTESIA_|OPENROUTER_|ANTHROPIC_|STT_|TTS_|MEMORY_|SIM_|DASHBOARD_|LESSON_|INSIGHTS_|CF_DISPATCH_|LLM_DISPATCH$|AGENT_SECRET$|SPACETIME_DB$|SPACETIME_SERVER$)/;
 const env = { ...fileEnv, ...Object.fromEntries(Object.entries(process.env).filter(([k]) => PASS.test(k))) };
 const target = resolveTarget(env);
 
@@ -56,7 +56,7 @@ const moduleEnv = {
   OPENROUTER_EXTRACTION_MODEL: env.OPENROUTER_EXTRACTION_MODEL || env.OPENROUTER_MODEL || '',
   AGENT_SECRET: env.AGENT_SECRET,
 };
-const OPTIONAL_MODULE_ENV = ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS', 'SIM_MAX_TURNS', 'DASHBOARD_INTERVAL_S', 'DASHBOARD_EFFORT', 'LESSON_ARC', 'INSIGHTS_KEY', 'ANTHROPIC_API_KEY', 'ANTHROPIC_EXTRACTION_MODEL', 'MEMORY_PROVIDER'];
+const OPTIONAL_MODULE_ENV = ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS', 'SIM_MAX_TURNS', 'DASHBOARD_INTERVAL_S', 'DASHBOARD_EFFORT', 'LESSON_ARC', 'INSIGHTS_KEY', 'ANTHROPIC_API_KEY', 'ANTHROPIC_EXTRACTION_MODEL', 'MEMORY_PROVIDER', 'LLM_DISPATCH', 'CF_DISPATCH_URL', 'CF_DISPATCH_SECRET'];
 for (const k of OPTIONAL_MODULE_ENV) if (env[k]) moduleEnv[k] = env[k];
 
 const args = ['publish', target.db, '--server', target.server, '--module-path', 'spacetimedb', '--yes'];
@@ -64,6 +64,7 @@ if (clear) args.push('--delete-data=always');
 const { command, prefix } = spacetimeCommand();
 
 console.log(`module env: ${Object.keys(moduleEnv).filter(k => moduleEnv[k]).join(', ')}`);
+if (env.LLM_DISPATCH === 'cloudflare' && (!env.CF_DISPATCH_URL || !env.CF_DISPATCH_SECRET)) fail('LLM_DISPATCH=cloudflare needs CF_DISPATCH_URL and CF_DISPATCH_SECRET (docs/DEPLOY.md "Cloudflare dispatch")');
 if (!target.local && !env.INSIGHTS_KEY) console.warn('warning: INSIGHTS_KEY is not set; for a shared deployment set it (docs/ARCHITECTURE.md §8)');
 if (dryRun) {
   console.log(`[dry-run] (cd ${shellQuote(ROOT)} && ${[command, ...prefix, ...args].map(shellQuote).join(' ')})`);

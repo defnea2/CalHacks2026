@@ -9,6 +9,7 @@
 import { schema, table, t } from 'spacetimedb/server';
 import { textPlayJob, textPlayback, canvasState, beat, learnerEvent, lessonState, lessonRecord, lessonPlan, agentStatus, tutorRequest, tutorResult } from './schema_pipeline';
 import * as classroom from './schema_classroom';
+import * as dispatchTables from './schema_dispatch';
 
 // ---------------------------------------------------------------- learners & sessions
 
@@ -556,6 +557,7 @@ const spacetimedb = schema(
     agentStatus,
     tutorRequest,
     tutorResult,
+    ...dispatchTables,
   },
   {
     env: {
@@ -588,6 +590,12 @@ const spacetimedb = schema(
       LESSON_ARC: t.option(t.string()),
       /** Optional key the teacher's student-profile read (learnerInsights) must present. Unset = teacher id only. */
       INSIGHTS_KEY: t.option(t.string()),
+      /** worker (default) | cloudflare: who answers student turns (docs/CLOUD_PLAN.md Part B). */
+      LLM_DISPATCH: t.option(t.string()),
+      /** Cloudflare dispatch: https://<worker>.workers.dev/dispatch. */
+      CF_DISPATCH_URL: t.option(t.string()),
+      /** Cloudflare dispatch: HMAC-SHA256 key shared with the Cloudflare Worker. */
+      CF_DISPATCH_SECRET: t.option(t.string()),
     },
   }
 );

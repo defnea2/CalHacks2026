@@ -21,7 +21,10 @@ export type EnvName =
   | 'DASHBOARD_INTERVAL_S'
   | 'DASHBOARD_EFFORT'
   | 'LESSON_ARC'
-  | 'INSIGHTS_KEY';
+  | 'INSIGHTS_KEY'
+  | 'LLM_DISPATCH'
+  | 'CF_DISPATCH_URL'
+  | 'CF_DISPATCH_SECRET';
 
 let override: Partial<Record<EnvName, string>> | null = null;
 
@@ -70,6 +73,10 @@ export const settings = {
   simMaxTurns: (ctx: { env: unknown }) => intEnv(ctx, 'SIM_MAX_TURNS', CLASSROOM_DEFAULTS.SIM_MAX_TURNS),
   dashboardIntervalS: (ctx: { env: unknown }) => intEnv(ctx, 'DASHBOARD_INTERVAL_S', CLASSROOM_DEFAULTS.DASHBOARD_INTERVAL_S),
   /** Thinking effort of the dashboard call (env DASHBOARD_EFFORT = low | medium | high). */
+  /** `worker` (default: the Node worker answers) | `cloudflare` (the module dispatches each turn, dispatch.ts). */
+  llmDispatch: (ctx: { env: unknown }): 'worker' | 'cloudflare' => (readEnv(ctx, 'LLM_DISPATCH')?.toLowerCase() === 'cloudflare' ? 'cloudflare' : 'worker'),
+  cfDispatchUrl: (ctx: { env: unknown }) => readEnv(ctx, 'CF_DISPATCH_URL') ?? '',
+  cfDispatchSecret: (ctx: { env: unknown }) => readEnv(ctx, 'CF_DISPATCH_SECRET') ?? '',
   dashboardEffort: (ctx: { env: unknown }): 'low' | 'medium' | 'high' => {
     const v = readEnv(ctx, 'DASHBOARD_EFFORT')?.toLowerCase();
     return v === 'low' || v === 'medium' || v === 'high' ? v : (CLASSROOM_DEFAULTS.DASHBOARD_EFFORT as 'low' | 'medium' | 'high');

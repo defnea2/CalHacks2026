@@ -7,6 +7,8 @@ import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob } from './schema
 import { dashboardJob, simTurnJob } from './schema_classroom';
 import * as classroom from './classroom';
 import { textPlayJob } from './schema_pipeline';
+import { dispatchJob, dispatchWatchJob } from './schema_dispatch';
+import * as dispatch from './dispatch';
 import { METRIC_NAMES, TURN_STATES, type MetricName } from '../../shared/src/types';
 import { AGENT_ROLE, getActiveSession, getSession, metricsFor, requireAgent, ts } from './ctx';
 import { settings } from './env';
@@ -89,9 +91,10 @@ export const endTurn = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessi
 
 /** "Start talking" clicked: on a session without turns, asks the worker to speak first
  *  (turnState = thinking, opening turn_metrics row). No-op once the conversation started. */
-export const startConversation = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) =>
-  opening.startConversation(ctx, sessionId)
-);
+export const startConversation = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => {
+  opening.startConversation(ctx, sessionId);
+  dispatch.onOpening(ctx, sessionId);
+});
 
 /** Barge-in: turnState = interrupted, unplayed sentences dropped, playback_flush emitted. */
 export const interrupt = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => voiceOut.interrupt(ctx, sessionId));
@@ -173,6 +176,7 @@ export const addBeat = spacetimedb.reducer(
   (ctx, args) => {
     requireAgent(ctx);
     pipeline.addBeat(ctx, args);
+    dispatch.noteProgress(ctx, args.utteranceId, 'sentence');
   }
 );
 
@@ -207,7 +211,9 @@ export const beginUtterance = spacetimedb.reducer(
   { sessionId: t.u64(), utteranceId: t.u64(), replyToIdx: t.u32(), preemptive: t.bool() },
   (ctx, args) => {
     requireAgent(ctx);
+    dispatch.assertDispatched(ctx, args.utteranceId);
     voiceOut.beginUtterance(ctx, args);
+    dispatch.noteProgress(ctx, args.utteranceId, 'began');
   }
 );
 
@@ -215,7 +221,9 @@ export const beginUtterance = spacetimedb.reducer(
  *  Only after startConversation, once, and before anything was said. */
 export const beginOpening = spacetimedb.reducer({ sessionId: t.u64(), utteranceId: t.u64() }, (ctx, args) => {
   requireAgent(ctx);
+  dispatch.assertDispatched(ctx, args.utteranceId);
   opening.beginOpening(ctx, args);
+  dispatch.noteProgress(ctx, args.utteranceId, 'began');
 });
 
 /** Inserts reply_sentence + a tts_job due now. */
@@ -224,6 +232,7 @@ export const addSentence = spacetimedb.reducer(
   (ctx, args) => {
     requireAgent(ctx);
     voiceOut.addSentence(ctx, args);
+    dispatch.noteProgress(ctx, args.utteranceId, 'sentence');
   }
 );
 
@@ -265,6 +274,7 @@ export const appendTutorTurn = spacetimedb.reducer(
   (ctx, args) => {
     requireAgent(ctx);
     voiceOut.appendTutorTurn(ctx, args);
+    dispatch.noteProgress(ctx, args.utteranceId, 'tutorTurn');
   }
 );
 
@@ -385,6 +395,19 @@ export const synthesizeSentence = spacetimedb.procedure(
 export const finishTextSentence = spacetimedb.reducer({ onSchedule: textPlayJob }, { job: textPlayJob.rowType }, (ctx, { job }) => {
   if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
   textMode.finishTextSentence(ctx, job);
+});
+
+/** Scheduled (LLM_DISPATCH=cloudflare): POSTs one llm_dispatch to the Cloudflare Worker (dispatch.ts). */
+export const dispatchTurn = spacetimedb.procedure({ onSchedule: dispatchJob }, { job: dispatchJob.rowType }, t.unit(), (ctx, { job }) => {
+  if (!ctx.sender.isEqual(ctx.databaseIdentity)) throw new SenderError('scheduler only');
+  dispatch.dispatchTurn(ctx, job);
+  return {};
+});
+
+/** Scheduled (LLM_DISPATCH=cloudflare): liveness of one dispatch; retry once, then the fallback line. */
+export const dispatchWatch = spacetimedb.reducer({ onSchedule: dispatchWatchJob }, { job: dispatchWatchJob.rowType }, (ctx, { job }) => {
+  if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
+  dispatch.dispatchWatch(ctx, job);
 });
 
 export const extractMemory = spacetimedb.procedure(

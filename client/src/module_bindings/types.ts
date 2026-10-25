@@ -162,6 +162,20 @@ export const DashboardState = __t.object("DashboardState", {
 });
 export type DashboardState = __Infer<typeof DashboardState>;
 
+export const DispatchJob = __t.object("DispatchJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  dispatchId: __t.u64(),
+});
+export type DispatchJob = __Infer<typeof DispatchJob>;
+
+export const DispatchWatchJob = __t.object("DispatchWatchJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  dispatchId: __t.u64(),
+});
+export type DispatchWatchJob = __Infer<typeof DispatchWatchJob>;
+
 export const Explanation = __t.object("Explanation", {
   id: __t.string(),
   concept: __t.string(),
@@ -247,6 +261,24 @@ export const LibraryMeta = __t.object("LibraryMeta", {
   packVersion: __t.string(),
 });
 export type LibraryMeta = __Infer<typeof LibraryMeta>;
+
+export const LlmDispatch = __t.object("LlmDispatch", {
+  id: __t.u64(),
+  sessionId: __t.u64(),
+  kind: __t.string(),
+  turnIdx: __t.u32(),
+  utteranceId: __t.u64(),
+  status: __t.string(),
+  attempt: __t.u32(),
+  withImage: __t.bool(),
+  createdAt: __t.timestamp(),
+  sentAt: __t.option(__t.timestamp()),
+  acceptedAt: __t.option(__t.timestamp()),
+  firstBeatAt: __t.option(__t.timestamp()),
+  lastBeatAt: __t.option(__t.timestamp()),
+  error: __t.string(),
+});
+export type LlmDispatch = __Infer<typeof LlmDispatch>;
 
 export const MemoryNote = __t.object("MemoryNote", {
   id: __t.u64(),

@@ -7,3 +7,4 @@ export * from './lesson/index';
 export * from './lesson/api';
 export * from './answers';
 export * from './insights';
+export * from './opening';

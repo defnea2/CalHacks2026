@@ -19,6 +19,7 @@ import {
 } from './ctx';
 import { onTurnAppended } from './memory';
 import { onStudentTurnReady } from './pipeline';
+import { onTurnReady as dispatchTurnReady } from './dispatch';
 import { bindPendingImage } from './turn_photo';
 import { concatBytes, ProviderError, transcribe } from './providers';
 
@@ -193,6 +194,7 @@ export function completeTurn(ctx: Ctx, turn: TurnRow, opts: { assessed?: boolean
     updateSession(ctx, session, { turnState: S_THINKING });
     onStudentTurnReady(ctx, ctx.db.turn.id.find(turn.id)!, opts);
     onTurnAppended(ctx, turn.sessionId);
+    dispatchTurnReady(ctx, turn.sessionId, turn.idx);
   }
 }
 
