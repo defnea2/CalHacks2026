@@ -1,10 +1,13 @@
 // Voice/board sync: an item tagged (utteranceId, sentenceIdx) appears when that sentence
-// starts playing. Kind-agnostic, pure.
+// starts playing; with an inline marker (markerPos >= 0) at the marker's word inside it, timed
+// from TTS word timestamps or estimated from the sentence duration. Kind-agnostic, pure.
 import type { RevealState } from './types';
 
 export interface RevealInput {
   utteranceId: bigint;
   sentenceIdx: number;
+  /** Inline marker offset in the speech of that sentence; -1 / absent = reveal at its start. */
+  markerPos?: number;
 }
 
 export interface UtteranceProgress {
@@ -16,13 +19,60 @@ export interface UtteranceProgress {
   over: boolean;
 }
 
-export function revealState(item: RevealInput, progress: UtteranceProgress | undefined): RevealState {
+export interface RevealOptions {
+  /** Current time on the clock of `markerAt` (performance.now() in the app). */
+  now?: number;
+  /** When the item's marker word plays (same clock), if this tab knows when its sentence
+   *  started. Undefined: reveal when the sentence starts (observer, reload, no audio). */
+  markerAt?: number;
+}
+
+export function revealState(item: RevealInput, progress: UtteranceProgress | undefined, opts: RevealOptions = {}): RevealState {
   if (item.utteranceId === 0n) return { revealed: true, progress: Infinity };
   if (!progress) return { revealed: false, progress: 0 };
+  // Exact indices (team): dropped/gap-skipped audio never reveals a visual.
   if (!progress.started.includes(item.sentenceIdx)) return { revealed: false, progress: 0 };
   let n = 0;
   while (progress.started.includes(item.sentenceIdx + n)) n++;
-  return n > 0 ? { revealed: true, progress: n } : { revealed: false, progress: 0 };
+  // Marker inside the sentence that is playing now: wait for its word (a later sentence
+  // having started means the word was said). Checked before `over`: the utterance counts as
+  // over as soon as its last sentence *starts* (markPlayed), while that sentence still plays.
+  if (n === 1 && (item.markerPos ?? -1) >= 0 && opts.markerAt !== undefined && (opts.now ?? 0) < opts.markerAt) {
+    return { revealed: false, progress: 0, revealAt: opts.markerAt };
+  }
+  return { revealed: true, progress: n };
+}
+
+/** Playback timing of one sentence on this tab (from the PlaybackQueue). */
+export interface SentenceTiming {
+  /** When its (trimmed) audio started playing, performance.now() clock. */
+  startMs: number;
+  /** Duration of the trimmed audio. */
+  durationMs: number;
+  /** Leading silence trimmed off before playback (TTS word times count from the untrimmed start). */
+  trimStartMs: number;
+  /** TTS word timestamps (ms from the untrimmed start); empty when the provider gave none. */
+  wordStartsMs: number[];
+  wordEndsMs: number[];
+}
+
+/**
+ * Offset (ms after the sentence's playback start) of the word at/after `pos` in `speech`.
+ * Exact with TTS word timestamps: the speech's whitespace tokens map 1:1 to the TTS words (or
+ * proportionally when the counts differ); a marker after the last word maps to the end of the
+ * last word. Without timestamps: duration × pos / speech length.
+ */
+export function markerOffsetMs(speech: string, pos: number, t: SentenceTiming): number {
+  const clamp = (ms: number) => Math.max(0, Math.min(t.durationMs, ms));
+  const n = Math.min(t.wordStartsMs.length, t.wordEndsMs.length);
+  if (n > 0) {
+    const starts = [...speech.matchAll(/\S+/g)].map(m => m.index!);
+    const k = starts.findIndex(st => st >= pos);
+    if (k < 0) return clamp(t.wordEndsMs[n - 1]! - t.trimStartMs);
+    const w = n === starts.length ? k : Math.min(n - 1, Math.round((k * n) / Math.max(1, starts.length)));
+    return clamp(t.wordStartsMs[w]! - t.trimStartMs);
+  }
+  return clamp((t.durationMs * Math.max(0, pos)) / Math.max(1, speech.length));
 }
 
 export interface SentenceLike {

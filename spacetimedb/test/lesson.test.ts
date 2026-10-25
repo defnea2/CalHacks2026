@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { pack } from '../../shared/src/lesson/index';
 import { canTransition } from '../../shared/src/lesson/api';
-import { call, makeLearner, makeSession, mod, proc, session, setup } from './helpers';
+import { call, makeLearner, makeSession, mod, proc, session, setup, studentSays } from './helpers';
 
 // Kinds/phases are taken from the pack by shape, never by name.
 const answerable = pack.boardKinds.find(k => /expectedAnswer/.test(k.description))!;
@@ -18,6 +18,7 @@ function start() {
 const show = (args: Partial<{ kind: string; content: string; taskKey: string; expectedAnswer: string }>) => ({
   utteranceId: 0n,
   sentenceIdx: 0,
+  markerPos: -1,
   kind: '',
   content: '',
   taskKey: '',
@@ -79,6 +80,32 @@ describe('board', () => {
     expect([...h.db.boardItem.sessionId.filter(s.id)][0]).toMatchObject({ utteranceId: 7n, sentenceIdx: 1, kind });
     const bad = { ...content, moments: [{ sentenceOffset: 0, visual: { kind: 'geometry', shape: 'rectangle', width: 3.2, height: 2 } }] };
     expect(() => call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind, content: JSON.stringify(bad) }) })).toThrow(/invalid content/);
+  });
+
+  it('stores the inline-marker reveal anchor, validated against the tagged sentence', () => {
+    const { h, agent, client, s } = start();
+    studentSays(h, client, s.id, 'help');
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 9n, replyToIdx: 0, preemptive: false });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 9n, idx: 0, display: 'Here are two thirds.', speech: 'Here are two thirds.' });
+    const ok = JSON.stringify({ [plain.contentSchema.required![0]!]: 'hello' });
+    const items = () => [...h.db.boardItem.sessionId.filter(s.id)].sort((a, b) => a.idx - b.idx);
+    // anchored at "two"
+    call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind: plain.name, content: ok }), utteranceId: 9n, sentenceIdx: 0, markerPos: 9 });
+    // past the end: clamped to the speech length
+    call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind: plain.name, content: ok }), utteranceId: 9n, sentenceIdx: 0, markerPos: 500 });
+    // sentence that does not exist: falls back to the sentence-start reveal
+    call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind: plain.name, content: ok }), utteranceId: 9n, sentenceIdx: 4, markerPos: 3 });
+    // no marker
+    call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind: plain.name, content: ok }), utteranceId: 9n, sentenceIdx: 1 });
+    expect(items().map(i => [i.sentenceIdx, i.markerPos])).toEqual([
+      [0, 9],
+      [0, 'Here are two thirds.'.length],
+      [4, -1],
+      [1, -1],
+    ]);
+    expect(() =>
+      call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind: plain.name, content: ok }), utteranceId: 9n, sentenceIdx: 0, markerPos: -2 })
+    ).toThrow(/markerPos/);
   });
 
   it('gap tasks need an expected answer; submitGapAnswer checks deterministically', () => {

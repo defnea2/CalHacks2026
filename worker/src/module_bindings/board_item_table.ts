@@ -24,4 +24,5 @@ export default __t.row({
   answerState: __t.string().name("answer_state"),
   lastAnswer: __t.string().name("last_answer"),
   createdAt: __t.timestamp().name("created_at"),
+  markerPos: __t.i32().name("marker_pos"),
 });

@@ -8,8 +8,9 @@ const json = (v: unknown): string => {
   return JSON.stringify(v);
 };
 
-/** Tagged with the current utterance and the index of the next sentence, so the client reveals
- *  the item when that sentence starts playing. */
+/** Tagged with the current utterance and a reveal anchor: the sentence + speech offset of its
+ *  inline marker ⟦id⟧ when the text has one (revealed at that word), else the index of the next
+ *  sentence (revealed when that sentence starts playing). */
 export const showBoardItem: ToolModule = {
   name: TOOL_NAMES.showBoardItem,
   // The board is revealed by FUTURE speech. Return to the model after the tool so
@@ -24,10 +25,14 @@ export const showBoardItem: ToolModule = {
     const lines = canvas?.moments.map(m => m.narration);
     const narrated = lines?.every((line): line is string => typeof line === 'string');
     if (narrated && !ctx.narrate) throw new Error('Narration is unavailable or a canvas was already narrated in this reply.');
+    // A self-narrated canvas is timed by its own moments (sentence offsets from the next sentence);
+    // otherwise the item may carry an inline marker ⟦id⟧ and appears at that word.
+    const anchor = narrated ? undefined : ctx.anchor?.(args.id);
     await ctx.transport.showBoardItem({
       sessionId: ctx.sessionId,
       utteranceId: ctx.utteranceId,
-      sentenceIdx: ctx.nextSentenceIdx,
+      sentenceIdx: anchor ? anchor.sentenceIdx : ctx.nextSentenceIdx,
+      markerPos: anchor ? anchor.pos : -1,
       kind: str(args.kind),
       content: json(canvas ?? args.content),
       taskKey: str(args.taskKey),
@@ -45,6 +50,8 @@ export const showBoardItem: ToolModule = {
         + moments.map(m => `sentence ${m.sentenceOffset + 1}: ${JSON.stringify(m.visual)}`).join('; ')
         + '. Do not stop after only a prediction question when later moments remain. Do not call another board tool before completing these sentences.';
     }
+    // Anchored at an inline marker: the speech about it was already said, nothing to follow up.
+    if (anchor) return { text: 'ok' };
     return 'Board accepted. Now refer to it in your next short spoken sentence.';
   },
 };

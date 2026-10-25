@@ -3,6 +3,7 @@
 import type { JsonSchema, LessonPack, PhaseDef, BoardKindDef } from './types';
 import type { ToolSpec } from '../types';
 import { MEMORY_KINDS, MEMORY_OUTCOMES } from '../types';
+import { markerText } from '../markers';
 
 export function getPhase(pack: LessonPack, id: string): PhaseDef | undefined {
   return pack.phases.find(p => p.id === id);
@@ -110,7 +111,12 @@ export const LEARNER_QUESTIONS = {
   handoff: 'Try your original question now. Talk me through your first step.',
 } as const;
 
-export function buildToolSpecs(pack: LessonPack): ToolSpec[] {
+/** Description of the optional `id` argument of board tools (inline marker, see markers.ts). */
+export const MARKER_ID_DESCRIPTION =
+  `Short marker id like "b1". Your spoken text must contain ${markerText('b1')} right after the words about this item; it appears at that word.`;
+
+/** `markers`: free speech is on, so board items may carry an inline marker (see markers.ts). */
+export function buildToolSpecs(pack: LessonPack, opts: { markers?: boolean } = {}): ToolSpec[] {
   const categories = pack.taxonomy.map(c => c.key);
   const concepts = pack.taxonomy.flatMap(c => c.concepts.map(k => k.key));
   const generatedKinds = generationKinds(pack);
@@ -153,11 +159,14 @@ export function buildToolSpecs(pack: LessonPack): ToolSpec[] {
     {
       name: TOOL_NAMES.showBoardItem,
       description:
-        'Show something on the shared board. Either pass kind + content, or a library taskKey. ' +
+        'Show something on the shared board. ' +
+        (opts.markers ? `Your spoken text must already contain its marker (${markerText('b1')}) right after the words about it, and you pass the same id here. ` : '') +
+        'Either pass kind + content, or a library taskKey. ' +
         generatedKinds.map(k => `${k.name}: ${k.description}`).join(' | '),
       parameters: {
         type: 'object',
         properties: {
+          id: { type: 'string', description: MARKER_ID_DESCRIPTION },
           kind: { type: 'string', enum: generatedKinds.map(k => k.name) },
           content: {
             type: 'object',
@@ -202,6 +211,21 @@ export function describePhases(pack: LessonPack): string {
   return pack.phases
     .map(p => `- ${p.id} (${p.label}): ${p.description} Next: ${p.next.length ? p.next.join(', ') : 'none (last)'}.`)
     .join('\n');
+}
+
+/** {{phaseInstructions}} block: the instructions of ONE phase (the current one). */
+export function phaseInstructions(pack: LessonPack, phaseId: string): string {
+  return getPhase(pack, phaseId)?.instructions ?? '';
+}
+
+/** The current phase's block (a system message after the current turn). `changed`: the
+ *  phaseChange variant appended after a successful set_phase mid-reply. */
+export function renderPhaseBlock(pack: LessonPack, phaseId: string, changed = false): string {
+  const p = getPhase(pack, phaseId);
+  return renderTemplate(changed ? pack.prompts.phaseChange : pack.prompts.phase, {
+    phase: p ? `${p.id} (${p.label})` : phaseId,
+    phaseInstructions: phaseInstructions(pack, phaseId),
+  });
 }
 
 /** {{concepts}} block for the system prompt. */

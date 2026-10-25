@@ -1,18 +1,20 @@
 // Screen 2: the live session (?session=<id>; a reload resumes it).
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DbConnection } from '../module_bindings';
 import type { ReplySentence } from '../module_bindings/types';
 import type { AppSettings } from '../config';
 import { useSessionData } from '../stdb/useSessionData';
 import { callReducer } from '../stdb/connection';
 import { VoiceSession, type VoiceUiState } from '../audio/VoiceSession';
-import { Board } from '../board/Board';
+import { Board, type BoardItemView } from '../board/Board';
+import { markerOffsetMs, type SentenceTiming } from '../board/reveal';
 import { Captions, DebugPanel, Indicators, SessionTitle, useUtteranceState } from '../components/session';
 import { Button, ErrorNote } from '../components/ui';
 import { APP_CONFIG } from '../app-config';
 import { compressPhoto } from '../lib/photo';
 import { eventLog } from '../lib/debug';
 import { homeUrl, navigate, sessionUrl } from '../lib/format';
+import { shouldStartConversation } from '../lib/conversation';
 import '../studio.css';
 
 const PLAYED = 'played';
@@ -28,6 +30,8 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
   const [localStarted, setLocalStarted] = useState<Map<string, number[]>>(() => new Map());
+  /** Playback timing of the sentences this tab started ("utteranceId:idx"), for marker reveals. */
+  const timings = useRef(new Map<string, SentenceTiming>());
   const [localLatency, setLocalLatency] = useState<Map<number, number>>(() => new Map());
   const lastTurnEnd = useRef<number | null>(null);
   const turnCounter = useRef(0);
@@ -51,7 +55,7 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
     st.tutorAudio = ui.tutorAudio;
     st.phrases = data.phrases.map(p => ({ phraseId: p.phraseId, turnIdx: p.turnIdx, status: p.status, text: p.text }));
     st.sentences = data.sentences.map(s => ({ utteranceId: s.utteranceId.toString(), idx: s.idx, status: s.status, display: s.display }));
-    st.boardItems = data.boardItems.map(b => ({ id: b.id.toString(), idx: b.idx, kind: b.kind, visible: b.visible, utteranceId: b.utteranceId.toString(), sentenceIdx: b.sentenceIdx, answerState: b.answerState }));
+    st.boardItems = data.boardItems.map(b => ({ id: b.id.toString(), idx: b.idx, kind: b.kind, visible: b.visible, utteranceId: b.utteranceId.toString(), sentenceIdx: b.sentenceIdx, markerPos: b.markerPos, answerState: b.answerState }));
     st.localLatencyMs = [...localLatency.values()];
   }, [sessionId, data, session, ui, localLatency]);
 
@@ -81,7 +85,8 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
     []
   );
 
-  const onSentenceStart = useCallback((u: bigint, idx: number) => {
+  const onSentenceStart = useCallback((u: bigint, idx: number, timing: SentenceTiming) => {
+    timings.current.set(`${u}:${idx}`, timing);
     setLocalStarted(prev => {
       const k = u.toString();
       if (prev.get(k)?.includes(idx)) return prev;
@@ -119,6 +124,13 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
       setVoice(v);
       eventLog.log('ui.start_talking', {});
       await v.start();
+      // Fresh session: the tutor speaks first (audio can play now that the click created the AudioContext).
+      if (shouldStartConversation(session)) {
+        lastTurnEnd.current = Date.now();
+        turnCounter.current += 1;
+        const r = await callReducer('startConversation', { sessionId }, () => conn.reducers.startConversation({ sessionId }));
+        if (!r.ok) eventLog.log('ui.start_conversation_failed', { error: r.error ?? '' });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       eventLog.log('ui.start_failed', { error: msg });
@@ -149,6 +161,18 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
     if (!r.ok) setError(r.error ?? 'failed');
   };
 
+  // Inline board markers: the item appears when its marker word plays.
+  const speechOf = useMemo(() => new Map(data.sentences.map(s => [`${s.utteranceId}:${s.idx}`, s.speech])), [data.sentences]);
+  const markerAt = useCallback(
+    (item: BoardItemView) => {
+      const k = `${item.utteranceId}:${item.sentenceIdx}`;
+      const t = timings.current.get(k);
+      const speech = speechOf.get(k);
+      return t && speech !== undefined ? t.startMs + markerOffsetMs(speech, item.markerPos, t) : undefined;
+    },
+    [speechOf]
+  );
+
   const tutorShown = useCallback(
     (s: ReplySentence) => s.status === PLAYED || (localStarted.get(s.utteranceId.toString()) ?? []).includes(s.idx),
     [localStarted]
@@ -178,7 +202,7 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
       <div className="lesson-layout">
         <section className="lesson-stage" aria-label="Learning canvas">
           <div className="lesson-picture">
-            <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} allowCanvasInteraction={!!session?.active && session.turnState === 'listening' && !ui.tutorAudio} />
+            <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} markerAt={markerAt} allowCanvasInteraction={!!session?.active && session.turnState === 'listening' && !ui.tutorAudio} />
           </div>
           <footer className="stage-controls">
             <div className="voice-control">

@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+import { eventLog } from '../lib/debug';
 import { AnimatedMathBoard } from './AnimatedMathBoard';
 import { getRenderer, parseContent } from './registry';
 import { revealState, type UtteranceProgress } from './reveal';
@@ -11,6 +13,8 @@ export interface BoardItemView {
   visible: boolean;
   utteranceId: bigint;
   sentenceIdx: number;
+  /** Inline marker offset in the tagged sentence's speech; -1 = none. */
+  markerPos: number;
   answerState: string;
   lastAnswer: string;
 }
@@ -22,21 +26,61 @@ interface Props {
   /** Absent in read-only views (observer). */
   allowCanvasInteraction?: boolean;
   onSubmitAnswer?: (itemId: bigint, answer: string) => Promise<void>;
+  /** When an item's marker word plays (performance.now() clock); undefined = at sentence start. */
+  markerAt?: (item: BoardItemView) => number | undefined;
 }
 
-export function Board({ items, progress, serverOver, onSubmitAnswer, allowCanvasInteraction = false }: Props) {
+export function Board({ items, progress, serverOver, onSubmitAnswer, allowCanvasInteraction = false, markerAt }: Props) {
   const shown = items.filter(i => i.visible).sort((a, b) => a.idx - b.idx);
-  const mathItems = shown.filter(i => i.kind === 'math_canvas').map(i => ({
+  // Team: generated math canvases animate their moments on exact sentence playback.
+  const mathItems = shown.filter(i => i.kind === 'math_canvas').map(i => ({ // pack-literal-ok
     id: i.id.toString(), order: i.idx, utteranceId: i.utteranceId.toString(), sentenceIdx: i.sentenceIdx,
     content: parseContent(i.content),
   }));
   const started = new Map([...progress].map(([id, p]) => [id, p.started]));
+  // Other kinds: revealed at their sentence, or at their inline marker's word.
+  const others = shown.filter(i => i.kind !== 'math_canvas'); // pack-literal-ok
+  const [, setTick] = useState(0);
+  const now = performance.now();
+  const states = others.map(item => {
+    const p = progress.get(item.utteranceId.toString()) ?? { maxStarted: -1, started: [], over: serverOver(item.utteranceId) };
+    return revealState(item, p, { now, markerAt: item.markerPos >= 0 ? markerAt?.(item) : undefined });
+  });
+  // Re-render when the next marker word is due.
+  const nextAt = Math.min(Infinity, ...states.map(r => r.revealAt ?? Infinity));
+  useEffect(() => {
+    if (!Number.isFinite(nextAt)) return;
+    const timer = setTimeout(() => setTick(t => t + 1), Math.max(0, nextAt - performance.now()));
+    return () => clearTimeout(timer);
+  }, [nextAt]);
+  // Debug/E2E: when each item first arrived (board.seen) and first became visible (board.reveal).
+  const logged = useRef(new Set<string>());
+  const seen = useRef(new Set<string>());
+  useEffect(() => {
+    others.forEach((item, i) => {
+      const k = item.id.toString();
+      if (!seen.current.has(k)) {
+        seen.current.add(k);
+        eventLog.log('board.seen', { id: k, utteranceId: item.utteranceId.toString(), sentenceIdx: item.sentenceIdx, markerPos: item.markerPos });
+      }
+      if (!states[i]!.revealed || logged.current.has(k)) return;
+      logged.current.add(k);
+      const at = item.markerPos >= 0 ? markerAt?.(item) : undefined;
+      eventLog.log('board.reveal', {
+        id: k,
+        utteranceId: item.utteranceId.toString(),
+        sentenceIdx: item.sentenceIdx,
+        markerPos: item.markerPos,
+        // When the marker word plays (performance.now() clock), if known on this tab.
+        markerAt: at === undefined ? null : Math.round(at),
+      });
+    });
+  });
   return (
     <div data-testid="board" className="flex flex-col gap-3">
       <AnimatedMathBoard items={mathItems} started={started} interactive={allowCanvasInteraction} />
-      {shown.filter(item => item.kind !== 'math_canvas').map(item => {
-        const p = progress.get(item.utteranceId.toString()) ?? { maxStarted: -1, started: [], over: serverOver(item.utteranceId) };
-        const reveal = revealState(item, p);
+      {others.map((item, i) => {
+        const reveal = states[i]!;
         const { renderer: R, known } = getRenderer(item.kind);
         const answer: AnswerProps = {
           state: item.answerState,

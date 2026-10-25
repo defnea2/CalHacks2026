@@ -56,7 +56,7 @@ export function CanvasPreview() {
   const current = examples[example]!;
   const u = BigInt(run + 1);
   const items: BoardItemView[] = useMemo(() => [{ id: 1n, idx: 0, kind: 'math_canvas',
-    content: JSON.stringify(current.content), visible: true, utteranceId: u, sentenceIdx: 0,
+    content: JSON.stringify(current.content), visible: true, utteranceId: u, sentenceIdx: 0, markerPos: -1,
     answerState: '', lastAnswer: '',
   }], [current, u]);
   const started = Array.from({ length: sentence + 1 }, (_, i) => i);

@@ -5,17 +5,22 @@ import type { PlaybackSettings, ClientSettings } from '../config';
 import { applyFades, SentenceOrderer, trimRange, type SentenceBlock } from './playbackLogic';
 import { int16ToFloat, pcm16ToInt16 } from './pcm';
 import { eventLog } from '../lib/debug';
+import type { SentenceTiming } from '../board/reveal';
 
 export interface AudioBlockIn {
   utteranceId: bigint;
   idx: number;
   pcm: Uint8Array;
   sampleRate: number;
+  /** TTS word timestamps (ms from the start of `pcm`), if any. */
+  wordStartsMs?: number[];
+  wordEndsMs?: number[];
 }
 
 export interface PlaybackCallbacks {
-  /** A sentence starts playing now (drives markPlayed, captions and board reveal). */
-  onSentenceStart?: (utteranceId: bigint, idx: number) => void;
+  /** A sentence starts playing now (drives markPlayed, captions and board reveal). `timing`
+   *  places its words on the performance.now() clock (inline board markers). */
+  onSentenceStart?: (utteranceId: bigint, idx: number, timing: SentenceTiming) => void;
   /** Playing state changed (true while audio is scheduled ahead). */
   onPlayingChange?: (playing: boolean) => void;
 }
@@ -26,6 +31,8 @@ interface Scheduled {
   source: AudioBufferSourceNode;
   startAt: number;
   endAt: number;
+  /** Word timing of this sentence (startMs is set when it really starts). */
+  timing: Omit<SentenceTiming, 'startMs'>;
   timer: ReturnType<typeof setTimeout>;
   started: boolean;
   cancelled: boolean;
@@ -128,7 +135,13 @@ export class PlaybackQueue {
     const endAt = startAt + buffer.duration;
     this.nextStart = endAt + this.cfg.SENTENCE_PAUSE_MS / 1000;
     source.start(startAt);
-    const item: Scheduled = { utteranceId: b.utteranceId, idx: b.idx, source, startAt, endAt,
+    const timing: Omit<SentenceTiming, 'startMs'> = {
+      durationMs: buffer.duration * 1000,
+      trimStartMs: (s / (sampleRate || this.cfg.TTS_SAMPLE_RATE)) * 1000,
+      wordStartsMs: b.data.wordStartsMs ?? [],
+      wordEndsMs: b.data.wordEndsMs ?? [],
+    };
+    const item: Scheduled = { utteranceId: b.utteranceId, idx: b.idx, source, startAt, endAt, timing,
       timer: undefined as unknown as ReturnType<typeof setTimeout>, started: false, cancelled: false };
     this.watchStart(item);
     source.onended = () => {
@@ -166,8 +179,16 @@ export class PlaybackQueue {
   private fireStart(item: Scheduled): void {
     if (item.started || item.cancelled) return;
     item.started = true;
-    eventLog.log('audio.play_start', { utteranceId: item.utteranceId.toString(), idx: item.idx });
-    this.cb.onSentenceStart?.(item.utteranceId, item.idx);
+    // Word times count from the audible start: correct by how late this check ran.
+    const lateMs = Math.max(0, (this.ctx.currentTime - item.startAt) * 1000);
+    const timing: SentenceTiming = { ...item.timing, startMs: performance.now() - lateMs };
+    eventLog.log('audio.play_start', {
+      utteranceId: item.utteranceId.toString(),
+      idx: item.idx,
+      durationMs: Math.round(timing.durationMs),
+      words: timing.wordStartsMs.length,
+    });
+    this.cb.onSentenceStart?.(item.utteranceId, item.idx, timing);
   }
 
   private updatePlaying(force?: boolean): void {

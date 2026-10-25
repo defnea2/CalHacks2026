@@ -1,4 +1,5 @@
-// ReplyRun: one tutor reply to one student turn (LiveKit's "speech handle").
+// ReplyRun: one tutor reply to one student turn, or the opening when the tutor speaks first
+// (LiveKit's "speech handle").
 //
 // The LLM loop streams text and tool calls. Everything it produces goes through an ordered
 // outbox: sentences (addSentence) and tool calls (ToolRouter) are applied strictly in the order
@@ -8,7 +9,18 @@
 // while the student may still continue: its output is held in memory until release() (turn
 // became ready with the same transcript) or thrown away by discard(). Nothing reaches
 // SpacetimeDB before release(), not even beginUtterance.
-import { SentenceChunker, normalizeForSpeech, TOOL_NAMES, LEARNER_QUESTIONS, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+//
+// Inline board markers: the model writes ⟦b1⟧ where an item should appear and calls the board
+// tool with id "b1" after its text. Sentences go out without markers; `anchors` remembers each
+// marker's sentence + speech offset, and the tool stores that as the item's reveal anchor. A
+// tool call whose marker is still in the chunker buffer waits until the round's text is cut
+// (and every later call of the round with it, to keep their order).
+//
+// Verified speech (team, default on): only the verified canvas compiler (show_board_item with a
+// self-narrated math_canvas) or an authored question (ask_learner) speaks. Free model text is
+// dropped; `verifiedSpeech: false` re-enables free text (with inline markers) for tests/dev.
+import { SentenceChunker, LEARNER_QUESTIONS, markerReminder, prepareSentence, stripMarkers, TOOL_NAMES, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { MarkerAnchors } from './markers';
 import { VISUAL_UNAVAILABLE } from './tools/visual_unavailable';
 import { buildMessages } from './prompt';
 import type { ToolResult, ToolRouter } from './router';
@@ -21,21 +33,36 @@ export interface ReplyDeps {
   transport: Transport;
   llm: LlmProvider;
   router: ToolRouter;
+  /** Stable system prompt (never changes during a session). */
   system: string;
+  /** Phase block for a phase (only its instructions); `changed` = the mid-reply variant. */
+  phaseBlock: (phase: string, changed: boolean) => string;
+  /** The pack's opening instruction (used when the reply is the opening). */
+  openingPrompt?: string;
+  /** Verified speech: the pack's authored opening (one line per row, {{task}}). */
+  openingScript?: string;
   maxToolRounds: number;
   recentTurns: number;
-  verifiedSpeech?: boolean;
   log: (msg: string) => void;
   /** Sentence status lookup (from the subscription) to tell what was actually played. */
   isDropped?: (utteranceId: bigint, idx: number) => boolean;
   now?: () => number;
+  /** Default true: only verified canvas narration / authored questions are spoken. */
+  verifiedSpeech?: boolean;
 }
 
 export interface ReplyParams {
   sessionId: bigint;
+  /** Student turn this reply answers (OPENING_TURN_IDX for the opening; used for metrics). */
   turnIdx: number;
+  /** The tutor speaks first: no student turn, beginOpening instead of beginUtterance. */
+  opening?: boolean;
+  /** The session's current phase (from the subscription), read before every LLM call. */
+  phase: () => string;
   /** Student transcript this reply answers. */
   transcript: string;
+  /** The session's task text (authored opening). */
+  taskText?: string;
   utteranceId: bigint;
   /** Earlier turns of the session (read when the prompt is built). */
   turns: () => TurnRow[];
@@ -62,10 +89,18 @@ export class ReplyRun {
   history: ChatMessage[] = [];
   imageIncluded = false;
   preemptive = false;
+  readonly opening: boolean;
+  /** Phase whose block was the latest one in the history, per LLM call (tests, logs). */
+  readonly promptPhases: string[] = [];
+  /** Phase set by a successful set_phase in this reply (wins over a lagging subscription). */
+  private phaseSet?: string;
   /** Settles when the run is fully over (LLM done, outbox drained, tutor turn appended). */
   readonly done: Promise<void>;
 
   private readonly abort = new AbortController();
+  private readonly anchors = new MarkerAnchors();
+  private narratedCanvas = false;
+  private rejectedVisual = false;
   private releaseGate!: () => void;
   private readonly gate = new Promise<void>(r => (this.releaseGate = r));
   private chain: Promise<unknown>;
@@ -74,8 +109,6 @@ export class ReplyRun {
   private closed = false;
   private firstTokenAt = 0;
   private firstTokenRecorded = false;
-  private narratedCanvas = false;
-  private rejectedVisual = false;
   private readonly startedAt: number;
   private readonly now: () => number;
 
@@ -87,6 +120,7 @@ export class ReplyRun {
     this.turnIdx = p.turnIdx;
     this.transcript = p.transcript;
     this.utteranceId = p.utteranceId;
+    this.opening = !!p.opening;
     this.state = p.held ? 'held' : 'live';
     this.now = deps.now ?? Date.now;
     this.startedAt = this.now();
@@ -134,8 +168,12 @@ export class ReplyRun {
 
   // ------------------------------------------------------------------ internals
 
+  private currentPhase(): string {
+    return this.phaseSet ?? this.p.phase();
+  }
+
   private log(msg: string) {
-    this.deps.log(`[s${this.sessionId} t${this.turnIdx} u${this.utteranceId}] ${msg}`);
+    this.deps.log(`[s${this.sessionId} ${this.opening ? 'opening' : `t${this.turnIdx}`} u${this.utteranceId}] ${msg}`);
   }
 
   private metric(name: MetricName, atMs: number) {
@@ -159,12 +197,14 @@ export class ReplyRun {
   private async begin(): Promise<void> {
     if (this.aborted) return;
     try {
-      await this.deps.transport.beginUtterance({
-        sessionId: this.sessionId,
-        utteranceId: this.utteranceId,
-        replyToIdx: this.turnIdx,
-        preemptive: this.preemptive,
-      });
+      if (this.opening) await this.deps.transport.beginOpening({ sessionId: this.sessionId, utteranceId: this.utteranceId });
+      else
+        await this.deps.transport.beginUtterance({
+          sessionId: this.sessionId,
+          utteranceId: this.utteranceId,
+          replyToIdx: this.turnIdx,
+          preemptive: this.preemptive,
+        });
       this.began = true;
       this.recordFirstToken();
     } catch (e) {
@@ -181,21 +221,28 @@ export class ReplyRun {
     return p;
   }
 
-  private enqueueSentence(display: string): void {
+  private enqueueSentence(raw: string): void {
     // In production, only the verified canvas compiler or an authored question
     // can speak. This also closes plain-reply and tool-free fallback bypasses.
     if (this.deps.verifiedSpeech !== false) return;
+    this.anchors.noteText(raw);
     void this.enqueue(async () => {
       // A paired canvas owns its spoken explanation. Ignore free text that the
       // model emitted after that tool instead of speaking the explanation twice.
-      if (!this.narratedCanvas && !this.rejectedVisual) await this.publishSentence(display);
+      if (!this.narratedCanvas && !this.rejectedVisual) await this.publishSentence(raw);
     }, undefined);
   }
 
-  private async publishSentence(display: string): Promise<void> {
+  private async publishSentence(raw: string): Promise<void> {
       if (this.aborted) return;
+      const { display, speech, markers } = prepareSentence(raw);
+      if (!display.trim()) {
+        this.anchors.addMarkerOnly(markers);
+        return;
+      }
       const idx = this.sent.length;
       this.sent.push(display);
+      this.anchors.addSentence(idx, speech.length, markers);
       if (idx === 0) this.metric('firstSentenceAt', this.now());
       try {
         await this.deps.transport.addSentence({
@@ -203,7 +250,7 @@ export class ReplyRun {
           utteranceId: this.utteranceId,
           idx,
           display,
-          speech: normalizeForSpeech(display) || display,
+          speech,
         });
       } catch (e) {
         this.log(`addSentence ${idx} failed: ${errText(e)}`);
@@ -223,20 +270,53 @@ export class ReplyRun {
       // Check again at execution time: an earlier tool in this same streamed
       // round may have invalidated the proposed visual.
       allowed = allowed && (!this.rejectedVisual || call.name === TOOL_NAMES.showBoardItem || call.name === TOOL_NAMES.visualUnavailable);
-      const r: ToolResult = !allowed ? { call, ok: false, kind: 'query', result: 'error: this tool is not offered in this round. Repair the visual using show_board_item or acknowledge the missing capability using visual_unavailable.' } : await this.deps.router.run(call, {
-        sessionId: this.sessionId,
-        utteranceId: this.utteranceId,
-        nextSentenceIdx: this.sent.length,
-        transport: this.deps.transport,
-        narrate: this.narratedCanvas ? undefined : lines => this.narrateCanvas(lines),
-      });
+      const r: ToolResult = !allowed
+        ? { call, ok: false, kind: 'query', result: 'error: this tool is not offered in this round. Repair the visual using show_board_item or acknowledge the missing capability using visual_unavailable.' }
+        : await this.deps.router.run(call, {
+            sessionId: this.sessionId,
+            utteranceId: this.utteranceId,
+            nextSentenceIdx: this.sent.length,
+            anchor: id => this.anchors.take(id),
+            transport: this.deps.transport,
+            narrate: this.narratedCanvas ? undefined : lines => this.narrateCanvas(lines),
+          });
       this.toolResults.push(r);
       if (call.name === TOOL_NAMES.showBoardItem && !r.ok) this.rejectedVisual = true;
+      if (r.ok && call.name === TOOL_NAMES.setPhase) {
+        const phase = parsePhaseArg(call.arguments);
+        if (phase) this.phaseSet = phase;
+      }
       return r;
     }, skipped);
   }
 
+  /** A query result goes back to the model for another round that may show board items: remind
+   *  it of the inline markers (long library material otherwise buries the prompt rule; measured
+   *  with the real model: ~70% -> ~100% of board calls with their marker). */
+  private withMarkerReminder(r: ToolResult, nextRound: number): string {
+    const nextOffersTools = !(nextRound >= this.deps.maxToolRounds && nextRound > 0);
+    const board = this.deps.router.kindOf(TOOL_NAMES.showBoardItem) !== 'unknown';
+    if (r.kind !== 'query' || !r.ok || !nextOffersTools || !board || r.call.name === TOOL_NAMES.showBoardItem) return r.result;
+    return `${r.result}\n\n${markerReminder(TOOL_NAMES.showBoardItem)}`;
+  }
+
   private async main(): Promise<void> {
+    // Verified speech: the opening is authored (greeting, the task, how to dive in), not generated.
+    if (this.opening && this.deps.verifiedSpeech !== false && this.deps.openingScript) {
+      try {
+        const lines = openingLines(this.deps.openingScript, this.p.taskText ?? '');
+        await this.enqueue(() => this.narrateCanvas(lines), undefined);
+        this.llmActive = false;
+        await this.chain;
+        if (!this.aborted) await this.close(false);
+      } catch (e) {
+        this.log(`opening failed: ${errText(e)}`);
+        if (this.released) await this.close(false, 'error', true);
+      } finally {
+        this.llmActive = false;
+      }
+      return;
+    }
     try {
       const [context, image] = await Promise.all([
         this.deps.transport.buildContext({ sessionId: this.sessionId }),
@@ -244,31 +324,47 @@ export class ReplyRun {
       ]);
       if (this.aborted) return;
       this.imageIncluded = !!image;
+      let promptPhase = this.currentPhase();
       this.history = buildMessages({
         system: this.deps.system,
+        phaseBlock: this.deps.phaseBlock(promptPhase, false),
         context,
         turns: this.p.turns(),
-        current: { idx: this.turnIdx, text: this.transcript },
+        current: this.opening ? { opening: this.deps.openingPrompt ?? '' } : { idx: this.turnIdx, text: this.transcript },
         recentTurns: this.deps.recentTurns,
         image,
       });
-      let spoken = false;
+      let said = '';
       let toolRoundLimit = this.deps.maxToolRounds;
       let repairAvailable = true;
       for (let round = 0; ; round++) {
-        // Canvas offsets count grammatical sentences. Merging short sentences or
-        // splitting long ones shifts every later visual cue away from its speech.
+        // After a set_phase (in this reply, or seen via the subscription) the new phase's block
+        // is APPENDED (after the tool results) and replaces the earlier one by its wording. The
+        // history is append-only: the system prompt and earlier messages never change, so the
+        // prompt cache and replayed thinking blocks stay valid.
+        const phase = this.currentPhase();
+        if (phase !== promptPhase) {
+          promptPhase = phase;
+          this.history = [...this.history, { role: 'system', content: this.deps.phaseBlock(phase, true) }];
+          this.log(`phase -> ${phase}: phase block appended`);
+        }
+        this.promptPhases.push(phase);
+        // Canvas offsets count grammatical sentences. Merging short sentences or splitting long
+        // ones shifts every later visual cue away from its speech (team). A short first sentence
+        // therefore goes out alone anyway.
         const chunker = new SentenceChunker({ minWords: 1, maxWords: Number.POSITIVE_INFINITY });
         let text = '';
         let raw: unknown;
         const calls: ToolResult['call'][] = [];
         const results: Promise<ToolResult>[] = [];
+        const waiting: ToolResult['call'][] = [];
         // Last allowed round: offer no tools, so the model has to speak (it otherwise tends to
         // chain tool-only rounds and the student hears nothing).
         const last = round >= toolRoundLimit && round > 0;
         if (last && (this.rejectedVisual || this.deps.verifiedSpeech !== false)) break;
-        const tools = last ? [] : this.deps.router.specs().filter(tool => !this.rejectedVisual ||
-          tool.name === TOOL_NAMES.showBoardItem || tool.name === TOOL_NAMES.visualUnavailable);
+        const tools = last
+          ? []
+          : this.deps.router.specs().filter(tool => !this.rejectedVisual || tool.name === TOOL_NAMES.showBoardItem || tool.name === TOOL_NAMES.visualUnavailable);
         // A round that fails before any event arrived is retried (flaky network): nothing from it
         // reached SpacetimeDB yet. Once output has started, a failure ends the reply as before.
         for (let attempt = 0; ; attempt++) {
@@ -287,7 +383,8 @@ export class ReplyRun {
                 // A finished sentence before the call belongs before it (board reveal index).
                 for (const s of chunker.flushComplete()) this.enqueueSentence(s);
                 calls.push(ev.call);
-                results.push(this.enqueueTool(ev.call, tools.some(t => t.name === ev.call.name)));
+                if (waiting.length || this.anchors.waitsFor(ev.call.arguments)) waiting.push(ev.call);
+                else results.push(this.enqueueTool(ev.call, tools.some(t => t.name === ev.call.name)));
               } else if (ev.type === 'done') {
                 raw = ev.raw;
               }
@@ -302,13 +399,14 @@ export class ReplyRun {
         }
         if (this.aborted) return;
         for (const s of chunker.flush()) this.enqueueSentence(s);
+        for (const c of waiting) results.push(this.enqueueTool(c, tools.some(t => t.name === c.name)));
         const res = await Promise.all(results);
         if (this.aborted) return;
-        if (text.trim()) spoken = true;
+        if (text.trim()) said = `${said} ${stripMarkers(text).trim()}`.trim();
         this.history = [
           ...this.history,
           { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}), ...(raw !== undefined ? { raw } : {}) },
-          ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
+          ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: this.withMarkerReminder(r, round + 1) })),
         ];
         // The tool supplied the actual spoken lines, so another model call would
         // add latency and commonly repeat the same explanation verbatim.
@@ -320,8 +418,10 @@ export class ReplyRun {
           toolRoundLimit++;
           repairAvailable = false;
         }
-        // Query results must go back to the LLM; action results only if nothing was said yet.
-        const again = res.some(r => r.kind === 'query') || !spoken;
+        // Query results must go back to the LLM. After action tools the LLM continues only if the
+        // reply has no next step yet. With verified speech only spoken (narrated) output counts.
+        const heardNextStep = this.deps.verifiedSpeech !== false ? this.narratedCanvas : endsWithNextStep(said);
+        const again = res.some(r => r.kind === 'query') || !heardNextStep;
         if (!again) break;
         if (round >= toolRoundLimit) {
           this.log(`max tool rounds (${toolRoundLimit}) reached`);
@@ -374,8 +474,39 @@ export class ReplyRun {
     const ft = this.firstTokenAt ? `${((this.firstTokenAt - this.startedAt) / 1000).toFixed(2)}s` : '-';
     this.log(
       `${interrupted ? `interrupted${why ? ` (${why})` : ''}` : 'done'}${this.preemptive ? ' [preemptive]' : ''}: ` +
-        `${said.length}/${this.sent.length} sentences, first token ${ft}${tools ? `, tools: ${tools}` : ''}`
+        `${said.length}/${this.sent.length} sentences, first token ${ft}${tools ? `, tools: ${tools}` : ''}` +
+        (this.anchors.summary() ? `, ${this.anchors.summary()}` : '')
     );
+    if (this.anchors.missing.length) {
+      // The model gave an id without writing its marker: keep its text for prompt tuning.
+      const said = this.history.filter(m => m.role === 'assistant').map(m => (typeof m.content === 'string' ? m.content : '')).join(' | ');
+      this.log(`marker text: ${JSON.stringify(said.slice(0, 600))}`);
+    }
+  }
+}
+
+/** Authored opening lines: one per row; rows with {{task}} are skipped when there is no task. */
+export function openingLines(script: string, taskText: string): string[] {
+  const task = taskText.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
+  const short = task.split(' ').slice(0, 30).join(' ');
+  return script
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l && (short || !l.includes('{{task}}')))
+    .map(l => l.replace('{{task}}', short));
+}
+
+/** The spoken reply ends with a question for the student (the prompt's "next step"). */
+export function endsWithNextStep(said: string): boolean {
+  return /\?["'”’)\]]*\s*$/.test(said);
+}
+
+function parsePhaseArg(args: string): string | undefined {
+  try {
+    const v = (JSON.parse(args) as { phase?: unknown }).phase;
+    return typeof v === 'string' && v ? v : undefined;
+  } catch {
+    return undefined;
   }
 }
 

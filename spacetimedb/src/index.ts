@@ -9,6 +9,7 @@ import { settings } from './env';
 import { ensureLibrary } from './library';
 import * as lesson from './lesson';
 import * as memory from './memory';
+import * as opening from './opening';
 import { base64 } from './providers';
 import * as sessions from './sessions';
 import * as voiceIn from './voice_in';
@@ -62,6 +63,12 @@ export const pushAudio = spacetimedb.reducer(
 
 /** VAD_TURN_MS of silence after the last phrase. Turn becomes ready when pendingPhrases hits 0. */
 export const endTurn = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => voiceIn.endTurn(ctx, sessionId));
+
+/** "Start talking" clicked: on a session without turns, asks the worker to speak first
+ *  (turnState = thinking, opening turn_metrics row). No-op once the conversation started. */
+export const startConversation = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) =>
+  opening.startConversation(ctx, sessionId)
+);
 
 /** Barge-in: turnState = interrupted, unplayed sentences dropped, playback_flush emitted. */
 export const interrupt = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => voiceOut.interrupt(ctx, sessionId));
@@ -121,6 +128,13 @@ export const beginUtterance = spacetimedb.reducer(
   }
 );
 
+/** Starts the tutor's opening utterance (no student turn to answer; metrics at OPENING_TURN_IDX).
+ *  Only after startConversation, once, and before anything was said. */
+export const beginOpening = spacetimedb.reducer({ sessionId: t.u64(), utteranceId: t.u64() }, (ctx, args) => {
+  requireAgent(ctx);
+  opening.beginOpening(ctx, args);
+});
+
 /** Inserts reply_sentence + a tts_job due now. */
 export const addSentence = spacetimedb.reducer(
   { sessionId: t.u64(), utteranceId: t.u64(), idx: t.u32(), display: t.string(), speech: t.string() },
@@ -144,6 +158,8 @@ export const showBoardItem = spacetimedb.reducer(
     sessionId: t.u64(),
     utteranceId: t.u64(),
     sentenceIdx: t.u32(),
+    /** Inline marker offset in that sentence's speech; -1 = none. */
+    markerPos: t.i32(),
     kind: t.string(),
     content: t.string(),
     taskKey: t.string(),

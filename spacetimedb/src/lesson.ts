@@ -7,7 +7,7 @@ import type { BoardKindDef, JsonSchema, LibraryTask } from '../../shared/src/les
 import { canTransition, conceptBelongsTo, getBoardKind, getPhase, isCategory, renderTemplate, validateJson } from '../../shared/src/lesson/api';
 import { checkAnswer } from '../../shared/src/answers';
 import { GAP_STATES, type ExpectedAnswer, type GapState, type MemoryKind } from '../../shared/src/types';
-import { type Ctx, type BoardItemRow, type SessionRow, getActiveSession, getSession, parseJson, truncate, updateSession } from './ctx';
+import { type Ctx, type BoardItemRow, type SessionRow, findSentence, getActiveSession, getSession, parseJson, truncate, updateSession } from './ctx';
 
 const [GAP_OPEN, GAP_CORRECT, GAP_WRONG] = GAP_STATES as unknown as [GapState, GapState, GapState];
 // Exhaustive over ExpectedAnswer['form'] (keys, so no string literal collides with a pack kind name).
@@ -98,9 +98,19 @@ function parseExpected(raw: string): ExpectedAnswer | null {
 
 export function showBoardItem(
   ctx: Ctx,
-  args: { sessionId: bigint; utteranceId: bigint; sentenceIdx: number; kind: string; content: string; taskKey: string; expectedAnswer: string }
+  args: {
+    sessionId: bigint;
+    utteranceId: bigint;
+    sentenceIdx: number;
+    markerPos?: number;
+    kind: string;
+    content: string;
+    taskKey: string;
+    expectedAnswer: string;
+  }
 ): BoardItemRow {
   const session = getActiveSession(ctx, args.sessionId);
+  const markerPos = revealMarkerPos(ctx, args);
   let kind: BoardKindDef | undefined;
   let content: unknown;
   let expected = parseExpected(args.expectedAnswer);
@@ -145,9 +155,22 @@ export function showBoardItem(
     answerState: expected ? GAP_OPEN : '',
     lastAnswer: '',
     createdAt: ctx.timestamp,
+    markerPos,
   });
   if (expected) ctx.db.boardAnswer.insert({ boardItemId: item.id, answer: JSON.stringify(expected) });
   return item;
+}
+
+/** Validated inline-marker anchor: an offset into the speech of the tagged sentence, clamped to
+ *  its length. A marker whose sentence does not exist (e.g. it failed to add) falls back to -1,
+ *  i.e. the reveal at the start of that sentence, instead of losing the item. */
+function revealMarkerPos(ctx: Ctx, args: { utteranceId: bigint; sentenceIdx: number; markerPos?: number }): number {
+  const pos = args.markerPos ?? -1;
+  if (!Number.isInteger(pos) || pos < -1) throw new SenderError(`markerPos must be -1 or a character offset, got ${pos}`);
+  if (pos < 0 || args.utteranceId === 0n) return -1;
+  const sentence = findSentence(ctx, args.utteranceId, args.sentenceIdx);
+  if (!sentence) return -1;
+  return Math.min(pos, sentence.speech.length);
 }
 
 export function clearBoard(ctx: Ctx, sessionId: bigint): void {

@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Page } from 'puppeteer-core';
-import { pack } from '@tutor/shared';
+import { OPENING_TURN_IDX, pack } from '@tutor/shared';
 import { launch, tid } from './browser';
 import { FIXTURES } from './env';
 import { readSession, type ServerSession, type TurnMetric } from './server';
@@ -26,7 +26,7 @@ interface PageState {
   tutorAudio: boolean;
   phrases: { phraseId: number; turnIdx: number; status: string; text: string }[];
   sentences: { utteranceId: string; idx: number; status: string; display: string }[];
-  boardItems: { id: string; idx: number; kind: string; visible: boolean; utteranceId: string }[];
+  boardItems: { id: string; idx: number; kind: string; visible: boolean; utteranceId: string; sentenceIdx?: number; markerPos?: number }[];
   localLatencyMs: number[];
 }
 
@@ -79,6 +79,14 @@ export function loadFixture(name: string): Fixture {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const DONE_SENTENCE = new Set(['played', 'dropped']);
+
+/** Utterance id of the tutor's opening reply ('' if none). */
+export const openingUtterance = (srv: ServerSession) => srv.metrics.find(m => m.turnIdx === OPENING_TURN_IDX && m.utteranceId !== '0')?.utteranceId ?? '';
+/** Tutor turns that answer a student turn (the opening does not count). */
+const replyTurns = (srv: ServerSession) => {
+  const o = openingUtterance(srv);
+  return srv.turns.filter(t => t.role === 'tutor' && t.utteranceId !== o);
+};
 
 async function readPage(page: Page): Promise<{ events: Ev[]; state: PageState }> {
   return page.evaluate(() => ({ events: window.__tutor.events, state: window.__tutor.state })) as unknown as Promise<{ events: Ev[]; state: PageState }>;
@@ -155,7 +163,7 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
   };
   const pageLog: string[] = [];
   const log = (m: string) => ctx.log(`[${sc.id}] ${m}`);
-  const mic = await launch(path.join(FIXTURES, `${sc.fixture}.wav`));
+  const mic = await launch(path.join(FIXTURES, `${sc.fixture}.wav`), E2E_DEFAULTS.openingLeadMs);
   // The observer gets its own browser (no mic): a second tab in the mic browser is a background
   // tab whose evaluate calls can stall while the session tab is busy.
   const viewer = sc.observer ? await launch(null) : null;
@@ -163,7 +171,7 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
   let stopObserver = () => {};
   try {
     const page = await mic.newPage(sc.id, m => pageLog.push(m));
-    const base = `${ctx.baseUrl}?db=${encodeURIComponent(ctx.db)}`;
+    const base = `${ctx.baseUrl}?db=${encodeURIComponent(ctx.db)}${E2E_DEFAULTS.clientQuery ? `&${E2E_DEFAULTS.clientQuery}` : ''}`;
     run.sessionId = await createSessionViaUi(page, base, learnerName, TASK_TEXT);
     log(`session ${run.sessionId} (learner "${learnerName}")`);
     run.checks.push({ name: 'ui.session', status: 'pass', detail: `session ${run.sessionId} via create-user → learner → start-session` });
@@ -190,14 +198,14 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
     log('talking');
 
     // Wait until every expected tutor reply is complete and played (or the timeout).
-    const deadline = talkAt + sc.timeoutMs;
+    const deadline = talkAt + E2E_DEFAULTS.openingLeadMs + sc.timeoutMs;
     let settledSince = 0;
     let done = false;
     while (Date.now() < deadline) {
       await sleep(1000);
       const { state } = await readPage(page);
       const srv = readSession(ctx.db, run.sessionId);
-      const tutorTurns = srv.turns.filter(t => t.role === 'tutor').length;
+      const tutorTurns = replyTurns(srv).length;
       const pagePending = state.sentences.some(s => !DONE_SENTENCE.has(s.status));
       const ok = tutorTurns >= sc.turns && !pagePending && !state.tutorAudio && state.turnState !== 'speaking' && state.turnState !== 'thinking';
       if (ok) {
@@ -221,7 +229,7 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
       path.join(ctx.outDir, `${sc.id}-a${ctx.attempt}.json`),
       JSON.stringify({ events, state, dom, server, observerSamples: observerSamples.slice(-20), pageLog }, null, 1)
     );
-    run.checks.push({ name: 'completed', status: done ? 'pass' : 'fail', detail: done ? `in ${Math.round((Date.now() - talkAt) / 1000)} s` : `not settled after ${sc.timeoutMs / 1000} s (tutor turns ${server.turns.filter(t => t.role === 'tutor').length}/${sc.turns})` });
+    run.checks.push({ name: 'completed', status: done ? 'pass' : 'fail', detail: done ? `in ${Math.round((Date.now() - talkAt) / 1000)} s` : `not settled after ${(E2E_DEFAULTS.openingLeadMs + sc.timeoutMs) / 1000} s (tutor replies ${replyTurns(server).length}/${sc.turns}, opening ${openingUtterance(server) ? 'yes' : 'no'})` });
     evaluate(run, sc, fixture, events, state, dom, server, observerSamples);
   } catch (e) {
     run.error = e instanceof Error ? (e.stack ?? e.message) : String(e);
@@ -242,6 +250,8 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
 function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], state: PageState, dom: DomSnapshot, srv: ServerSession, obs: ObserverSample[]): void {
   const add = (name: string, status: CheckStatus, detail: string) => run.checks.push({ name, status, detail });
   const ofType = (p: string) => events.filter(e => e.type === p || e.type.startsWith(p + '.'));
+  const openingU = openingUtterance(srv);
+  evaluateOpening(add, ofType, srv, openingU);
 
   // Transcript vs. fixture text.
   const studentPhrases = srv.phrases.filter(p => p.text.trim());
@@ -253,7 +263,8 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
   const studentTurns = srv.turns.filter(t => t.role === 'student' && t.text.trim());
   const turnEnds = ofType('vad.turn_end');
   if (sc.singleTurn) {
-    const firstPlay = ofType('audio.play_start')[0]?.t ?? Infinity;
+    // The first play of a reply to the student (the opening plays before the student speaks).
+    const firstPlay = ofType('audio.play_start').find(e => String(e.utteranceId) !== openingU)?.t ?? Infinity;
     const endsBefore = turnEnds.filter(e => e.t < firstPlay).length;
     const turnsOfPhrases = new Set(studentPhrases.map(p => p.turnIdx));
     add(
@@ -264,6 +275,20 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
   } else {
     add('student-turns', studentTurns.length === sc.turns ? 'pass' : 'warn', `${studentTurns.length} student turn(s), expected ${sc.turns}`);
   }
+
+  // Turn ends: silence after the last speech when the turn ended, and why (Smart Turn verdict
+  // or the VAD_TURN_MS fallback). Informational; warns only if Smart Turn never answered.
+  const smart = ofType('vad.smart_turn');
+  const smartReady = ofType('smart_turn.ready');
+  const smartFailed = ofType('smart_turn.error');
+  add(
+    'turn-end',
+    smartFailed.length || (smartReady.length && !smart.some(e => e.prob !== null)) ? 'warn' : 'pass',
+    turnEnds.map(e => `${e.reason ?? '?'} after ${e.silenceMs ?? '?'} ms silence`).join('; ') +
+      (smart.length ? ` | smart_turn: ${smart.map(e => `p=${e.prob ?? '–'} ${e.decision} ${e.ms} ms`).join(', ')}` : '') +
+      (smartReady.length ? ` | model ready in ${smartReady[0]!.loadMs} ms` : '') +
+      (smartFailed.length ? ` | errors: ${smartFailed.map(e => e.error).join(', ')}` : '')
+  );
 
   // Tutor replies: sentences in order, audio received and played in idx order.
   const utterances = [...new Set(srv.sentences.map(s => s.utteranceId))];
@@ -288,10 +313,11 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
     }
   }
   const played = srv.sentences.filter(s => s.status === 'played');
+  const replies = utterances.filter(u => u !== openingU);
   add(
     'reply',
-    utterances.length >= sc.turns && played.length > 0 && !replyIssues.length ? 'pass' : 'fail',
-    `${utterances.length} utterance(s), ${srv.sentences.length} sentences (${played.length} played)${replyIssues.length ? '; ' + replyIssues.join('; ') : ''}`
+    replies.length >= sc.turns && played.some(s => s.utteranceId !== openingU) && !replyIssues.length ? 'pass' : 'fail',
+    `${replies.length} reply utterance(s) + ${openingU ? 1 : 0} opening, ${srv.sentences.length} sentences (${played.length} played)${replyIssues.length ? '; ' + replyIssues.join('; ') : ''}`
   );
   add('audio-order', plays.length > 0 && !audioIssues.length ? 'pass' : 'fail', `${received.length} blocks received, ${plays.length} played${audioIssues.length ? '; ' + audioIssues.join('; ') : ''}`);
 
@@ -315,8 +341,51 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
     );
   }
 
+  // Inline board markers: an item with a marker appears while its sentence plays (at the
+  // marker word), or at once if it arrived after that sentence had finished.
+  const marked = state.boardItems.filter(b => (b.markerPos ?? -1) >= 0);
+  if (!marked.length) add('board-markers', 'skip', `no board item with an inline marker (${state.boardItems.length} item(s))`);
+  else {
+    const TOL_MS = 150;
+    const issues: string[] = [];
+    const notes: string[] = [];
+    const ends = ofType('audio.play_end');
+    for (const b of marked) {
+      const reveal = ofType('board.reveal').find(e => e.id === b.id);
+      const seen = ofType('board.seen').find(e => e.id === b.id);
+      const start = plays.find(e => e.utteranceId === b.utteranceId && Number(e.idx) === b.sentenceIdx);
+      const end = ends.find(e => e.utteranceId === b.utteranceId && Number(e.idx) === b.sentenceIdx);
+      if (!reveal) {
+        issues.push(`#${b.id}: never revealed`);
+        continue;
+      }
+      if (!start || !end) {
+        notes.push(`#${b.id}: sentence ${b.sentenceIdx} not played here`);
+        continue;
+      }
+      const late = seen && seen.t > end.t; // arrived after its sentence: shown at once
+      const inMs = Math.round(reveal.t - start.t);
+      const dur = Math.round(end.t - start.t);
+      if (late) {
+        if (reveal.t - seen!.t > TOL_MS) issues.push(`#${b.id}: arrived late but revealed ${Math.round(reveal.t - seen!.t)} ms later`);
+        else notes.push(`#${b.id} late arrival, immediate`);
+      } else if (reveal.t < start.t - TOL_MS || reveal.t > end.t + TOL_MS) {
+        issues.push(`#${b.id}: revealed ${inMs} ms after its sentence started (sentence ${dur} ms)`);
+      } else {
+        // The tab's own marker-word time (TTS word timestamps or estimate), when it knew it.
+        const at = typeof reveal.markerAt === 'number' ? reveal.markerAt : null;
+        const wordMs = at === null ? null : Math.round(at - start.t);
+        const arrivedAfterWord = at !== null && !!seen && seen.t > at;
+        if (at !== null && !arrivedAfterWord && Math.abs(reveal.t - at) > TOL_MS) issues.push(`#${b.id}: revealed at ${inMs} ms, its word plays at ${wordMs} ms`);
+        else notes.push(`#${b.id} at ${inMs}/${dur} ms (word ${wordMs ?? '?'} ms${arrivedAfterWord ? ', arrived after it' : ''}, pos ${b.markerPos})`);
+      }
+    }
+    add('board-markers', issues.length ? 'fail' : 'pass', `${marked.length} marked item(s): ${[...issues, ...notes].join('; ')}`);
+  }
+
   // turn_metrics.
-  const replied = srv.metrics.filter(m => m.utteranceId !== '0');
+  // Replies to student turns (the opening's row is checked in evaluateOpening).
+  const replied = srv.metrics.filter(m => m.utteranceId !== '0' && m.turnIdx !== OPENING_TURN_IDX);
   const noAudio = replied.filter(m => m.firstAudio === null);
   const slow = replied.filter(m => m.firstAudio !== null && m.firstAudio > E2E_DEFAULTS.latencyTargetMs);
   add(
@@ -328,7 +397,7 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
   );
   // Rows for turns that never existed (e.g. noise reported after the turn already became ready).
   const studentIdx = new Set(srv.turns.filter(t => t.role === 'student').map(t => t.idx));
-  const phantom = srv.metrics.filter(m => m.utteranceId === '0' && !studentIdx.has(m.turnIdx));
+  const phantom = srv.metrics.filter(m => m.utteranceId === '0' && !studentIdx.has(m.turnIdx) && m.turnIdx !== OPENING_TURN_IDX);
   const noNoise = replied.filter(m => m.noiseDb === 0);
   add(
     'metrics-noise',
@@ -358,6 +427,42 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
 
   if (sc.interrupt) evaluateInterrupt(add, fx, ofType, srv, run);
   if (sc.observer) evaluateObserver(add, obs, dom, srv, ofType);
+}
+
+/** The tutor speaks first: one opening utterance before any student turn, fully played before the
+ *  student starts, with a short first sentence and a question at the end. */
+function evaluateOpening(add: (n: string, s: CheckStatus, d: string) => void, ofType: (p: string) => Ev[], srv: ServerSession, u: string): void {
+  const m = srv.metrics.find(x => x.turnIdx === OPENING_TURN_IDX);
+  if (!m || !u) {
+    add('opening', 'fail', m ? 'startConversation recorded, but no opening utterance started (beginOpening)' : 'no opening requested (startConversation) on a fresh session');
+    return;
+  }
+  const ss = srv.sentences.filter(s => s.utteranceId === u);
+  const turn = srv.turns.find(t => t.role === 'tutor' && t.utteranceId === u);
+  const firstStudent = srv.turns.find(t => t.role === 'student');
+  const issues: string[] = [];
+  if (!turn) issues.push('no tutor turn');
+  else if (turn.idx !== 0) issues.push(`tutor turn is #${turn.idx}, not #0`);
+  if (firstStudent && turn && firstStudent.idx < turn.idx) issues.push('a student turn comes first');
+  if (!ss.some(s => s.status === 'played')) issues.push('nothing played');
+  const warns: string[] = [];
+  if (turn?.interrupted) warns.push('interrupted (student spoke during the opening: lead-in too short?)');
+  // Played completely before the student started speaking.
+  const lastEnd = ofType('audio.play_end').filter(e => String(e.utteranceId) === u).pop();
+  const speech = ofType('vad.speech_start')[0];
+  if (lastEnd && speech && speech.t < lastEnd.t) warns.push(`student speech started ${Math.round(lastEnd.t - speech.t)} ms before the opening ended`);
+  const first = ss.find(s => s.idx === 0)?.display ?? '';
+  const words = first.split(/\s+/).filter(Boolean).length;
+  if (words > E2E_DEFAULTS.openingFirstSentenceMaxWords) warns.push(`first sentence has ${words} words`);
+  const last = [...ss].sort((a, b) => a.idx - b.idx).pop()?.display ?? '';
+  if (!/\?["'”’)]*\s*$/.test(last)) warns.push('does not end with a question');
+  add(
+    'opening',
+    issues.length ? 'fail' : warns.length ? 'warn' : 'pass',
+    `u${u}: ${ss.length} sentence(s), click → audio ${m.firstAudio ?? '–'} / play ${m.firstPlayback ?? '–'} ms; first "${first}" (${words} words); last "${last}"` +
+      (issues.length ? `; ${issues.join('; ')}` : '') +
+      (warns.length ? `; ${warns.join('; ')}` : '')
+  );
 }
 
 function evaluateInterrupt(

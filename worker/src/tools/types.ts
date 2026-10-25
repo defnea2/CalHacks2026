@@ -7,15 +7,19 @@ export interface ToolContext {
   utteranceId: bigint;
   /** Index the next sentence added to this utterance will get (board reveal sync). */
   nextSentenceIdx: number;
+  /** Reveal anchor of the inline marker ⟦id⟧ in this reply's speech (consumed), if any. */
+  anchor?: (id: unknown) => { sentenceIdx: number; pos: number } | undefined;
   transport: Transport;
   /** Publishes one audio cue per line inside the current ordered operation. One plan per reply. */
   narrate?: (lines: string[]) => Promise<void>;
 }
 
+/** An object result means the tool is complete: no follow-up LLM round for it (the router
+ *  reports it as an action). */
 export interface NarratedToolOutput {
   text: string;
-  /** This tool already delivered the reply's speech; no follow-up LLM round is needed. */
-  narrated: true;
+  /** This tool already delivered the reply's speech (self-narrated canvas). */
+  narrated?: boolean;
 }
 
 /** One tool module: everything except name/description/parameters, which come from the pack

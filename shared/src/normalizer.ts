@@ -86,6 +86,8 @@ function decimalWords(int: string, frac: string): string {
 /** Strips markdown and turns LaTeX remnants into plain text with ASCII operators. */
 function stripMarkup(s: string): string {
   let t = s;
+  // Inline board markers (⟦b1⟧, [[b1]]) are never spoken; prepareSentence (markers.ts) records them first.
+  t = t.replace(/⟦[^⟧\n]{0,26}⟧|\[\[[^\]\n]{0,26}\]\]/g, ' ');
   // Markdown: links, images, code, emphasis, headings, bullets, block quotes.
   t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
   t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');

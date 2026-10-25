@@ -4,7 +4,7 @@
 //
 // The SpacetimeDB adapter (stdb.ts) feeds subscription rows in through the on* methods; tests
 // call them directly with a fake Transport and a fake LlmProvider.
-import { VOICE_DEFAULTS, type LessonPack, type LlmProvider, type PhraseStatus, type SentenceStatus, type TurnState, type TurnStatus } from '@tutor/shared';
+import { OPENING_TURN_IDX, renderPhaseBlock, VOICE_DEFAULTS, type LessonPack, type LlmProvider, type PhraseStatus, type SentenceStatus, type TurnState, type TurnStatus, buildToolSpecs } from '@tutor/shared';
 import { buildSystemPrompt } from './prompt';
 import { ReplyRun, type ReplyDeps } from './reply';
 import { ToolRouter } from './router';
@@ -40,6 +40,7 @@ export interface AgentDeps {
 }
 
 const INTERRUPTED: TurnState = 'interrupted';
+const THINKING: TurnState = 'thinking';
 const READY: TurnStatus = 'ready';
 const OPEN_STATUSES: readonly TurnStatus[] = ['open', 'closing'];
 const BUSY_PHRASES: readonly PhraseStatus[] = ['streaming', 'transcribing'];
@@ -55,6 +56,7 @@ const MUTATIONS = ['setPhase', 'showBoardItem', 'clearBoard', 'remember', 'setTo
 export class Agent {
   readonly sessions = new Map<bigint, SessionAgent>();
   readonly router: ToolRouter;
+  /** Stable for the whole run (prompt cache); phase instructions go in a separate message. */
   readonly system: string;
   private lastUtteranceId = 0n;
   readonly log: (msg: string) => void;
@@ -63,9 +65,14 @@ export class Agent {
   constructor(readonly deps: AgentDeps) {
     this.log = deps.log ?? (m => console.log(m));
     this.now = deps.now ?? Date.now;
-    this.router = new ToolRouter(deps.tools ?? createToolDefs(deps.pack), deps.opts.toolTimeoutMs);
-    this.system = buildSystemPrompt(deps.pack, this.router.specs());
+    const markers = deps.opts.verifiedSpeech === false;
+    this.router = new ToolRouter(deps.tools ?? createToolDefs(deps.pack, undefined, buildToolSpecs(deps.pack, { markers })), deps.opts.toolTimeoutMs);
+    // Free-speech rules (speak first, inline markers) only when model text is actually spoken.
+    const free = deps.opts.verifiedSpeech === false ? `\n\n${deps.pack.prompts.freeSpeech}` : '';
+    this.system = buildSystemPrompt(deps.pack, this.router.specs()) + free;
   }
+
+
 
   /** Unique u64 per utterance: ms timestamp * 1000 + counter, strictly increasing. */
   nextUtteranceId(): bigint {
@@ -156,6 +163,8 @@ export class SessionAgent {
   private ctxCache?: { version: number; at: number; promise: Promise<string> };
   private transportView?: AgentDeps['transport'];
   imageSent = false;
+  /** The opening reply was started (at most once per session and worker). */
+  openingStarted = false;
   private preemptTimer?: ReturnType<typeof setTimeout>;
   private closed = false;
 
@@ -293,6 +302,7 @@ export class SessionAgent {
    *  arm the preemptive timer. Idempotent. */
   evaluate(): void {
     if (this.closed || !this.row?.active) return;
+    if (this.wantsOpening()) return this.startOpening();
     const latest = this.latestTurn();
     if (!latest || latest.role !== STUDENT) {
       this.clearPreemptTimer();
@@ -308,6 +318,26 @@ export class SessionAgent {
       if (latest.status === CLOSING && latest.idx > this.handledIdx && !this.held) this.prefetchContext();
       this.armPreemptive(latest);
     }
+  }
+
+  /** The client asked the tutor to speak first (startConversation: thinking on a session where
+   *  nothing was said yet) and no reply is running. All turns must be known (turnCount), and only
+   *  open student turns (e.g. noise right after the click) may exist. */
+  private wantsOpening(): boolean {
+    const r = this.row!;
+    if (this.openingStarted || this.live || this.held || r.turnState !== THINKING || r.currentUtteranceId !== 0n) return false;
+    if (r.turnCount !== this.turns.size) return false;
+    return [...this.turns.values()].every(t => t.role === STUDENT && OPEN_STATUSES.includes(t.status as TurnStatus));
+  }
+
+  private startOpening(): void {
+    this.openingStarted = true;
+    this.clearPreemptTimer();
+    const run = this.newRun({ idx: OPENING_TURN_IDX, text: '' }, false, true);
+    this.log(`opening -> u${run.utteranceId}`);
+    if (run.imageIncluded) this.imageSent = true;
+    else void run.done.then(() => run.imageIncluded && (this.imageSent = true));
+    this.live = run;
   }
 
   private dropHeldIfStale(latest: TurnRow | undefined): void {
@@ -365,13 +395,16 @@ export class SessionAgent {
     this.preemptTimer = undefined;
   }
 
-  private newRun(turn: TurnRow, held: boolean): ReplyRun {
+  private newRun(turn: { idx: number; text: string }, held: boolean, opening = false): ReplyRun {
     const a = this.agent;
     const deps: ReplyDeps = {
       transport: this.transport(),
       llm: a.deps.llm,
       router: a.router,
       system: a.system,
+      phaseBlock: (phase, changed) => renderPhaseBlock(a.deps.pack, phase, changed),
+      openingPrompt: a.deps.pack.prompts.opening,
+      openingScript: a.deps.pack.prompts.openingScript,
       maxToolRounds: a.deps.opts.maxToolRounds,
       recentTurns: a.deps.opts.recentTurns,
       verifiedSpeech: a.deps.opts.verifiedSpeech,
@@ -382,7 +415,10 @@ export class SessionAgent {
     return new ReplyRun(deps, {
       sessionId: this.id,
       turnIdx: turn.idx,
+      opening,
+      phase: () => this.row?.phase ?? a.deps.pack.initialPhase,
       transcript: turn.text,
+      taskText: this.row?.taskText ?? '',
       utteranceId: a.nextUtteranceId(),
       turns: () => [...this.turns.values()],
       wantImage: !this.imageSent && !!this.row?.hasImage,

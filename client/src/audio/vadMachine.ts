@@ -6,6 +6,12 @@
 //    │                                            ▼                                  │ VAD_PHRASE_MS silence: final chunk
 //    └──── VAD_TURN_MS silence since last speech: turn_end ◀───────────────────────┘
 //
+// Smart Turn (SMART_TURN=1): every silence phrase end also emits `smart_turn_request` with the
+// turn's audio (last ≤ 8 s, pauses included). The caller runs the model and hands the
+// probability back via smartTurnResult(); P ≥ SMART_TURN_THRESHOLD ends the turn as soon as
+// SMART_TURN_MIN_SILENCE_MS of silence has passed, otherwise VAD_TURN_MS stays the fallback.
+// Speech resuming invalidates the pending request.
+//
 // While the tutor speaks the start threshold is BARGE_IN_THRESHOLD and the min speech
 // BARGE_IN_MIN_MS; confirming such a start emits `barge_in` before the phrase opens.
 import { NoiseMonitor, type NoiseConfig, type NoiseState } from './noise';
@@ -26,13 +32,24 @@ export interface VadMachineConfig extends NoiseConfig {
   NOISY_MIN_SPEECH_MS: number;
   VAD_CANDIDATE_GAP_MS: number;
   VAD_HYSTERESIS: number;
+  SMART_TURN: number;
+  SMART_TURN_THRESHOLD: number;
+  SMART_TURN_MIN_SILENCE_MS: number;
 }
+
+/** Smart Turn's input window: the last 8 s of the turn. */
+export const SMART_TURN_WINDOW_MS = 8000;
+
+export type TurnEndReason = 'silence' | 'smart_turn' | 'stop';
+export type SmartTurnDecision = 'complete' | 'incomplete' | 'stale';
 
 export type VadEvent =
   | { type: 'speech_start'; phraseId: number; bargeIn: boolean; prerollMs: number }
   | { type: 'chunk'; phraseId: number; seq: number; pcm: Float32Array; final: boolean }
   | { type: 'phrase_end'; phraseId: number; durationMs: number; reason: 'silence' | 'max_length' | 'stop' }
-  | { type: 'turn_end'; noiseDb: number | null }
+  | { type: 'turn_end'; noiseDb: number | null; reason: TurnEndReason; silenceMs: number }
+  | { type: 'smart_turn_request'; requestId: number; pcm: Float32Array; silenceMs: number }
+  | { type: 'smart_turn'; requestId: number; prob: number; decision: SmartTurnDecision; silenceMs: number; ended: boolean }
   | { type: 'barge_in'; speechMs: number }
   | { type: 'misfire'; speechMs: number }
   | { type: 'noise_state'; state: NoiseState; floorDb: number | null };
@@ -70,6 +87,12 @@ export class VadMachine {
   private turnOpen = false;
   private silenceMs = 0;
   private lastNoiseState: NoiseState | null = null;
+  /** Audio of the open turn (pre-roll, phrases and pauses), trimmed to SMART_TURN_WINDOW_MS. */
+  private turnAudio: Float32Array[] = [];
+  private turnAudioSamples = 0;
+  private smartRequestSeq = 0;
+  private smartPending = 0;
+  private smartComplete = false;
 
   constructor(
     private readonly cfg: VadMachineConfig,
@@ -122,6 +145,8 @@ export class VadMachine {
       events.push({ type: 'noise_state', state: ns, floorDb: this.noise.floorDb });
     }
 
+    if (this.turnOpen) this.pushTurnAudio([frame]);
+
     if (this.phrase) {
       this.continuePhrase(prob, frame, frameMs, events);
       return events;
@@ -165,12 +190,52 @@ export class VadMachine {
       return events;
     }
 
-    if (!this.candidate && this.turnOpen && this.silenceMs >= this.cfg.VAD_TURN_MS) {
-      this.turnOpen = false;
-      this.silenceMs = 0;
-      events.push({ type: 'turn_end', noiseDb: this.noise.floorDb });
+    if (!this.candidate && this.turnOpen) {
+      if (this.smartComplete && this.silenceMs >= this.cfg.SMART_TURN_MIN_SILENCE_MS) this.endTurn('smart_turn', events);
+      else if (this.silenceMs >= this.cfg.VAD_TURN_MS) this.endTurn('silence', events);
     }
     return events;
+  }
+
+  /** Smart Turn verdict for a `smart_turn_request`. Returns the resulting events (maybe turn_end). */
+  smartTurnResult(requestId: number, prob: number): VadEvent[] {
+    const events: VadEvent[] = [];
+    const live = requestId === this.smartPending && this.turnOpen && !this.phrase;
+    if (!live) {
+      events.push({ type: 'smart_turn', requestId, prob, decision: 'stale', silenceMs: this.silenceMs, ended: false });
+      return events;
+    }
+    this.smartPending = 0;
+    this.smartComplete = prob >= this.cfg.SMART_TURN_THRESHOLD;
+    const silenceMs = this.silenceMs;
+    const endNow = this.smartComplete && !this.candidate && silenceMs >= this.cfg.SMART_TURN_MIN_SILENCE_MS;
+    events.push({ type: 'smart_turn', requestId, prob, decision: this.smartComplete ? 'complete' : 'incomplete', silenceMs, ended: endNow });
+    if (endNow) this.endTurn('smart_turn', events);
+    return events;
+  }
+
+  private endTurn(reason: TurnEndReason, events: VadEvent[]): void {
+    events.push({ type: 'turn_end', noiseDb: this.noise.floorDb, reason, silenceMs: this.silenceMs });
+    this.turnOpen = false;
+    this.silenceMs = 0;
+    this.resetSmartTurn();
+  }
+
+  private resetSmartTurn(): void {
+    this.smartPending = 0;
+    this.smartComplete = false;
+  }
+
+  private pushTurnAudio(frames: Float32Array[]): void {
+    if (!this.cfg.SMART_TURN) return;
+    const max = (SMART_TURN_WINDOW_MS * this.cfg.INPUT_SAMPLE_RATE) / 1000;
+    for (const f of frames) {
+      this.turnAudio.push(f);
+      this.turnAudioSamples += f.length;
+    }
+    while (this.turnAudio.length > 1 && this.turnAudioSamples - this.turnAudio[0]!.length >= max) {
+      this.turnAudioSamples -= this.turnAudio.shift()!.length;
+    }
   }
 
   /** Close everything (stop talking / leave): final chunk for an open phrase, then turn_end. */
@@ -178,11 +243,9 @@ export class VadMachine {
     const events: VadEvent[] = [];
     if (this.phrase) this.closePhrase('stop', events);
     this.candidate = null;
-    if (this.turnOpen) {
-      this.turnOpen = false;
-      events.push({ type: 'turn_end', noiseDb: this.noise.floorDb });
-    }
+    if (this.turnOpen) this.endTurn('stop', events);
     this.silenceMs = 0;
+    this.resetSmartTurn();
     return events;
   }
 
@@ -211,8 +274,15 @@ export class VadMachine {
     events.push({ type: 'chunk', phraseId, seq: 0, pcm: first, final: false });
     const candMs = c.frames.reduce((n, f) => n + (f.length * 1000) / this.cfg.INPUT_SAMPLE_RATE, 0);
     this.phrase = { phraseId, seq: 1, acc: new ChunkAccumulator(this.chunkSamples()), durationMs: candMs, silenceMs: c.gapMs };
+    if (!this.turnOpen) {
+      // new turn: its audio starts with the pre-roll (in an open turn every frame is already in)
+      this.turnAudio = [];
+      this.turnAudioSamples = 0;
+      this.pushTurnAudio([...c.preroll, ...c.frames]);
+    }
     this.turnOpen = true;
     this.silenceMs = 0;
+    this.resetSmartTurn(); // speech resumed: any pending verdict is about older audio
   }
 
   private continuePhrase(prob: number, frame: Float32Array, frameMs: number, events: VadEvent[]): void {
@@ -227,6 +297,11 @@ export class VadMachine {
       const silence = p.silenceMs;
       this.closePhrase('silence', events);
       this.silenceMs = silence; // silence already elapsed counts toward the turn end
+      if (this.cfg.SMART_TURN) {
+        this.smartPending = ++this.smartRequestSeq;
+        this.smartComplete = false;
+        events.push({ type: 'smart_turn_request', requestId: this.smartPending, pcm: concatFloat(this.turnAudio), silenceMs: silence });
+      }
       return;
     }
     if (p.durationMs >= this.cfg.VAD_MAX_PHRASE_MS) {

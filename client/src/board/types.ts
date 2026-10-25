@@ -8,6 +8,8 @@ export interface RevealState {
   /** Sentences of the same utterance started since the tagged one, inclusive (1 = just revealed).
    *  Infinity when the utterance is over or the item was untagged. Used to step through content. */
   progress: number;
+  /** Not revealed yet, but will be at this time (performance.now() clock): marker word. */
+  revealAt?: number;
 }
 
 /** Item state for interactive kinds (gap tasks). `submit` is absent in read-only views. */

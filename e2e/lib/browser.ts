@@ -12,7 +12,28 @@ export interface MicBrowser {
   newPage(label: string, onLog: (m: string) => void): Promise<Page>;
 }
 
-export async function launch(wav: string | null): Promise<MicBrowser> {
+/**
+ * Copies a fixture WAV (16-bit PCM, 44-byte header as written by gen-speech) with `leadMs` of
+ * background prepended: the tutor speaks first, so the student starts once the opening is over.
+ * The lead-in is taken from the file's tail (its trailing silence, with the same background noise
+ * for noisy fixtures), so the noise floor does not jump when the original audio starts.
+ */
+export function withLeadIn(src: string, dst: string, leadMs: number): void {
+  const buf = fs.readFileSync(src);
+  if (leadMs <= 0 || buf.toString('ascii', 36, 40) !== 'data' || buf.readUInt16LE(34) !== 16 || buf.readUInt16LE(22) !== 1) {
+    fs.copyFileSync(src, dst);
+    return;
+  }
+  const rate = buf.readUInt32LE(24);
+  const data = buf.subarray(44);
+  const leadBytes = Math.min(data.length, Math.round((leadMs / 1000) * rate) * 2);
+  const head = Buffer.from(buf.subarray(0, 44));
+  head.writeUInt32LE(36 + data.length + leadBytes, 4);
+  head.writeUInt32LE(data.length + leadBytes, 40);
+  fs.writeFileSync(dst, Buffer.concat([head, data.subarray(data.length - leadBytes), data]));
+}
+
+export async function launch(wav: string | null, leadMs = 0): Promise<MicBrowser> {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tutor-e2e-'));
   // macOS TCC keeps Chrome from reading files under ~/Desktop: the fake mic then delivers zeros.
   const args = [
@@ -29,7 +50,7 @@ export async function launch(wav: string | null): Promise<MicBrowser> {
   ];
   if (wav) {
     const copy = path.join(profile, 'mic.wav');
-    fs.copyFileSync(wav, copy);
+    withLeadIn(wav, copy, leadMs);
     args.push(`--use-file-for-fake-audio-capture=${copy}`);
   }
   const browser = await puppeteer.launch({

@@ -171,3 +171,22 @@ describe('SentenceChunker', () => {
     expect(chunk('Yes. No. Maybe.', 2, { minWords: 1 })).toEqual(['Yes.', 'No.', 'Maybe.']);
   });
 });
+
+describe('SentenceChunker firstMinWords', () => {
+  const run = (text: string, opts = {}) => {
+    const c = new SentenceChunker(opts);
+    const out: string[] = [];
+    for (const tok of text.match(/\S+\s*/g) ?? []) out.push(...c.push(tok));
+    return [...out, ...c.flush()];
+  };
+  it('lets a short first sentence go out alone, then merges short ones again', () => {
+    expect(run('Great thinking! Let us look at the bottom number now. Okay? Then we cut each slice into four.', { firstMinWords: 1 })).toEqual([
+      'Great thinking!',
+      'Let us look at the bottom number now.',
+      'Okay? Then we cut each slice into four.',
+    ]);
+  });
+  it('defaults to merging the short first sentence (old behaviour)', () => {
+    expect(run('Great thinking! Let us look at the bottom number now.')[0]).toBe('Great thinking! Let us look at the bottom number now.');
+  });
+});
