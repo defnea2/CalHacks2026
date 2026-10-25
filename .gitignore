@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.idea/
+.DS_Store
+*.log
+# agent identity token
+worker/.agent-token
+# recordings of real people never go in the repo
+recordings/
