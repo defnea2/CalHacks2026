@@ -38,7 +38,7 @@ Routes: `/` entry (student or teacher) · `?student` · `?wait=<id>` waiting roo
 
 Small direct commits on `night/integration`: night plan / contract docs, `164eda5` (e2e smoke typecheck fix), this report.
 
-Test status of the final state (`983c230`): 791 unit tests green (teaching 52, shared 157, module 127, client 131, worker 106, team app 218), typecheck clean, static client build. Final full E2E: see bottom.
+Test status of the final state (`983c230`): 791 unit tests green (teaching 52, shared 157, module 127, client 131, worker 106, team app 218), typecheck clean, static client build. Final full E2E on this state (06:13–06:25, quiet machine): **8/8 PASS**, 0 external flakes; turn end → first audio p50 2.75 s (min 2.62, max 3.17); "Start talking" → opening audio p50 1.06 s. `main` = `09db721` (fast-forwarded 06:27).
 
 ## Decisions I made for you (easy to change)
 - **Architecture of the team integration (approved "A")**: their planner runs in the worker, their compiler/validator in shared code, the module validates every beat against `canvas_state`. Their old tool-based canvas path stays as `REPLY_MODE=tools`.
@@ -58,6 +58,7 @@ Test status of the final state (`983c230`): 791 unit tests green (teaching 52, s
 - Class page has no list of past students after a class ends.
 
 ## Incidents tonight
+- An earlier full E2E (05:45) failed 5/8 while two browser suites ran at once (load average ~35): audio arrived but never played after a harness crash. Re-run alone: 8/8.
 - The shared local SpacetimeDB server process died once (~05:00); restarted 05:21 with the same data dir, nothing lost.
 - Two agents hit the usage limit (~04:50) and were resumed after the reset.
 - One agent ran `pkill` by pattern twice (it could have stopped other workers); no lasting effect found.
