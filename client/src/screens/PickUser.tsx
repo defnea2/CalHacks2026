@@ -9,6 +9,7 @@ import { APP_CONFIG } from '../app-config';
 import { navigate, phaseLabel, sessionUrl } from '../lib/format';
 import { compressPhoto } from '../lib/photo';
 import { eventLog } from '../lib/debug';
+import { Buddy } from '../design/Buddy';
 
 export function PickUser({ conn }: { conn: DbConnection }) {
   const [error, setError] = useState('');
@@ -32,38 +33,46 @@ export function PickUser({ conn }: { conn: DbConnection }) {
   };
 
   return (
-    <div className="grid gap-6 md:grid-cols-[1fr_360px]">
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Who is learning today?</h1>
-          <p className="text-sm text-muted-foreground">{APP_CONFIG.pageDescription} Test users only.</p>
+    <div className="lesson-welcome voice-welcome">
+      <div className="lesson-intro">
+        <div className="lesson-intro-copy">
+          <span className="lesson-eyebrow">Talk it through · See it move</span>
+          <h1>Who is <span className="lesson-intro-underline">learning</span> today?</h1>
+          <p>{APP_CONFIG.pageDescription} Test users only.</p>
         </div>
+        <div className="lesson-intro-art" aria-hidden="true">
+          <span className="intro-light" />
+          <span className="intro-bar intro-bar-top"><i /><i /></span>
+          <span className="intro-bar intro-bar-bottom"><i /><i /><i /><i /></span>
+          <span className="intro-tab">½ = ²⁄₄</span>
+          <Buddy size={132} wave />
+        </div>
+      </div>
+      <div className="flex flex-col gap-4">
         <ErrorNote>{error}</ErrorNote>
-        <Card>
-          <CardHeader title="Learners">
-            <span className="text-xs text-muted-foreground">{learners.length}</span>
-          </CardHeader>
-          <ul data-testid="learner-list" className="divide-y">
-            {learners.length === 0 ? <li className="px-4 py-6 text-sm text-muted-foreground">No learners yet. Create a test user.</li> : null}
+        <div className="lesson-samples-heading"><h2>Learners</h2><span>{learners.length}</span></div>
+          <ul data-testid="learner-list" className="voice-learners">
+            {learners.length === 0 ? <li className="voice-empty">No learners yet. Create a test user.</li> : null}
             {learners.map(l => {
               const s = activeFor(l);
               return (
-                <li key={l.id.toString()} className="flex items-center justify-between gap-3 px-4 py-3">
+                <li key={l.id.toString()} className="voice-learner">
                   <button
                     data-testid="learner-item"
                     data-learner-id={l.id.toString()}
                     data-learner-name={l.name}
                     onClick={() => choose(l)}
-                    className="flex flex-1 flex-col items-start text-left"
+                    className="voice-learner-pick"
                   >
-                    <span className="font-medium">{l.name}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <strong>{l.name}</strong>
+                    <span>
                       Age {l.age} · Grade {l.grade}
                       {l.style ? ` · ${l.style}` : ''}
                     </span>
+                    <small>{s ? 'Continue the session' : 'Start talking'} <span aria-hidden="true">→</span></small>
                   </button>
                   {s ? (
-                    <div className="flex items-center gap-2">
+                    <div className="voice-learner-active">
                       <Badge data-testid="learner-active-session">Active · {s.code || s.id.toString()} · {phaseLabel(s.phase)}</Badge>
                       <Button size="sm" variant="ghost" data-testid="learner-new-session" onClick={() => setPicked(l)}>
                         New
@@ -74,9 +83,8 @@ export function PickUser({ conn }: { conn: DbConnection }) {
               );
             })}
           </ul>
-        </Card>
       </div>
-      <div className="flex flex-col gap-6">
+      <div className="voice-side">
         {picked ? (
           <StartForm conn={conn} learner={picked} previous={activeFor(picked)} active={active} onCancel={() => setPicked(null)} />
         ) : null}
@@ -109,12 +117,12 @@ function CreateUserForm({ conn }: { conn: DbConnection }) {
   return (
     <Card>
       <CardHeader title="Create a test user" />
-      <form data-testid="create-user-form" onSubmit={submit} className="flex flex-col gap-3 p-4">
+      <form data-testid="create-user-form" onSubmit={submit} className="voice-form">
         <Label>
           Name
           <Input data-testid="create-name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Mia" required />
         </Label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="voice-form-row">
           <Label>
             Age
             <Input data-testid="create-age" type="number" min={5} max={16} value={age} onChange={e => setAge(e.target.value)} />
@@ -201,16 +209,16 @@ function StartForm({
           Cancel
         </Button>
       </CardHeader>
-      <form onSubmit={start} className="flex flex-col gap-3 p-4">
+      <form onSubmit={start} className="voice-form">
         <Label>
           The task you are stuck on
           <Textarea data-testid="task-text" rows={3} value={task} onChange={e => setTask(e.target.value)} placeholder="e.g. Expand 2/3 so the bottom number is 12." />
         </Label>
         <Label>
           Photo of the task (optional)
-          <input data-testid="photo-input" type="file" accept="image/*" onChange={e => setPhoto(e.target.files?.[0] ?? null)} className="text-sm" />
+          <input data-testid="photo-input" type="file" accept="image/*" onChange={e => setPhoto(e.target.files?.[0] ?? null)} />
         </Label>
-        {previous && waitingSince === null ? <p className="text-xs text-muted-foreground">This ends the active session {previous.code || previous.id.toString()}.</p> : null}
+        {previous && waitingSince === null ? <p className="voice-note">This ends the active session {previous.code || previous.id.toString()}.</p> : null}
         <ErrorNote>{error}</ErrorNote>
         <Button data-testid="start-session" disabled={busy}>
           {busy ? 'Starting…' : 'Start session'}

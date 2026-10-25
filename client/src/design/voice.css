@@ -1,0 +1,197 @@
+/*
+ * Voice-tutor pieces in the ui/final language. Everything else comes from the copied
+ * tokens / lesson / playful / atelier layers; this file only maps the voice client's own
+ * elements (mic, captions, board items, forms) onto the same tokens and depth recipes.
+ */
+
+/* Shared primitives ------------------------------------------------------------------------ */
+.lesson-workspace .voice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-tab);
+  color: var(--color-text);
+  font: 700 14px var(--font-ui);
+  padding: 8px 16px;
+  box-shadow: none;
+  transition: border-color var(--duration-control), box-shadow var(--duration-control), transform var(--duration-control);
+}
+.lesson-workspace .voice-button:hover:not(:disabled) { background: var(--color-tab); border-color: var(--color-outline); box-shadow: var(--shadow-contact); }
+.lesson-workspace .voice-button.is-ghost { border-color: transparent; background: transparent; }
+.lesson-workspace .voice-button.is-ghost:hover:not(:disabled) { border-color: var(--color-border-strong); box-shadow: none; }
+.lesson-workspace .voice-button.is-small { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+.lesson-workspace .voice-button.is-danger { color: var(--color-danger); }
+.lesson-workspace .lesson-primary.is-large { padding: 16px 34px; font-size: 19px; }
+
+.voice-card {
+  background: var(--color-surface-raised);
+  border: 2px solid var(--color-outline);
+  border-radius: var(--card-radius);
+  box-shadow: var(--highlight-inset), var(--shadow-float);
+  overflow: hidden;
+}
+.voice-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1.5px dashed var(--color-border);
+}
+.voice-card-header h2 { margin: 0; font: 800 20px/1.2 var(--font-display); color: var(--color-text); }
+.voice-label { display: grid; gap: 6px; font: 700 14px var(--font-ui); color: var(--color-text-muted); }
+.lesson-workspace .voice-label input,
+.lesson-workspace .voice-label textarea,
+.lesson-workspace .voice-input {
+  width: 100%;
+  border: 2px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-stage);
+  color: var(--color-text);
+  font: 600 16px var(--font-ui);
+  padding: 12px 14px;
+  box-shadow: var(--highlight-inset);
+}
+.lesson-workspace .voice-label input:focus-visible,
+.lesson-workspace .voice-label textarea:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; border-color: var(--color-outline); }
+.lesson-workspace .voice-label input[type="file"] { border-style: dashed; font-size: 14px; padding: 10px; background: var(--color-tab); }
+.voice-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: var(--color-tab);
+  border: 1.5px solid var(--color-outline);
+  box-shadow: var(--shadow-contact);
+  font: 800 13px var(--font-ui);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.voice-tab .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-subtle); }
+.voice-tab .dot.is-good { background: var(--teal-500); }
+.voice-tab .dot.is-wait { background: var(--sunny-400); }
+.voice-tab .dot.is-bad { background: var(--cherry-600); }
+.voice-tab[data-tone="listening"] { background: var(--teal-100); }
+.voice-tab[data-tone="thinking"] { background: var(--sunny-100); }
+.voice-tab[data-tone="speaking"] { background: var(--tangerine-100); }
+.voice-tab[data-tone="interrupted"] { background: var(--berry-100); }
+.lesson-workspace .lesson-error[data-testid="error"] { margin: 0; color: var(--color-danger); font-weight: 700; }
+
+/* Header ----------------------------------------------------------------------------------- */
+.product-header nav { display: flex; align-items: center; gap: 12px; }
+.product-header nav a { font: 700 14px var(--font-ui); color: var(--color-text-muted); text-decoration: none; }
+.product-header nav a:hover { color: var(--color-text); }
+
+/* Learners: the welcome hero, then learner cards in the prepared-lesson grid --------------- */
+.voice-welcome { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 28px; align-items: start; }
+.voice-welcome .lesson-intro { grid-column: 1 / -1; }
+.voice-learners { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; padding: 0; margin: 0; list-style: none; }
+.lesson-workspace .voice-learner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  background: var(--color-surface-raised);
+  border: 2px solid var(--color-outline);
+  border-radius: var(--card-radius);
+  box-shadow: var(--highlight-inset), var(--shadow-float);
+  transition: transform var(--duration-base) var(--ease-bounce), box-shadow var(--duration-base);
+  animation: pop-in var(--duration-slow) var(--ease-bounce) both;
+}
+.lesson-workspace .voice-learner:hover { transform: translateY(-4px); box-shadow: var(--highlight-inset), var(--shadow-stage); }
+.lesson-workspace .voice-learner:nth-child(3n + 2) { background: var(--teal-100); }
+.lesson-workspace .voice-learner:nth-child(3n + 3) { background: var(--sky-100); }
+.lesson-workspace .voice-learner-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 0; border: 0; background: none; text-align: left; color: var(--color-text); }
+.lesson-workspace .voice-learner-pick:hover:not(:disabled) { background: none; }
+.voice-learner-pick strong { font: 800 24px/1.1 var(--font-display); }
+.voice-learner-pick span { font: 600 14px var(--font-ui); color: var(--color-text-muted); }
+.voice-learner-pick small { margin-top: 6px; font: 800 14px var(--font-ui); color: var(--color-secondary); }
+.voice-learner-active { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.voice-empty { padding: 24px; font: 600 15px var(--font-ui); color: var(--color-text-muted); }
+.voice-side { display: grid; gap: 22px; }
+.voice-form { display: grid; gap: 14px; padding: 18px 20px 20px; }
+.voice-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.voice-note { margin: 0; font: 600 13px var(--font-ui); color: var(--color-text-muted); }
+
+/* Session: the lesson view. Board on the stage, the conversation as the instrument panel --- */
+.lesson-view .voice-indicators { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+.lesson-view .lesson-title .voice-session-code { margin-left: 4px; }
+.voice-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+.voice-title h1 { margin: 0; }
+.voice-title .voice-tab { font-family: var(--font-mono); }
+.voice-title > span:not(.voice-tab) { font: 600 14px var(--font-ui); color: var(--color-text-muted); }
+.lesson-view .voice-task { margin: 0 0 18px; padding: 14px 18px; border-left: 3px solid var(--color-accent); background: var(--color-tab); border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+.voice-task span { display: block; font: 800 12px var(--font-ui); letter-spacing: 0.04em; color: var(--color-text-muted); }
+.voice-task p { margin: 4px 0 0; font: 600 18px/1.45 var(--font-ui); color: var(--color-text); white-space: pre-wrap; }
+.lesson-view .voice-board-stage { min-height: 420px; }
+.lesson-view .voice-board-stage .canvas-heading { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.lesson-view .voice-board-stage h2 { margin: 0 0 14px; }
+
+/* Board items sit on the stage as manipulatives: crisp edge, contact shadow. */
+.voice-board { display: grid; gap: 14px; }
+.voice-board-empty { padding: 56px 12px; text-align: center; font: 700 20px var(--font-display); color: var(--color-text-subtle); }
+.voice-board-item {
+  background: var(--color-surface-raised);
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 20px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow-contact);
+  animation: rise-in var(--duration-diagram) var(--ease-out) both;
+}
+.voice-board-item .katex { font-size: 1.15em; }
+.voice-step-number { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid var(--color-outline); background: var(--color-highlight); font: 800 13px var(--font-ui); color: var(--ink-900); }
+.lesson-workspace .voice-choice { border: 2px solid var(--color-outline); border-radius: var(--radius-md); background: var(--color-surface-raised); color: var(--color-text); font: 800 18px var(--font-ui); padding: 10px 18px; box-shadow: 0 3px 0 var(--color-outline); transition: transform var(--duration-fast) var(--ease-bounce), box-shadow var(--duration-fast); }
+.lesson-workspace .voice-choice:hover:not(:disabled) { background: var(--color-highlight-soft); transform: translateY(-2px); box-shadow: 0 5px 0 var(--color-outline); }
+.voice-gap-state { display: inline-block; padding: 5px 12px; border-radius: var(--radius-pill); font: 800 13px var(--font-ui); background: var(--teal-100); color: var(--color-text); }
+.voice-gap-state[data-state="correct"] { background: var(--leaf-100); }
+.voice-gap-state[data-state="wrong"] { background: var(--sunny-100); }
+
+/* The conversation panel: Pip has the floor, then the transcript. */
+.voice-mic { display: grid; justify-items: center; gap: 10px; padding: 8px 0 18px; }
+.voice-mic-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border-strong);
+  background: var(--color-tab);
+  transition: border-color var(--duration-base), background var(--duration-base);
+}
+.voice-mic-ring[data-who="you"] { border-color: var(--teal-500); background: var(--teal-100); color: var(--teal-500); }
+.voice-mic-ring[data-who="tutor"] { border-color: var(--tangerine-500); background: var(--tangerine-100); color: var(--tangerine-500); }
+.voice-mic-ring::before { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 2px solid currentColor; opacity: 0; }
+.voice-mic-ring[data-who="you"]::before,
+.voice-mic-ring[data-who="tutor"]::before { animation: ring-pulse 1.6s var(--ease-out) infinite; }
+.voice-mic-ring[data-who="tutor"] .buddy-body { animation: buddy-talk 0.42s ease-in-out infinite; }
+.voice-mic-ring[data-who="you"] .buddy { transform: rotate(-8deg); transition: transform var(--duration-base) var(--ease-out); }
+.voice-mic-who { font: 800 15px var(--font-ui); color: var(--color-text); }
+.voice-mic-level { width: 180px; height: 8px; border-radius: var(--radius-pill); background: var(--color-surface-sunken); overflow: hidden; }
+.voice-mic-level > i { display: block; height: 100%; border-radius: inherit; background: var(--teal-500); transition: width 100ms linear; }
+.voice-hint { margin: 0; text-align: center; font: 600 13px var(--font-ui); color: var(--color-text-muted); }
+.voice-hint.is-noisy { padding: 8px 12px; border-radius: var(--radius-md); background: var(--sunny-100); color: var(--color-text); font-weight: 700; }
+
+.voice-captions { display: flex; flex-direction: column; gap: 10px; max-height: 420px; min-height: 140px; overflow-y: auto; padding: 4px 2px 8px; }
+.voice-bubble { max-width: 88%; padding: 10px 14px; font: 600 16px/1.45 var(--font-ui); color: var(--color-text); animation: caption-in var(--duration-diagram) var(--ease-out); }
+.voice-bubble.is-tutor { align-self: flex-start; background: var(--color-stage); border: 1.5px solid var(--color-border-strong); border-radius: 16px 16px 16px 6px; box-shadow: var(--shadow-contact); }
+.voice-bubble.is-student { align-self: flex-end; background: var(--tangerine-100); border-radius: 16px 16px 6px 16px; }
+.voice-bubble .is-pending { font-style: italic; opacity: 0.6; }
+
+@keyframes buddy-talk { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.03, 0.97); } }
+@keyframes ring-pulse { 0% { opacity: 0.55; transform: scale(0.92); } 100% { opacity: 0; transform: scale(1.18); } }
+
+@media (max-width: 900px) {
+  .voice-welcome { grid-template-columns: 1fr; }
+  /* On a phone the microphone comes first: talking is how this lesson starts. */
+  .lesson-view .lesson-conversation { order: -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-mic-ring::before, .voice-mic-ring .buddy-body, .voice-board-item, .voice-bubble, .lesson-workspace .voice-learner { animation: none !important; }
+}

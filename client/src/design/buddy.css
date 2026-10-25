@@ -1,0 +1,27 @@
+.buddy { overflow: visible; flex-shrink: 0; }
+.buddy-shadow { fill: var(--color-outline); opacity: .12; transform-origin: 60px 112px; animation: buddy-shadow 2.4s ease-in-out infinite; }
+.buddy-body { transform-origin: 60px 104px; animation: buddy-bob 2.4s ease-in-out infinite; }
+.buddy-eyes { transform-origin: 60px 56px; animation: buddy-blink 4.8s infinite; }
+.buddy-arm { transform-origin: 100px 62px; }
+.buddy-wave .buddy-arm { animation: buddy-wave 1.6s var(--ease-bounce) infinite; }
+
+@keyframes buddy-bob { 0%, 100% { transform: translateY(0) scale(1, 1); } 45% { transform: translateY(-6px) scale(.98, 1.02); } 90% { transform: translateY(0) scale(1.03, .97); } }
+@keyframes buddy-shadow { 45% { transform: scaleX(.8); opacity: .07; } }
+@keyframes buddy-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes buddy-wave { 0%, 60%, 100% { transform: rotate(0); } 15%, 45% { transform: rotate(-18deg); } 30% { transform: rotate(10deg); } }
+
+.loading-buddy { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 16px; color: var(--color-text-muted); font-weight: 700; }
+.loading-buddy .buddy-body { animation: buddy-hop .9s var(--ease-bounce) infinite; }
+.loading-buddy .buddy-shadow { animation: buddy-shadow-hop .9s var(--ease-bounce) infinite; }
+@keyframes buddy-hop { 0%, 100% { transform: translateY(0) scale(1.04, .96); } 50% { transform: translateY(-16px) scale(.97, 1.03); } }
+@keyframes buddy-shadow-hop { 50% { transform: scaleX(.6); opacity: .05; } }
+
+.loading-dots { display: inline-flex; gap: 6px; }
+.loading-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--color-accent); animation: dot-bounce 1s var(--ease-bounce) infinite; }
+.loading-dots i:nth-child(2) { background: var(--teal-500); animation-delay: .15s; }
+.loading-dots i:nth-child(3) { background: var(--sunny-400); animation-delay: .3s; }
+@keyframes dot-bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .buddy *, .loading-dots i { animation: none !important; }
+}

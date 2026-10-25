@@ -1,0 +1,314 @@
+/*
+ * Playful K-12 layer. Loaded last so it restyles the shared chrome without
+ * touching the teaching renderers. Uses tokens from tokens.css only.
+ */
+
+/* ---- Page ---------------------------------------------------------------- */
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background:
+    radial-gradient(circle at 8% 12%, var(--sunny-100) 0 120px, transparent 121px),
+    radial-gradient(circle at 96% 30%, var(--teal-100) 0 90px, transparent 91px),
+    radial-gradient(circle at 4% 78%, var(--berry-100) 0 70px, transparent 71px),
+    radial-gradient(circle at 92% 92%, var(--sky-100) 0 110px, transparent 111px),
+    var(--color-bg);
+  background-attachment: fixed;
+}
+h1, h2, h3, .lesson-prepared-copy strong { font-family: var(--font-display); letter-spacing: -0.01em; }
+p { color: var(--color-text-muted); }
+button, select, textarea, input { border-radius: var(--radius-sm); }
+:where(button, select, textarea, input, summary, a):focus-visible { outline: 3px solid var(--color-focus) !important; outline-offset: 3px; }
+
+/* Chunky "clay" buttons for the main actions. */
+.lesson-workspace .lesson-primary,
+.preview-primary,
+.narration-controls .play-primary,
+.learning-workspace .lab-action {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border: 3px solid var(--color-outline);
+  border-radius: var(--radius-pill);
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 0 4px 0 var(--color-outline);
+  transition: transform var(--duration-fast) var(--ease-bounce), box-shadow var(--duration-fast), background var(--duration-fast);
+}
+.lesson-workspace .lesson-primary:hover:not(:disabled),
+.preview-primary:hover:not(:disabled),
+.narration-controls .play-primary:hover:not(:disabled),
+.learning-workspace .lab-action:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  color: var(--color-on-accent);
+  border-color: var(--color-outline);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 var(--color-outline);
+}
+.lesson-workspace .lesson-primary:active:not(:disabled),
+.preview-primary:active:not(:disabled),
+.narration-controls .play-primary:active:not(:disabled),
+.learning-workspace .lab-action:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--color-outline);
+}
+
+/* Friendly secondary buttons. */
+.lesson-workspace .lesson-help button,
+.lesson-playback button,
+.lesson-planning button,
+.studio-tabs button,
+.product-header button {
+  border: 2px solid var(--color-outline);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-weight: 700;
+  padding: 8px 16px;
+  box-shadow: 0 3px 0 var(--color-outline);
+  transition: transform var(--duration-fast) var(--ease-bounce), box-shadow var(--duration-fast), background var(--duration-fast);
+}
+.lesson-workspace .lesson-help button:hover:not(:disabled),
+.lesson-playback button:hover:not(:disabled),
+.lesson-planning button:hover:not(:disabled),
+.studio-tabs button:hover:not(:disabled),
+.product-header button:hover:not(:disabled) {
+  background: var(--color-highlight-soft);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 0 var(--color-outline);
+}
+.studio-tabs button[aria-pressed="true"] { background: var(--teal-500); color: var(--color-on-accent); border-color: var(--color-outline); }
+.lesson-workspace .lesson-back { font-weight: 700; color: var(--color-secondary); }
+.lesson-workspace .lesson-back:hover { color: var(--color-accent-strong); }
+
+/* ---- Header -------------------------------------------------------------- */
+.product-header { border-bottom: 0; padding: 18px 0 8px; }
+.product-identity { gap: 10px; }
+.product-identity > span { display: grid; gap: 3px; }
+.product-identity strong { font: 800 28px/1 var(--font-display); color: var(--color-text); }
+.product-identity small { font-size: 12px; line-height: 1; color: var(--color-text-muted); letter-spacing: 0.025em; }
+.product-header button { font-size: 13px; padding: 6px 14px; }
+.product-buddy { margin-top: -4px; }
+
+/* ---- Welcome ------------------------------------------------------------- */
+.lesson-intro { display: grid; grid-template-columns: minmax(0, 1fr) 280px; align-items: center; gap: 24px; padding: 24px 0 8px; }
+.lesson-intro h1 { font: 800 clamp(40px, 6vw, 68px)/1.02 var(--font-display); letter-spacing: -0.02em; margin: 14px 0 12px; }
+.lesson-intro p { font-size: 18px; max-width: 460px; }
+.lesson-eyebrow {
+  display: inline-block;
+  font: 800 12px/1 var(--font-sans);
+  letter-spacing: 0.12em;
+  color: var(--color-text);
+  background: var(--color-highlight);
+  border: 2px solid var(--color-outline);
+  border-radius: var(--radius-pill);
+  padding: 7px 14px;
+  box-shadow: 0 3px 0 var(--color-outline);
+}
+.lesson-intro .lesson-eyebrow { transform: rotate(-3deg); }
+.lesson-intro-art { position: relative; height: 240px; display: grid; place-items: center; }
+.lesson-intro-art .buddy { position: relative; z-index: 1; }
+.intro-shape { position: absolute; border: 3px solid var(--color-outline); animation: float 6s ease-in-out infinite; }
+.intro-circle { width: 54px; height: 54px; border-radius: 50%; background: var(--teal-300); top: 8px; left: 12px; }
+.intro-square { width: 44px; height: 44px; border-radius: 10px; background: var(--sky-100); bottom: 14px; left: 0; animation-delay: -2s; --spin: 14deg; }
+.intro-triangle { width: 0; height: 0; border: 0; border-left: 28px solid transparent; border-right: 28px solid transparent; border-bottom: 48px solid var(--berry-500); top: 20px; right: 6px; animation-delay: -4s; filter: drop-shadow(0 3px 0 var(--color-outline)); }
+.intro-star { width: 46px; height: 46px; background: var(--color-highlight); bottom: 22px; right: 18px; border: 0; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); animation: spin-float 8s ease-in-out infinite; }
+@keyframes float { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-14px) rotate(var(--spin, -10deg)); } }
+@keyframes spin-float { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-10px) rotate(180deg); } }
+
+/* Big, friendly question box. */
+.lesson-workspace .lesson-topic-entry { padding: 18px 0 28px; }
+.lesson-topic-entry > label { font: 700 18px var(--font-display); color: var(--color-text); }
+.lesson-workspace .lesson-topic-row input {
+  font-size: 18px;
+  padding: 16px 20px;
+  border: 3px solid var(--color-outline);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: inset 0 3px 0 rgb(45 31 61 / 0.06);
+  transition: box-shadow var(--duration-base), transform var(--duration-base) var(--ease-bounce);
+}
+.lesson-workspace .lesson-topic-row input:focus-visible { outline: 3px solid var(--color-secondary); outline-offset: 3px; box-shadow: 0 0 0 6px var(--color-surface-raised); transform: scale(1.01); }
+.lesson-topic-entry > small { font-size: 12px; margin-top: 8px; }
+.lesson-model-setup summary { font-weight: 700; color: var(--color-secondary); }
+
+/* Section headings with a doodle underline. */
+.lesson-samples-heading h2 { font-size: 26px; font-weight: 800; position: relative; }
+.lesson-samples-heading h2::after { content: ""; display: block; height: 8px; width: 72px; margin-top: 2px; border-radius: 8px; background: var(--color-highlight); }
+.lesson-samples-heading span { font-size: 13px; font-weight: 700; color: var(--color-secondary); }
+
+/* Prepared lessons become a row of colourful clay cards. */
+.lesson-prepared { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; border-top: 0; margin-bottom: 40px; }
+.lesson-workspace .lesson-prepared-item {
+  --card-tint: var(--tangerine-100);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 22px;
+  background: var(--card-tint);
+  border: 3px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-clay);
+  transition: transform var(--duration-base) var(--ease-bounce), box-shadow var(--duration-base);
+  animation: pop-in var(--duration-slow) var(--ease-bounce) both;
+}
+.lesson-workspace .lesson-prepared-item:nth-child(3n + 2) { --card-tint: var(--teal-100); animation-delay: 80ms; }
+.lesson-workspace .lesson-prepared-item:nth-child(3n + 3) { --card-tint: var(--sky-100); animation-delay: 160ms; }
+.lesson-workspace .lesson-prepared-item:hover { background: var(--card-tint); transform: translateY(-6px) rotate(-1deg); box-shadow: 0 12px 0 rgb(45 31 61 / 0.14), 0 22px 30px -10px rgb(45 31 61 / 0.25); }
+.lesson-workspace .lesson-prepared-item:active { transform: translateY(2px); }
+.lesson-prepared-index {
+  position: absolute;
+  top: -14px;
+  left: 18px;
+  padding: 2px 10px !important;
+  font: 800 13px/1.4 var(--font-display);
+  color: var(--color-text);
+  background: var(--color-highlight);
+  border: 2px solid var(--color-outline);
+  border-radius: var(--radius-pill);
+}
+.lesson-prepared-item .lesson-sketch { height: 110px; background: var(--color-surface-raised); border: 2px solid var(--color-outline); border-radius: var(--radius-md); padding: 8px; }
+.lesson-prepared-item:hover .lesson-sketch { transform: none; animation: wiggle 500ms ease-in-out; }
+.lesson-prepared-copy strong { font-size: 22px; font-weight: 800; line-height: 1.15; }
+.lesson-prepared-copy > span { font-size: 14px; color: var(--color-text-muted); }
+.lesson-prepared-copy small { font-size: 14px; font-weight: 800; color: var(--color-secondary); }
+.lesson-prepared-copy small span { transition: transform var(--duration-base) var(--ease-bounce); }
+.lesson-prepared-item:hover .lesson-prepared-copy small span { transform: translateX(6px); }
+
+/* Feature + studio + sample cards share the clay look. */
+.lesson-workspace .slant-feature,
+.studio-invitation,
+.lesson-catalog {
+  background: var(--color-surface-raised);
+  border: 3px solid var(--color-outline);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-clay);
+}
+.lesson-workspace .slant-feature { border-left-width: 3px; background: var(--grape-100); transition: transform var(--duration-base) var(--ease-bounce); }
+.lesson-workspace .slant-feature:hover { background: var(--grape-100); transform: translateY(-4px) rotate(0.5deg); }
+.slant-feature-title, .studio-invitation h2 { font-family: var(--font-display); font-weight: 800; }
+.studio-invitation { background: var(--sunny-100); }
+.lesson-catalog { overflow: hidden; }
+.lesson-workspace .lesson-card { transition: background var(--duration-base); }
+.lesson-workspace .lesson-card:hover { background: var(--color-highlight-soft); }
+.lesson-card-title { font-size: 20px; font-weight: 800; }
+.lesson-card-link { font-weight: 800; }
+
+/* Gentle staggered entrance for the welcome sections. */
+.lesson-welcome > * { animation: rise-in var(--duration-slow) var(--ease-out) both; }
+.lesson-welcome > :nth-child(2) { animation-delay: 80ms; }
+.lesson-welcome > :nth-child(3) { animation-delay: 160ms; }
+.lesson-welcome > :nth-child(4) { animation-delay: 220ms; }
+.lesson-welcome > :nth-child(n + 5) { animation-delay: 280ms; }
+
+/* ---- Lesson -------------------------------------------------------------- */
+.lesson-title h1 { font-weight: 800; }
+.lesson-journey { border-bottom: 0; gap: 10px; flex-wrap: wrap; }
+.lesson-journey li { padding: 6px 14px; border: 2px solid var(--color-border-strong); border-radius: var(--radius-pill); background: var(--color-surface-raised); font-size: 13px; font-weight: 700; }
+.lesson-journey li[aria-current="step"] { color: var(--color-text); background: var(--color-highlight); border-color: var(--color-outline); box-shadow: 0 3px 0 var(--color-outline); animation: pop-in var(--duration-slow) var(--ease-bounce); }
+
+.lesson-workspace .teaching-canvas,
+.lesson-think {
+  border: 3px solid var(--color-outline);
+  border-radius: var(--card-radius);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-clay);
+}
+.lesson-think h2 { font-weight: 800; }
+.lesson-pencil-rule { height: 8px; border-radius: 8px; background: var(--color-highlight); }
+
+/* Narration reads like a speech bubble from the tutor. */
+.lesson-workspace .lesson-caption {
+  position: relative;
+  border: 3px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  padding: 16px 20px;
+  color: var(--color-text);
+  box-shadow: 0 4px 0 var(--color-outline);
+  animation: rise-in var(--duration-base) var(--ease-out);
+}
+.lesson-turn-label { color: var(--color-secondary); font-size: 14px; font-weight: 800; }
+.lesson-tutor-mark { width: auto; height: auto; background: none; border-radius: 0; }
+.lesson-guide h2 { font-weight: 800; }
+
+.lesson-choices button {
+  border: 2px solid var(--color-outline) !important;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  box-shadow: 0 3px 0 var(--color-outline);
+  transition: transform var(--duration-fast) var(--ease-bounce), box-shadow var(--duration-fast), background var(--duration-fast);
+}
+.lesson-workspace .lesson-choices button:hover { background: var(--color-highlight-soft); transform: translateY(-2px); box-shadow: 0 5px 0 var(--color-outline); }
+.lesson-choices button > span:first-child { border-radius: 50%; border: 2px solid var(--color-outline); background: var(--color-highlight); font-weight: 800; }
+.lesson-workspace .lesson-answer-row input { border: 3px solid var(--color-outline); border-radius: var(--radius-md); }
+
+.lesson-feedback { font-weight: 800; font-size: 16px; animation: pop-in var(--duration-slow) var(--ease-bounce); }
+
+/* "Thinking" states get bouncing dots. */
+.lesson-planning > span::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 22px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--color-accent);
+  box-shadow: 14px 0 0 var(--teal-500), 28px 0 0 var(--sunny-400);
+  animation: dot-bounce 1s var(--ease-bounce) infinite;
+}
+.lesson-planning { font-weight: 700; }
+
+/* Progress as a chunky, colourful track. */
+.lesson-filmstrip { gap: 6px; }
+.lesson-filmstrip span { height: 10px; border-radius: var(--radius-pill); background: var(--color-surface-sunken); }
+.lesson-filmstrip .seen { background: var(--teal-500); animation: grow-in var(--duration-slow) var(--ease-bounce); transform-origin: left; }
+
+.lesson-error { border: 2px solid var(--color-danger); border-radius: var(--radius-md); background: var(--color-danger-soft); }
+.lesson-notebook summary { font-weight: 800; }
+
+/* ---- Dev tools ----------------------------------------------------------- */
+.workbench-mode { border-bottom: 0; gap: 8px; flex-wrap: wrap; }
+.workbench-mode button { border: 2px solid var(--color-outline); border-radius: var(--radius-pill); padding: 8px 16px; font-weight: 700; background: var(--color-surface-raised); }
+.workbench-mode button[aria-pressed="true"] { background: var(--color-highlight); border-bottom-color: var(--color-outline); }
+.teaching-canvas, .preview-panel, .learning-workspace { border-radius: var(--card-radius); }
+
+.product-shell > footer { border-top: 0; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-subtle); }
+
+/* ---- Motion -------------------------------------------------------------- */
+@keyframes pop-in { 0% { opacity: 0; transform: scale(0.85) translateY(12px); } 100% { opacity: 1; transform: none; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes wiggle { 0%, 100% { rotate: 0deg; } 25% { rotate: -3deg; } 75% { rotate: 3deg; } }
+@keyframes grow-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+@media (max-width: 700px) {
+  .lesson-intro { grid-template-columns: 1fr; }
+  .lesson-intro-art { height: 150px; order: -1; }
+  .lesson-intro-art .buddy { width: 110px; height: 110px; }
+  .lesson-workspace .lesson-prepared-item { padding: 20px 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lesson-workspace *,
+  .lesson-workspace *::before,
+  .lesson-workspace *::after {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .lesson-welcome,
+  .lesson-welcome > *,
+  .intro-shape,
+  .lesson-prepared-item,
+  .lesson-journey li[aria-current="step"],
+  .lesson-narration,
+  .lesson-filmstrip .seen,
+  .lesson-feedback,
+  .lesson-caption,
+  .lesson-planning > span::before,
+  .typing-dot {
+    animation: none !important;
+  }
+}

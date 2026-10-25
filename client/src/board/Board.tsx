@@ -67,8 +67,8 @@ export function Board({ items, progress, serverOver, onSubmitAnswer, markerAt }:
     });
   });
   return (
-    <div data-testid="board" className="flex flex-col gap-3">
-      {shown.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">The board is empty.</p> : null}
+    <div data-testid="board" className="voice-board">
+      {shown.length === 0 ? <p className="voice-board-empty">Your picture will appear here</p> : null}
       {shown.map((item, i) => {
         const reveal = states[i]!;
         const { renderer: R, known } = getRenderer(item.kind);
@@ -87,7 +87,7 @@ export function Board({ items, progress, serverOver, onSubmitAnswer, markerAt }:
             data-revealed={reveal.revealed ? 'true' : 'false'}
             data-known={known ? 'true' : 'false'}
             hidden={!reveal.revealed}
-            className="rounded-xl border bg-card p-4 shadow-xs animate-[fadein_.35s_ease-out]"
+            className="voice-board-item"
           >
             {reveal.revealed ? <R content={parseContent(item.content)} reveal={reveal} answer={answer} {...(known ? {} : { kind: item.kind })} /> : null}
           </div>

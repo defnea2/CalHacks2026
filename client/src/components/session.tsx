@@ -30,29 +30,23 @@ export function useUtteranceState(data: SessionData, localStarted: Map<string, n
 
 // ---------------------------------------------------------------- header / indicators
 
-const TURN_STYLE: Record<string, string> = {
-  listening: 'bg-emerald-100 text-emerald-900 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-100',
-  thinking: 'bg-amber-100 text-amber-900 border-amber-200 dark:bg-amber-900/40 dark:text-amber-100',
-  speaking: 'bg-sky-100 text-sky-900 border-sky-200 dark:bg-sky-900/40 dark:text-sky-100',
-  interrupted: 'bg-rose-100 text-rose-900 border-rose-200 dark:bg-rose-900/40 dark:text-rose-100',
-};
 
 export function Indicators({ data, noise }: { data: SessionData; noise?: { state: NoiseState; floorDb: number | null } }) {
   const s = data.session;
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="voice-indicators">
       <Badge data-testid="phase-indicator" data-phase={s?.phase ?? ''}>
         Phase: {phaseLabel(s?.phase ?? '')}
       </Badge>
       <Badge data-testid="topic-indicator" data-category={s?.category ?? ''} data-concept={s?.concept ?? ''}>
         Topic: {topicLabel(s?.category ?? '', s?.concept ?? '')}
       </Badge>
-      <Badge data-testid="turnstate-indicator" data-state={s?.turnState ?? ''} className={TURN_STYLE[s?.turnState ?? ''] ?? ''}>
+      <Badge data-testid="turnstate-indicator" data-state={s?.turnState ?? ''} data-tone={s?.turnState ?? ''}>
         {s?.turnState || '—'}
       </Badge>
       {noise ? (
         <Badge data-testid="noise-indicator" data-noise={noise.state} data-floor={noise.floorDb === null ? '' : noise.floorDb.toFixed(1)}>
-          <span className={cx('size-2 rounded-full', noise.state === 'quiet' ? 'bg-emerald-500' : noise.state === 'moderate' ? 'bg-amber-400' : 'bg-red-500')} />
+          <span className={cx('dot', noise.state === 'quiet' ? 'is-good' : noise.state === 'moderate' ? 'is-wait' : 'is-bad')} />
           {noise.state}
           {noise.floorDb !== null ? ` · ${noise.floorDb.toFixed(0)} dBFS` : ''}
         </Badge>
@@ -64,15 +58,15 @@ export function Indicators({ data, noise }: { data: SessionData; noise?: { state
 export function SessionTitle({ data, suffix }: { data: SessionData; suffix?: string }) {
   const s = data.session;
   return (
-    <div className="flex flex-wrap items-baseline gap-3">
-      <h1 data-testid="learner-name" className="text-2xl font-semibold tracking-tight">
+    <div className="voice-title">
+      <h1 data-testid="learner-name">
         {data.learner?.name ?? (s ? `Learner ${s.learnerId}` : '…')}
       </h1>
-      <span data-testid="session-code" data-session-id={s?.id.toString() ?? ''} className="rounded-md bg-secondary px-2 py-0.5 font-mono text-sm">
+      <span data-testid="session-code" data-session-id={s?.id.toString() ?? ''} className="voice-tab">
         {s?.code || (s ? `#${s.id}` : '')}
       </span>
       {s && !s.active ? <Badge data-testid="session-ended">ended</Badge> : null}
-      {suffix ? <span className="text-sm text-muted-foreground">{suffix}</span> : null}
+      {suffix ? <span>{suffix}</span> : null}
     </div>
   );
 }
@@ -121,14 +115,14 @@ export function Captions({
   }, [entries]);
 
   return (
-    <div data-testid="captions" className="flex max-h-[420px] min-h-40 flex-col gap-3 overflow-y-auto p-4">
-      {entries.length === 0 ? <p className="text-sm text-muted-foreground">Captions appear here.</p> : null}
+    <div data-testid="captions" className="voice-captions">
+      {entries.length === 0 ? <p className="voice-hint">Captions appear here.</p> : null}
       {entries.map(e => (
         <div
           key={e.key}
           data-testid={e.role === 'student' ? 'caption-student' : 'caption-tutor'}
           data-ref={e.ref}
-          className={cx('max-w-[85%] rounded-2xl px-4 py-2 text-[15px] leading-snug', e.role === 'student' ? 'self-end bg-primary text-primary-foreground' : 'self-start bg-secondary')}
+          className={cx('voice-bubble', e.role === 'student' ? 'is-student' : 'is-tutor')}
         >
           {e.parts.map(p => (
             <span
@@ -136,7 +130,7 @@ export function Captions({
               data-testid={e.role === 'student' ? 'caption-phrase' : 'caption-sentence'}
               data-id={p.id}
               data-status={p.status}
-              className={cx(p.text ? '' : 'italic opacity-60')}
+              className={cx(p.text ? '' : 'is-pending')}
             >
               {p.text || (p.status === 'done' ? '' : '…')}{' '}
             </span>

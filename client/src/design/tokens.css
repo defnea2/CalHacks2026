@@ -1,0 +1,163 @@
+/*
+ * Design tokens: playful, welcoming theme for K-12 learners.
+ *
+ * Style: soft "claymorphism" (chunky rounded shapes, thick friendly outlines,
+ * soft double shadows) on a warm peach-cream page. Bright but never neon;
+ * text keeps 4.5:1 contrast.
+ *
+ * Three tiers, per the design-system-patterns skill:
+ *   1. Primitives  (--cream-*, --tangerine-*, ...) raw palette. Never use in components.
+ *   2. Semantic    (--color-*, --font-*, ...) purpose-named; what components use.
+ *   3. Component   (--button-*, --card-*, ...) knobs for shared controls.
+ */
+:root {
+  /* ---- 1. Primitives ---------------------------------------------------- */
+  --cream-50: #fffdf8;
+  --cream-100: #fff8ec;
+  --cream-200: #fff0d9;
+  --cream-300: #fde3bf;
+  --cream-400: #f1cf9f;
+  --cream-500: #d9a86a;
+
+  --ink-900: #2d1f3d;
+  --ink-700: #5e4b6b;
+  --ink-500: #75607f;
+
+  --tangerine-100: #ffe0c4;
+  --tangerine-300: #f8b27a;
+  --tangerine-500: #f0731f;
+  --tangerine-600: #e0600f;
+  --tangerine-800: #a8440a;
+
+  --teal-100: #d3f2ec;
+  --teal-300: #7fd1c2;
+  --teal-500: #14a08c;
+  --teal-700: #0b7466;
+
+  --sunny-100: #fff1c2;
+  --sunny-400: #ffc53d;
+  --sunny-600: #c98a00;
+
+  --berry-100: #ffdbe7;
+  --berry-500: #e0457b;
+
+  --sky-100: #d8ecfd;
+  --sky-500: #2f8fe0;
+
+  --grape-100: #e8e1ff;
+  --grape-500: #7b5cf0;
+
+  --leaf-100: #d9f5df;
+  --leaf-600: #2a8c47;
+
+  --cherry-100: #ffdde2;
+  --cherry-600: #c62a42;
+
+  /* ---- 2. Semantic ------------------------------------------------------ */
+  --color-bg: var(--cream-200);
+  --color-surface: var(--cream-100);
+  --color-surface-raised: var(--cream-50);
+  --color-surface-sunken: var(--cream-300);
+  --color-border: var(--cream-400);
+  --color-border-subtle: var(--cream-300);
+  --color-border-strong: var(--cream-500);
+  --color-outline: var(--ink-900); /* chunky clay outlines */
+
+  --color-text: var(--ink-900);
+  --color-text-muted: var(--ink-700);
+  --color-text-subtle: var(--ink-500);
+
+  /* Primary action: tangerine fill with ink text (ink-on-tangerine is 5:1). */
+  --color-accent: var(--tangerine-500);
+  --color-accent-hover: var(--tangerine-600);
+  --color-accent-strong: var(--tangerine-800);
+  --color-accent-muted: var(--tangerine-300);
+  --color-accent-soft: var(--tangerine-100);
+  --color-on-accent: var(--ink-900);
+
+  /* Secondary: teal, safe as text on cream. */
+  --color-secondary: var(--teal-700);
+  --color-secondary-muted: var(--teal-300);
+  --color-secondary-soft: var(--teal-100);
+
+  --color-focus: var(--grape-500);
+  --color-highlight: var(--sunny-400);
+  --color-highlight-soft: var(--sunny-100);
+
+  --color-success: var(--leaf-600);
+  --color-success-soft: var(--leaf-100);
+  --color-danger: var(--cherry-600);
+  --color-danger-soft: var(--cherry-100);
+
+  /* Teaching visuals and decoration: one bright hue per idea. */
+  --viz-clay: var(--tangerine-500);
+  --viz-clay-wash: var(--tangerine-100);
+  --viz-pine: var(--teal-500);
+  --viz-pine-wash: var(--teal-100);
+  --viz-honey: var(--sunny-600);
+  --viz-honey-wash: var(--sunny-100);
+  --viz-plum: var(--berry-500);
+  --viz-plum-wash: var(--berry-100);
+  --viz-dusk: var(--sky-500);
+  --viz-dusk-wash: var(--sky-100);
+  --viz-ink: var(--grape-500);
+  --viz-ink-wash: var(--grape-100);
+
+  --font-sans: "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Baloo 2", "Nunito", ui-rounded, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --shadow-sm: 0 2px 0 rgb(45 31 61 / 0.12);
+  --shadow-md: 0 4px 14px rgb(45 31 61 / 0.1);
+  --shadow-clay:
+    0 6px 0 rgb(45 31 61 / 0.14), 0 14px 24px -8px rgb(45 31 61 / 0.18),
+    inset 0 -4px 0 rgb(45 31 61 / 0.05), inset 0 2px 0 rgb(255 255 255 / 0.8);
+
+  /* Depth: each level gets exactly one recipe (atmosphere → stage → manipulatives). */
+  --shadow-contact: 0 2px 0 rgb(45 31 61 / 0.22);
+  --shadow-float: 0 10px 30px -12px rgb(45 31 61 / 0.28);
+  --shadow-stage: 0 24px 70px -32px rgb(45 31 61 / 0.32);
+  --highlight-inset: inset 0 1px 0 rgb(255 255 255 / 0.72);
+  --color-paper: var(--cream-100);
+  --color-stage: var(--cream-50);
+  --color-tab: rgb(255 253 248 / 0.82);
+  --color-halo: rgb(20 160 140 / 0.28);
+  --color-halo-ring: var(--teal-500);
+  --color-idea: var(--teal-700);
+  --color-idea-soft: var(--teal-100);
+  --light-warm: rgb(255 197 61 / 0.16);
+  --light-cool: rgb(47 143 224 / 0.12);
+  --light-rose: rgb(224 69 123 / 0.08);
+  --font-ui: "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  --duration-touch: 120ms;
+  --duration-control: 160ms;
+  --duration-diagram: 520ms;
+  --duration-scene: 680ms;
+
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 500ms;
+
+  /* ---- 3. Component ----------------------------------------------------- */
+  --button-bg: var(--color-surface-raised);
+  --button-bg-hover: var(--color-highlight-soft);
+  --button-border: var(--color-outline);
+  --button-text: var(--color-text);
+  --card-bg: var(--color-surface-raised);
+  --card-border: var(--color-outline);
+  --card-radius: var(--radius-lg);
+}

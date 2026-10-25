@@ -9,12 +9,13 @@ import { VoiceSession, type VoiceUiState } from '../audio/VoiceSession';
 import { Board, type BoardItemView } from '../board/Board';
 import { markerOffsetMs, type SentenceTiming } from '../board/reveal';
 import { Captions, DebugPanel, Indicators, SessionTitle, useUtteranceState } from '../components/session';
-import { Button, Card, CardHeader, ErrorNote } from '../components/ui';
+import { Button, ErrorNote } from '../components/ui';
 import { APP_CONFIG } from '../app-config';
 import { compressPhoto } from '../lib/photo';
 import { eventLog } from '../lib/debug';
 import { navigate, sessionUrl } from '../lib/format';
 import { shouldStartConversation } from '../lib/conversation';
+import { Buddy } from '../design/Buddy';
 
 const PLAYED = 'played';
 const SPEAKING = 'speaking';
@@ -179,51 +180,48 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
   if (data.error) return <ErrorNote>Subscription failed: {data.error}</ErrorNote>;
   if (data.ready && !session) {
     return (
-      <div data-testid="session-missing" className="py-16 text-center text-sm text-muted-foreground">
+      <div data-testid="session-missing" className="voice-empty">
         Session {sessionId.toString()} does not exist.
       </div>
     );
   }
 
   return (
-    <div data-testid="session-screen" data-session-id={sessionId.toString()} className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-2">
-          <SessionTitle data={data} />
-          <Indicators data={data} noise={{ state: ui.noise, floorDb: ui.floorDb }} />
-        </div>
-        <div className="flex items-center gap-2">
+    <div data-testid="session-screen" data-session-id={sessionId.toString()} className="lesson-view" data-stage={ui.speaking ? 'practice' : 'teaching'}>
+      <div className="lesson-topline">
           <a
             data-testid="open-observer"
             href={sessionUrl('observe', sessionId)}
             target="_blank"
             rel="noreferrer"
-            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+            className="lesson-back"
           >
             Open observer
           </a>
           <Button variant="outline" size="sm" data-testid="end-session" onClick={endSession} disabled={!session?.active}>
             End session
           </Button>
-        </div>
       </div>
+      <div className="lesson-title"><SessionTitle data={data} /></div>
+      <Indicators data={data} noise={{ state: ui.noise, floorDb: ui.floorDb }} />
 
       <ErrorNote>{error}</ErrorNote>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader title="Your task" />
-            <div className="flex flex-col gap-3 p-4">
-              <p data-testid="task-display" className="whitespace-pre-wrap">
-                {session?.taskText || <span className="text-muted-foreground">No task text.</span>}
-              </p>
-              <PhotoUpload conn={conn} sessionId={sessionId} hasImage={!!session?.hasImage} />
-            </div>
-          </Card>
+      <div className="lesson-stage">
+        <div className="lesson-paper">
+          <div className="voice-task">
+            <span>Your task</span>
+            <p data-testid="task-display">{session?.taskText || 'No task text.'}</p>
+          </div>
+          <section className="teaching-canvas voice-board-stage" aria-label="Board">
+            <div className="canvas-heading"><span>Board</span><span className="canvas-interaction-hint">Pictures appear as the tutor speaks</span></div>
+            <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} markerAt={markerAt} />
+          </section>
+          <div className="mt-4"><PhotoUpload conn={conn} sessionId={sessionId} hasImage={!!session?.hasImage} /></div>
+        </div>
 
-          <Card>
-            <div className="flex flex-col items-center gap-3 p-6">
+        <aside className="lesson-conversation" aria-label="Tutor conversation">
+            <div className="voice-mic">
               {!voice ? (
                 <Button size="lg" data-testid="start-talking" onClick={startTalking} disabled={starting || !session?.active}>
                   {starting ? 'Starting…' : APP_CONFIG.startButtonText}
@@ -236,29 +234,18 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
                   </Button>
                 </div>
               )}
-              <p data-testid="headphones-hint" className="text-center text-xs text-muted-foreground">
+              <p data-testid="headphones-hint" className="voice-hint">
                 {APP_CONFIG.headphonesHint}
               </p>
               {ui.noise === 'noisy' ? (
-                <p data-testid="noise-hint" className="rounded-lg bg-amber-100 px-3 py-2 text-center text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+                <p data-testid="noise-hint" className="voice-hint is-noisy">
                   {APP_CONFIG.noisyHint}
                 </p>
               ) : null}
             </div>
-          </Card>
-
-          <Card>
-            <CardHeader title="Conversation" />
+            <div className="lesson-turn-label"><span>Conversation</span></div>
             <Captions data={data} tutorShown={tutorShown} />
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader title="Board" />
-          <div className="p-4">
-            <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} markerAt={markerAt} />
-          </div>
-        </Card>
+        </aside>
       </div>
 
       {debugOpen ? <DebugPanel data={data} localLatency={localLatency} /> : null}
@@ -274,13 +261,13 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
 function MicMeter({ ui }: { ui: VoiceUiState }) {
   const pct = Math.max(0, Math.min(100, ((ui.levelDb + 70) / 60) * 100));
   return (
-    <div className="flex flex-col items-center gap-2" data-testid="mic-state" data-listening={ui.listening} data-speaking={ui.speaking} data-tutor-audio={ui.tutorAudio}>
-      <div className={`flex size-16 items-center justify-center rounded-full border-2 transition-colors ${ui.speaking ? 'border-emerald-500 bg-emerald-500/10' : ui.tutorAudio ? 'border-sky-500 bg-sky-500/10' : 'border-border'}`}>
-        <span className="text-xs font-medium">{ui.speaking ? 'You' : ui.tutorAudio ? 'Tutor' : ui.listening ? 'Listening' : '…'}</span>
+    <div className="voice-mic" data-testid="mic-state" data-listening={ui.listening} data-speaking={ui.speaking} data-tutor-audio={ui.tutorAudio}>
+      {/* Pip shows who has the floor: the tutor, the learner, or nobody yet. */}
+      <div className="voice-mic-ring" data-who={ui.speaking ? 'you' : ui.tutorAudio ? 'tutor' : 'none'}>
+        <Buddy size={66} />
       </div>
-      <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted">
-        <div className="h-full bg-foreground/60 transition-[width] duration-100" style={{ width: `${pct}%` }} />
-      </div>
+      <span className="voice-mic-who">{ui.speaking ? 'You' : ui.tutorAudio ? 'Tutor' : ui.listening ? 'Listening' : '…'}</span>
+      <div className="voice-mic-level"><i style={{ width: `${pct}%` }} /></div>
     </div>
   );
 }
@@ -288,9 +275,9 @@ function MicMeter({ ui }: { ui: VoiceUiState }) {
 function PhotoUpload({ conn, sessionId, hasImage }: { conn: DbConnection; sessionId: bigint; hasImage: boolean }) {
   const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [msg, setMsg] = useState('');
-  if (hasImage) return <p data-testid="photo-state" data-state="uploaded" className="text-xs text-muted-foreground">Photo attached.</p>;
+  if (hasImage) return <p data-testid="photo-state" data-state="uploaded" className="voice-note">Photo attached.</p>;
   return (
-    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+    <label className="voice-label">
       Add a photo of the task (optional)
       <input
         data-testid="session-photo-input"
@@ -312,7 +299,6 @@ function PhotoUpload({ conn, sessionId, hasImage }: { conn: DbConnection; sessio
             setMsg(String(err));
           }
         }}
-        className="text-sm"
       />
       {msg ? <span data-testid="photo-state" data-state={state}>{msg}</span> : null}
     </label>

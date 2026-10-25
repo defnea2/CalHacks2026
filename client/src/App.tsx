@@ -9,6 +9,7 @@ import { MicCheck } from './screens/MicCheck';
 import { APP_CONFIG } from './app-config';
 import { homeUrl, navigate } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Buddy } from './design/Buddy';
 
 type Route = { name: 'pick' } | { name: 'session'; id: bigint } | { name: 'observe'; id: bigint } | { name: 'overview' } | { name: 'miccheck' };
 
@@ -43,20 +44,20 @@ export function App({ settings }: { settings: AppSettings }) {
   }, [route, status]);
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+    <main className="product-shell">
+      <header className="product-header">
           <a
             href={homeUrl()}
             onClick={e => {
               e.preventDefault();
               navigate(homeUrl());
             }}
-            className="font-semibold tracking-tight"
+            className="product-identity"
           >
-            {APP_CONFIG.pageTitle}
+            <Buddy size={40} className="product-buddy" />
+            <span><strong>{APP_CONFIG.pageTitle}</strong><small>Visual learning, made clear</small></span>
           </a>
-          <nav className="flex items-center gap-3 text-sm">
+          <nav>
             <a
               data-testid="nav-overview"
               href={homeUrl('overview')}
@@ -64,20 +65,18 @@ export function App({ settings }: { settings: AppSettings }) {
                 e.preventDefault();
                 navigate(homeUrl('overview'));
               }}
-              className="text-muted-foreground hover:text-foreground"
             >
               Sessions
             </a>
-            <span data-testid="conn-status" data-status={status} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className={`size-2 rounded-full ${status === 'connected' ? 'bg-emerald-500' : status === 'connecting' ? 'bg-amber-400' : 'bg-red-500'}`} />
+            <span data-testid="conn-status" data-status={status} className="voice-tab">
+              <span className={`dot ${status === 'connected' ? 'is-good' : status === 'connecting' ? 'is-wait' : 'is-bad'}`} />
               {status}
             </span>
           </nav>
-        </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">
+      <section className="lesson-workspace" aria-label="Learning session">
         {status === 'error' ? (
-          <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="lesson-error">
             Cannot reach SpacetimeDB at {settings.spacetimeUri} / {settings.spacetimeDb}: {error}
           </p>
         ) : null}
@@ -85,7 +84,7 @@ export function App({ settings }: { settings: AppSettings }) {
         {route.name === 'miccheck' ? (
           <MicCheck settings={settings} />
         ) : !conn ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">Connecting…</p>
+          <div className="loading-buddy" role="status"><Buddy size={72} /><span className="loading-dots" aria-hidden="true"><i /><i /><i /></span><span>Connecting…</span></div>
         ) : route.name === 'session' ? (
           <SessionScreen key={`s${route.id}`} conn={conn} sessionId={route.id} settings={settings} />
         ) : route.name === 'observe' ? (
@@ -96,7 +95,7 @@ export function App({ settings }: { settings: AppSettings }) {
           <PickUser conn={conn} />
         )}
         </ErrorBoundary>
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }

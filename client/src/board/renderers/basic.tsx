@@ -33,7 +33,7 @@ export function WorkedStepsRenderer({ content, reveal }: RendererProps) {
       <ol className="flex flex-col gap-2">
         {steps.slice(0, shown).map((s, i) => (
           <li key={i} data-testid="worked-step" className="flex items-baseline gap-3 animate-[fadein_.3s_ease-out]">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
+            <span className="voice-step-number">
               {i + 1}
             </span>
             <div className="flex flex-col">
@@ -50,11 +50,6 @@ export function WorkedStepsRenderer({ content, reveal }: RendererProps) {
   );
 }
 
-const STATE_STYLE: Record<string, string> = {
-  correct: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100',
-  wrong: 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100',
-  open: 'bg-secondary text-secondary-foreground',
-};
 const STATE_LABEL: Record<string, string> = { correct: 'Correct!', wrong: 'Not yet, try again', open: 'Your turn' };
 
 export function GapTaskRenderer({ content, answer }: RendererProps) {
@@ -87,7 +82,7 @@ export function GapTaskRenderer({ content, answer }: RendererProps) {
                 data-testid="gap-choice"
                 disabled={busy}
                 onClick={() => send(c)}
-                className="rounded-lg border bg-card px-4 py-2 text-lg font-medium hover:bg-accent disabled:opacity-50"
+                className="voice-choice"
               >
                 {c}
               </button>
@@ -106,19 +101,19 @@ export function GapTaskRenderer({ content, answer }: RendererProps) {
               value={value}
               onChange={e => setValue(e.target.value)}
               placeholder="?"
-              className="w-24 rounded-lg border bg-background px-3 py-2 text-center text-lg"
+              className="voice-input w-24 text-center"
             />
             <button
               data-testid="gap-submit"
               disabled={busy}
-              className="rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50"
+              className="lesson-primary"
             >
               Check
             </button>
           </form>
         )
       ) : null}
-      <span data-testid="gap-state" data-state={state} className={`rounded-full px-3 py-1 text-xs font-medium ${STATE_STYLE[state] ?? STATE_STYLE.open}`}>
+      <span data-testid="gap-state" data-state={state} className="voice-gap-state">
         {STATE_LABEL[state] ?? state}
         {state === 'wrong' && answer.last ? ` (${answer.last})` : ''}
       </span>
