@@ -18,7 +18,8 @@ export type EnvName =
   | 'TTS_SAMPLE_RATE'
   | 'MEMORY_EVERY_N_TURNS'
   | 'SIM_MAX_TURNS'
-  | 'DASHBOARD_INTERVAL_S';
+  | 'DASHBOARD_INTERVAL_S'
+  | 'LESSON_ARC';
 
 let override: Partial<Record<EnvName, string>> | null = null;
 

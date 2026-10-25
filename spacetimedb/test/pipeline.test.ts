@@ -9,8 +9,10 @@ type Env = ReturnType<typeof setup> & { s: ReturnType<typeof makeSession> };
 const U = 100n;
 const ttsOk = (req: Req) => ({ status: 200, body: ttsSse(new Uint8Array(4800).fill(req.text.length % 7)) });
 
-function lessonSession(voice = false, say = 'Why is 2/4 the same as 1/2?'): Env {
-  const env = setup();
+// The team fixture is a 6-moment adaptive mini lesson: these tests run without an arc
+// (LESSON_ARC=adaptive); the two-minute arc has its own tests (arc.test.ts).
+function lessonSession(voice = false, say = 'Why is 2/4 the same as 1/2?', arc = 'adaptive'): Env {
+  const env = setup({ LESSON_ARC: arc });
   const learner = makeLearner(env.h, env.client);
   const s = makeSession(env.h, env.client, learner.id, 'Equivalent fractions');
   if (!voice) call(env.h, env.client, mod.setSessionVoice, { sessionId: s.id, voice: false });

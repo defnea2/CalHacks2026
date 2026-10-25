@@ -220,6 +220,27 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
 }
 
 /**
+ * Barge-in on the utterance this client was PLAYING. The session already counts an utterance as
+ * over once its last sentence starts (markPlayed -> currentUtteranceId 0, listening), so a plain
+ * interrupt during the last sentence found nothing to interrupt and the tutor turn stayed
+ * interrupted=false. Utterance-scoped: the current utterance -> interrupt(); an utterance that just
+ * finished -> its tutor turn is marked interrupted (the learner cut into its last sentence) and
+ * the client's playback is flushed. Older or unknown utterances are ignored.
+ */
+export function interruptUtterance(ctx: Ctx, sessionId: bigint, utteranceId: bigint): void {
+  const session = getActiveSession(ctx, sessionId);
+  if (utteranceId === 0n || utteranceId === session.currentUtteranceId) return interrupt(ctx, sessionId);
+  if (session.currentUtteranceId !== 0n) return interrupt(ctx, sessionId); // a newer reply is speaking: barge-in on it
+  const tutorTurn = tutorTurnFor(ctx, sessionId, utteranceId);
+  if (!tutorTurn || tutorTurn.interrupted) return;
+  // Only the latest tutor turn: a barge-in cannot cut into an utterance that something else followed.
+  const later = sessionTurns(ctx, sessionId).some(t => t.role === 'tutor' && t.idx > tutorTurn.idx);
+  if (later) return;
+  ctx.db.turn.id.update({ ...tutorTurn, interrupted: true });
+  ctx.db.playbackFlush.insert({ sessionId, utteranceId });
+}
+
+/**
  * Appends the tutor turn (what was actually spoken). A student turn that started while this
  * utterance was playing (barge-in) and isn't ready yet is moved behind the tutor turn, so turn
  * order matches what was said.

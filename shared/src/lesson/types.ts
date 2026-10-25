@@ -168,4 +168,6 @@ export interface LessonPack {
   taxonomy: TaxonomyCategory[];
   prompts: PromptTemplates;
   content: ContentLibrary;
+  /** Rigid lesson arcs by id (team planner phases; validated with @tutor/teaching LessonArcSchema). */
+  arcs?: Record<string, unknown>;
 }

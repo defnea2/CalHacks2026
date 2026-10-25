@@ -3,17 +3,9 @@ import { IdSchema } from "../shared/contracts";
 import { VisualBeatSchema } from "../presentation/contracts";
 
 export const TEACHING_VERSION = 1 as const;
-export const PhaseSchema = z.enum([
-  "diagnose",
-  "intuition",
-  "formalize",
-  "worked_example",
-  "repair",
-  "solo",
-  "transfer",
-  "return_to_problem",
-]);
-export type TeachingPhase = z.infer<typeof PhaseSchema>;
+import { PhaseSchema, type TeachingPhase } from "./phase";
+import { LessonArcSchema } from "./arc";
+export { PhaseSchema, type TeachingPhase } from "./phase";
 const short = z.string().min(1).max(600);
 export const SessionConfigSchema = z
   .object({
@@ -24,6 +16,8 @@ export const SessionConfigSchema = z
     // Keep older step-at-a-time clients compatible; the learner UI opts into a
     // complete explanation before its first check.
     lessonStyle: z.enum(["mini_lesson", "step_by_step"]).optional(),
+    // A rigid lesson arc from the lesson pack (e.g. the two-minute demo); absent = adaptive policy.
+    arc: LessonArcSchema.optional(),
     context: z
       .array(
         z

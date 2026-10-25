@@ -4,11 +4,14 @@ import { boardKinds } from './pack/boardKinds';
 import { taxonomy } from './pack/taxonomy';
 import { prompts } from './pack/prompts';
 import { content } from './pack/content';
+import { arcs } from './pack/arcs';
 
 export * from './types';
 export * from './contract';
 export * from './import';
 export * from './latexMath';
+export * from './library';
+export { arcs, DEFAULT_ARC, ADAPTIVE_ARC } from './pack/arcs';
 
 /** The active lesson pack. Swap this export to replace all placeholder content. */
 export const pack: LessonPack = {
@@ -20,4 +23,5 @@ export const pack: LessonPack = {
   taxonomy,
   prompts,
   content,
+  arcs,
 };
