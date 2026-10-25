@@ -403,7 +403,8 @@ function simInput(ctx: Ctx, s: SessionRow): SimInput | null {
   const p = l ? ctx.db.simProfile.rank.find(l.simRank) : undefined;
   const cls = ctx.db.classSession.id.find(s.classSessionId);
   if (!l || !p || !cls) return null;
-  const behaviour = pickBehaviour(ctx.random());
+  // Spread by session and turn: transactions that start close together draw similar numbers.
+  const behaviour = pickBehaviour((ctx.random() + Number(s.id % 1000n) * 0.6180339887 + s.turnCount * 0.4142135624) % 1);
   const misconceptions = parseJson<string[]>(p.misconceptions, []);
   const system = [
     `You play ${p.name.split(' ')[0]}, a real ${p.age}-year-old child in grade ${p.grade}, in a one-on-one online maths lesson with an AI tutor during class. You write ONLY the child's next chat message.`,
@@ -461,7 +462,7 @@ export function simStudentTurn(ctx: PCtx, job: SimJob): void {
   const started = Date.now();
   try {
     const r = callAnthropicJson<{ message?: unknown }>(ctx, { system: prep.system, user: prep.user, schema: SIM_SCHEMA, effort: C.SIM_EFFORT, maxTokens: C.SIM_MAX_TOKENS });
-    message = typeof r.value?.message === 'string' ? r.value.message.replace(/\s+/g, ' ').trim() : '';
+    message = typeof r.value?.message === 'string' ? cleanChildMessage(r.value.message) : '';
     console.log(`simStudentTurn s${job.sessionId} ${prep.name} [${prep.behaviour}]: ${r.model} ${Date.now() - started} ms, in=${r.usage.inputTokens} out=${r.usage.outputTokens} "${truncate(message, 80)}"`);
   } catch (e) {
     if (!(e instanceof ProviderError)) {
@@ -489,6 +490,15 @@ export function simStudentTurn(ctx: PCtx, job: SimJob): void {
       console.warn(`simStudentTurn s${job.sessionId}: turn rejected: ${e.message}`);
     }
   });
+}
+
+/** One chat line: no emoji / markdown, whitespace collapsed. */
+export function cleanChildMessage(raw: string): string {
+  return raw
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '')
+    .replace(/[*_`#]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** The internal text-turn path with source 'sim'. */

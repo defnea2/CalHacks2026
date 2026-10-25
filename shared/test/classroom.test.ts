@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SIM_STUDENTS } from '../src/classroom/simStudents';
-import { clusterViolations, repairClusters, sizeRuleText, type Cluster, type ClusterStudent } from '../src/classroom/clusters';
+import { clusterViolations, repairClusters, sizePartitions, sizeRuleText, type Cluster, type ClusterStudent } from '../src/classroom/clusters';
 import { pack } from '../src/lesson/index';
 import { conceptBelongsTo, isCategory } from '../src/lesson/api';
 import { MEMORY_KINDS, MEMORY_OUTCOMES } from '../src/types';
@@ -57,6 +57,20 @@ describe('cluster rules', () => {
     const r = repairClusters([c('A', ['1', '2', '3', '4']), c('B', ['5', '6'])], s);
     expect(r.valid).toBe(true);
     expect(r.clusters.map(x => x.learnerIds)).toEqual([['1', '2', '3', '4'], ['5', '6']]);
+  });
+
+  it('size partitions', () => {
+    expect(sizePartitions(6)).toEqual([[4, 2], [2, 2, 2]]);
+    expect(sizePartitions(7)).toEqual([[4, 3], [3, 2, 2]]);
+    expect(sizePartitions(8)).toEqual([[4, 4], [4, 2, 2], [2, 2, 2, 2]]);
+    expect(sizePartitions(3)).toEqual([[3]]);
+    expect(sizePartitions(1)).toEqual([[1]]);
+  });
+
+  it('merged leftovers carry both cluster names', () => {
+    const s = students(4);
+    const r = repairClusters([c('A', ['1']), c('B', ['2']), c('C', ['3', '4'])], s);
+    expect(r.clusters.find(x => x.learnerIds.includes('1'))!.name).toMatch(/A · B|B · A/);
   });
 
   it('size rule text', () => {

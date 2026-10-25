@@ -4,7 +4,7 @@ import { TestAuth } from 'spacetimedb/server/test-utils';
 import { CLASSROOM_DEFAULTS as C } from '../../shared/src/config';
 import { SIM_STUDENTS } from '../../shared/src/classroom/simStudents';
 import { clusterViolations } from '../../shared/src/classroom/clusters';
-import { pickBehaviour } from '../src/classroom';
+import { cleanChildMessage, pickBehaviour } from '../src/classroom';
 import { anthropicResponse, auth, call, makeLearner, makeSession, mod, proc, runExtraction, runTextPlay, session, setup, turns, type H, type Req, type Responder } from './helpers';
 
 type Env = ReturnType<typeof setup>;
@@ -348,6 +348,10 @@ describe('simulation', () => {
     expect(retry).toMatchObject({ attempt: 1 });
     expect(Number(at(retry) - now(h)) / 1e6).toBe(C.SIM_FAILURE_RETRY_S);
     expect([...h.db.simRunning.iter()]).toHaveLength(0);
+  });
+
+  it('child messages lose emoji and markdown', () => {
+    expect(cleanChildMessage('um.. step by step? ok 🙂 **3/8**  ')).toBe('um.. step by step? ok 3/8');
   });
 
   it('behaviour mix covers mistakes, questions, hesitation and correct answers', () => {

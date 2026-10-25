@@ -30,12 +30,31 @@ export function sizeRule(n: number): { allowOneThree: boolean; single: boolean }
   return { allowOneThree: n % 2 === 1 && n >= 3, single: n === 1 };
 }
 
-/** One human-readable sentence of the size rule for the prompt. */
+/** Every allowed multiset of cluster sizes for n students (largest first), at most `limit`. */
+export function sizePartitions(n: number, limit = 4): number[][] {
+  if (n <= 0) return [];
+  if (n === 1) return [[1]];
+  const out: number[][] = [];
+  const odd = n % 2 === 1;
+  const rest = odd ? n - 3 : n;
+  for (let fours = Math.floor(rest / 4); fours >= 0 && out.length < limit; fours--) {
+    const left = rest - fours * 4;
+    if (left % 2) continue;
+    const p = [...Array(fours).fill(4), ...(odd ? [3] : []), ...Array(left / 2).fill(2)];
+    out.push(p);
+  }
+  return out;
+}
+
+/** The size rule for the prompt, with the allowed size combinations for this class. */
 export function sizeRuleText(n: number): string {
+  const ex = sizePartitions(n)
+    .map(p => p.join('+'))
+    .join(' or ');
   if (n === 1) return 'There is 1 student: one cluster with that student.';
   if (n === 3) return 'There are 3 students: exactly one cluster of 3.';
-  if (n % 2 === 0) return `There are ${n} students: every cluster has exactly 2 or 4 students.`;
-  return `There are ${n} students (odd): exactly one cluster has 3 students, every other cluster has exactly 2 or 4.`;
+  if (n % 2 === 0) return `There are ${n} students: every cluster has exactly 2 or 4 students, never 1 or 3 (allowed: ${ex}).`;
+  return `There are ${n} students (odd): exactly one cluster has 3 students, every other cluster has exactly 2 or 4, never 1 (allowed: ${ex}).`;
 }
 
 /** Checks the rules; returns the list of violations (empty = valid). */
@@ -167,12 +186,12 @@ export function repairClusters(raw: Cluster[], students: ClusterStudent[]): Repa
   };
   const singles = leftovers.flatMap(p => p.ids.map(id => ({ ids: [id], origin: p.origin }))).sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
   const describe = (piece: Piece[]): Cluster => {
-    const origin = piece.find(p => p.origin >= 0)?.origin ?? -1;
     const first = byId.get(piece[0]!.ids[0]!)!;
-    const base = origin >= 0 ? cleaned[origin]! : undefined;
+    // Merged from different LLM clusters: both names / descriptions (each is short).
+    const bases = [...new Set(piece.map(p => p.origin).filter(o => o >= 0))].map(o => cleaned[o]!);
     return {
-      name: base?.name || first.phase || 'Mixed',
-      description: base?.description || `Working on ${first.topic || 'the class task'} (${first.phase || 'starting'}).`,
+      name: bases.map(b => b.name).filter(Boolean).join(' · ') || first.phase || 'Mixed',
+      description: bases.map(b => b.description).filter(Boolean).join(' ') || `Working on ${first.topic || 'the class task'} (${first.phase || 'starting'}).`,
       learnerIds: piece.flatMap(p => p.ids),
     };
   };
