@@ -13,7 +13,7 @@ const DROPPED = 'dropped';
 const TUTOR = 'tutor';
 
 /** Reveal progress + "is this utterance over" for board and captions. */
-export function useUtteranceState(data: SessionData, localStarted: Map<string, number>) {
+export function useUtteranceState(data: SessionData, localStarted: Map<string, number[]>) {
   const { session, turns, sentences } = data;
   const serverOver = useMemo(() => {
     const done = new Set(turns.filter(t => t.role === TUTOR && t.utteranceId !== 0n).map(t => t.utteranceId.toString()));
@@ -21,7 +21,7 @@ export function useUtteranceState(data: SessionData, localStarted: Map<string, n
     return (u: bigint) => done.has(u.toString()) || u !== current;
   }, [turns, session?.currentUtteranceId]);
   const progress = useMemo<Map<string, UtteranceProgress>>(
-    () => utteranceProgress(sentences, localStarted, serverOver, [PLAYED, DROPPED], [PLAYED, DROPPED]),
+    () => utteranceProgress(sentences, localStarted, serverOver, [PLAYED], [PLAYED, DROPPED]),
     [sentences, localStarted, serverOver]
   );
   return { serverOver, progress };

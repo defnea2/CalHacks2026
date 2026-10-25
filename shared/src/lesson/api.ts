@@ -28,14 +28,18 @@ export function conceptBelongsTo(pack: LessonPack, category: string, concept: st
 /** Validates `value` against the JsonSchema subset. Returns error messages ([] = valid). */
 export function validateJson(schema: JsonSchema, value: unknown, path = '$'): string[] {
   const errs: string[] = [];
-  if (schema.oneOf) {
-    const ok = schema.oneOf.some(s => validateJson(s, value, path).length === 0);
+  if (schema.oneOf || schema.anyOf) {
+    const ok = (schema.oneOf ?? schema.anyOf!).some(s => validateJson(s, value, path).length === 0);
     return ok ? [] : [`${path}: matches none of the allowed shapes`];
   }
+  if ('const' in schema && value !== schema.const) errs.push(`${path}: wrong literal value`);
   if (schema.enum && !schema.enum.includes(value as string | number)) {
     errs.push(`${path}: must be one of ${schema.enum.join(', ')}`);
   }
   switch (schema.type) {
+    case 'null':
+      if (value !== null) errs.push(`${path}: must be null`);
+      break;
     case 'object': {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) return [`${path}: must be an object`];
       const obj = value as Record<string, unknown>;
@@ -55,11 +59,13 @@ export function validateJson(schema: JsonSchema, value: unknown, path = '$'): st
       break;
     case 'string':
       if (typeof value !== 'string') return [`${path}: must be a string`];
+      if (schema.minLength !== undefined && value.length < schema.minLength) errs.push(`${path}: too short`);
       if (schema.maxLength !== undefined && value.length > schema.maxLength) errs.push(`${path}: at most ${schema.maxLength} characters`);
       break;
     case 'number':
     case 'integer':
       if (typeof value !== 'number' || !Number.isFinite(value)) return [`${path}: must be a number`];
+      if (schema.multipleOf && Math.abs(value / schema.multipleOf - Math.round(value / schema.multipleOf)) > 1e-8) errs.push(`${path}: invalid increment`);
       if (schema.type === 'integer' && !Number.isInteger(value)) errs.push(`${path}: must be a whole number`);
       if (schema.minimum !== undefined && value < schema.minimum) errs.push(`${path}: must be >= ${schema.minimum}`);
       if (schema.maximum !== undefined && value > schema.maximum) errs.push(`${path}: must be <= ${schema.maximum}`);

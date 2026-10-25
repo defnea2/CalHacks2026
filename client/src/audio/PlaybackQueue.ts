@@ -27,6 +27,8 @@ interface Scheduled {
   startAt: number;
   endAt: number;
   timer: ReturnType<typeof setTimeout>;
+  started: boolean;
+  cancelled: boolean;
 }
 
 export class PlaybackQueue {
@@ -78,6 +80,7 @@ export class PlaybackQueue {
     let stopped = 0;
     this.scheduled = this.scheduled.filter(s => {
       if (!all && s.utteranceId !== utteranceId) return true;
+      s.cancelled = true;
       clearTimeout(s.timer);
       try {
         s.source.stop();
@@ -111,7 +114,6 @@ export class PlaybackQueue {
     const [s, e] = trimRange(ints, this.cfg.TRIM_SILENCE_LEVEL);
     if (e <= s) {
       eventLog.log('audio.empty', { utteranceId: b.utteranceId.toString(), idx: b.idx });
-      this.fireStart(b.utteranceId, b.idx, 0);
       return;
     }
     const samples = applyFades(int16ToFloat(ints.subarray(s, e)), sampleRate, this.cfg.FADE_MS);
@@ -126,9 +128,12 @@ export class PlaybackQueue {
     const endAt = startAt + buffer.duration;
     this.nextStart = endAt + this.cfg.SENTENCE_PAUSE_MS / 1000;
     source.start(startAt);
-    const timer = this.fireStart(b.utteranceId, b.idx, Math.max(0, (startAt - now) * 1000));
-    const item: Scheduled = { utteranceId: b.utteranceId, idx: b.idx, source, startAt, endAt, timer };
+    const item: Scheduled = { utteranceId: b.utteranceId, idx: b.idx, source, startAt, endAt,
+      timer: undefined as unknown as ReturnType<typeof setTimeout>, started: false, cancelled: false };
+    this.watchStart(item);
     source.onended = () => {
+      clearTimeout(item.timer);
+      if (!item.cancelled && !item.started) this.fireStart(item);
       this.scheduled = this.scheduled.filter(x => x !== item);
       eventLog.log('audio.play_end', { utteranceId: b.utteranceId.toString(), idx: b.idx });
       this.updatePlaying();
@@ -145,12 +150,24 @@ export class PlaybackQueue {
     this.updatePlaying(true);
   }
 
-  private fireStart(utteranceId: bigint, idx: number, delayMs: number): ReturnType<typeof setTimeout> {
-    // Flushing clears these timers, so a timer that fires belongs to audio that really plays.
-    return setTimeout(() => {
-      eventLog.log('audio.play_start', { utteranceId: utteranceId.toString(), idx });
-      this.cb.onSentenceStart?.(utteranceId, idx);
-    }, delayMs);
+  private watchStart(item: Scheduled): void {
+    item.timer = setTimeout(() => {
+      if (item.cancelled) return;
+      // AudioContext time stops during suspension. A wall-clock timeout alone would reveal
+      // pictures early when autoplay is blocked or the tab/audio device is suspended.
+      if (this.ctx.currentTime < item.startAt || this.ctx.state !== 'running') {
+        this.watchStart(item);
+        return;
+      }
+      this.fireStart(item);
+    }, Math.max(8, Math.min(100, (item.startAt - this.ctx.currentTime) * 1000)));
+  }
+
+  private fireStart(item: Scheduled): void {
+    if (item.started || item.cancelled) return;
+    item.started = true;
+    eventLog.log('audio.play_start', { utteranceId: item.utteranceId.toString(), idx: item.idx });
+    this.cb.onSentenceStart?.(item.utteranceId, item.idx);
   }
 
   private updatePlaying(force?: boolean): void {

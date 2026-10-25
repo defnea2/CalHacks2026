@@ -10,7 +10,7 @@ import { Card, CardHeader, ErrorNote } from '../components/ui';
 import { eventLog } from '../lib/debug';
 
 const PLAYED = 'played';
-const EMPTY = new Map<string, number>();
+const EMPTY = new Map<string, number[]>();
 
 export function ObserverScreen({ conn, sessionId }: { conn: DbConnection; sessionId: bigint }) {
   const data = useSessionData(conn, sessionId, { withAudio: false });

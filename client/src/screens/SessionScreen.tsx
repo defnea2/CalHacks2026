@@ -26,7 +26,7 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
   const [ui, setUi] = useState<VoiceUiState>({ listening: false, speaking: false, tutorAudio: false, noise: 'quiet', floorDb: null, levelDb: -100, prob: 0 });
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
-  const [localStarted, setLocalStarted] = useState<Map<string, number>>(() => new Map());
+  const [localStarted, setLocalStarted] = useState<Map<string, number[]>>(() => new Map());
   const [localLatency, setLocalLatency] = useState<Map<number, number>>(() => new Map());
   const lastTurnEnd = useRef<number | null>(null);
   const turnCounter = useRef(0);
@@ -82,9 +82,9 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
   const onSentenceStart = useCallback((u: bigint, idx: number) => {
     setLocalStarted(prev => {
       const k = u.toString();
-      if ((prev.get(k) ?? -1) >= idx) return prev;
+      if (prev.get(k)?.includes(idx)) return prev;
       const next = new Map(prev);
-      next.set(k, idx);
+      next.set(k, [...(prev.get(k) ?? []), idx]);
       return next;
     });
     if (idx === 0 && lastTurnEnd.current !== null) {
@@ -148,7 +148,7 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
   };
 
   const tutorShown = useCallback(
-    (s: ReplySentence) => s.status === PLAYED || (localStarted.get(s.utteranceId.toString()) ?? -1) >= s.idx,
+    (s: ReplySentence) => s.status === PLAYED || (localStarted.get(s.utteranceId.toString()) ?? []).includes(s.idx),
     [localStarted]
   );
 
@@ -232,7 +232,7 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
         <Card>
           <CardHeader title="Board" />
           <div className="p-4">
-            <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} />
+            <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} allowCanvasInteraction={!!session?.active && session.turnState === 'listening' && !ui.tutorAudio} />
           </div>
         </Card>
       </div>

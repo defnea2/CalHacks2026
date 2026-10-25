@@ -4,7 +4,7 @@
 
 /** Minimal JSON Schema subset understood by validateJson (shared/src/lesson/validate.ts). */
 export type JsonSchema = {
-  type?: 'object' | 'array' | 'string' | 'number' | 'integer' | 'boolean';
+  type?: 'object' | 'array' | 'string' | 'number' | 'integer' | 'boolean' | 'null';
   description?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
@@ -16,6 +16,10 @@ export type JsonSchema = {
   maxItems?: number;
   minItems?: number;
   oneOf?: JsonSchema[];
+  anyOf?: JsonSchema[];
+  const?: unknown;
+  minLength?: number;
+  multipleOf?: number;
   additionalProperties?: boolean;
 };
 

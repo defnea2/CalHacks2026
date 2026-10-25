@@ -1,3 +1,4 @@
+import { AnimatedMathBoard } from './AnimatedMathBoard';
 import { getRenderer, parseContent } from './registry';
 import { revealState, type UtteranceProgress } from './reveal';
 import type { AnswerProps } from './types';
@@ -19,16 +20,23 @@ interface Props {
   progress: Map<string, UtteranceProgress>;
   serverOver: (u: bigint) => boolean;
   /** Absent in read-only views (observer). */
+  allowCanvasInteraction?: boolean;
   onSubmitAnswer?: (itemId: bigint, answer: string) => Promise<void>;
 }
 
-export function Board({ items, progress, serverOver, onSubmitAnswer }: Props) {
+export function Board({ items, progress, serverOver, onSubmitAnswer, allowCanvasInteraction = false }: Props) {
   const shown = items.filter(i => i.visible).sort((a, b) => a.idx - b.idx);
+  const mathItems = shown.filter(i => i.kind === 'math_canvas').map(i => ({
+    id: i.id.toString(), order: i.idx, utteranceId: i.utteranceId.toString(), sentenceIdx: i.sentenceIdx,
+    content: parseContent(i.content),
+  }));
+  const started = new Map([...progress].map(([id, p]) => [id, p.started]));
   return (
     <div data-testid="board" className="flex flex-col gap-3">
       {shown.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">The board is empty.</p> : null}
-      {shown.map(item => {
-        const p = progress.get(item.utteranceId.toString()) ?? { maxStarted: -1, over: serverOver(item.utteranceId) };
+      <AnimatedMathBoard items={mathItems} started={started} interactive={allowCanvasInteraction} />
+      {shown.filter(item => item.kind !== 'math_canvas').map(item => {
+        const p = progress.get(item.utteranceId.toString()) ?? { maxStarted: -1, started: [], over: serverOver(item.utteranceId) };
         const reveal = revealState(item, p);
         const { renderer: R, known } = getRenderer(item.kind);
         const answer: AnswerProps = {

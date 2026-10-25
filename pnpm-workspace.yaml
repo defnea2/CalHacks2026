@@ -5,3 +5,6 @@ packages:
   - client
   - e2e
   - stt-proxy
+allowBuilds:
+  esbuild: true
+  protobufjs: true

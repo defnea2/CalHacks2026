@@ -56,6 +56,7 @@ function vadAssets(): Plugin {
 }
 
 export default defineConfig({
+  resolve: { dedupe: ['react', 'react-dom'] },
   plugins: [vadAssets(), react(), tailwindcss()],
   optimizeDeps: { include: ['@ricky0123/vad-web', 'onnxruntime-web/wasm'] },
   server: { host: '127.0.0.1', port: 5175, strictPort: true },

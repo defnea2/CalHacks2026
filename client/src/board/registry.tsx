@@ -2,9 +2,11 @@
 // this is the replaceable boundary; kind names appear nowhere else in the client.
 import type { BoardRenderer, RendererProps } from './types';
 import { EquationRenderer, GapTaskRenderer, TextRenderer, WorkedStepsRenderer } from './renderers/basic';
+import { MathCanvasRenderer } from './AnimatedMathBoard';
 import { VisualRenderer } from './renderers/visual';
 
 export const renderers: Record<string, BoardRenderer> = {
+  math_canvas: MathCanvasRenderer,
   text: TextRenderer,
   equation: EquationRenderer,
   worked_steps: WorkedStepsRenderer,

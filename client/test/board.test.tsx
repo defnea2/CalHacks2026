@@ -71,10 +71,10 @@ describe('reveal sync', () => {
   it('tagged items wait for their sentence', () => {
     const item = { utteranceId: 7n, sentenceIdx: 2 };
     expect(revealState(item, undefined).revealed).toBe(false);
-    expect(revealState(item, { maxStarted: 1, over: false }).revealed).toBe(false);
-    expect(revealState(item, { maxStarted: 2, over: false })).toEqual({ revealed: true, progress: 1 });
-    expect(revealState(item, { maxStarted: 4, over: false }).progress).toBe(3);
-    expect(revealState(item, { maxStarted: -1, over: true }).revealed).toBe(true);
+    expect(revealState(item, { maxStarted: 1, started: [0, 1], over: false }).revealed).toBe(false);
+    expect(revealState(item, { maxStarted: 2, started: [0, 1, 2], over: false })).toEqual({ revealed: true, progress: 1 });
+    expect(revealState(item, { maxStarted: 4, started: [0, 1, 2, 3, 4], over: false }).progress).toBe(3);
+    expect(revealState(item, { maxStarted: -1, started: [], over: true }).revealed).toBe(false);
   });
 
   it('progress from sentence statuses and local playback', () => {
@@ -84,8 +84,8 @@ describe('reveal sync', () => {
       { utteranceId: 8n, idx: 0, status: 'played' },
     ];
     const over = (u: bigint) => u === 8n;
-    const p = utteranceProgress(s, new Map([['7', 1]]), over, ['played', 'dropped'], ['played', 'dropped']);
-    expect(p.get('7')).toEqual({ maxStarted: 1, over: false });
-    expect(p.get('8')).toEqual({ maxStarted: 0, over: true });
+    const p = utteranceProgress(s, new Map([['7', [1]]]), over, ['played'], ['played', 'dropped']);
+    expect(p.get('7')).toEqual({ maxStarted: 1, started: [0, 1], over: false });
+    expect(p.get('8')).toEqual({ maxStarted: 0, started: [0], over: true });
   });
 });
