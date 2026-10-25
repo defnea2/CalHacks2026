@@ -142,10 +142,12 @@ export class VadMachine {
     } else {
       const c = this.candidate;
       c.frames.push(frame);
+      // Hysteresis: between threshold - VAD_HYSTERESIS and threshold a frame neither adds speech
+      // nor counts as a gap (Silero-style positive/negative thresholds).
       if (speechy) {
         c.speechMs += frameMs;
         c.gapMs = 0;
-      } else {
+      } else if (prob < eff.threshold - this.cfg.VAD_HYSTERESIS) {
         c.gapMs += frameMs;
       }
       if (c.gapMs > this.cfg.VAD_CANDIDATE_GAP_MS) {

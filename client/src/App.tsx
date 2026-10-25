@@ -8,6 +8,7 @@ import { Overview } from './screens/Overview';
 import { MicCheck } from './screens/MicCheck';
 import { APP_CONFIG } from './app-config';
 import { homeUrl, navigate } from './lib/format';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 type Route = { name: 'pick' } | { name: 'session'; id: bigint } | { name: 'observe'; id: bigint } | { name: 'overview' } | { name: 'miccheck' };
 
@@ -80,6 +81,7 @@ export function App({ settings }: { settings: AppSettings }) {
             Cannot reach SpacetimeDB at {settings.spacetimeUri} / {settings.spacetimeDb}: {error}
           </p>
         ) : null}
+        <ErrorBoundary key={`${route.name}${'id' in route ? route.id : ''}`}>
         {route.name === 'miccheck' ? (
           <MicCheck settings={settings} />
         ) : !conn ? (
@@ -93,6 +95,7 @@ export function App({ settings }: { settings: AppSettings }) {
         ) : (
           <PickUser conn={conn} />
         )}
+        </ErrorBoundary>
       </main>
     </div>
   );

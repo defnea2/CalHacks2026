@@ -66,7 +66,9 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
 
   // Phrase ids stay unique across reloads.
   const maxPhraseId = data.phrases.reduce((m, p) => Math.max(m, p.phraseId), 0);
-  useEffect(() => voice?.setNextPhraseId(maxPhraseId + 1), [voice, maxPhraseId]);
+  useEffect(() => {
+    voice?.setNextPhraseId(maxPhraseId + 1);
+  }, [voice, maxPhraseId]);
 
   // Stop the microphone when leaving the screen.
   useEffect(
@@ -111,6 +113,7 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
         },
       });
       voiceRef.current = v;
+      window.__tutor.voice = v;
       setVoice(v);
       eventLog.log('ui.start_talking', {});
       await v.start();
@@ -127,6 +130,7 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
   };
 
   const stopTalking = async () => {
+    window.__tutor.voice = undefined;
     await voiceRef.current?.stop();
     voiceRef.current = null;
     setVoice(null);

@@ -157,7 +157,9 @@ function StartForm({
   const [waitingSince, setWaitingSince] = useState<number | null>(null);
 
   // After startSession: the learner's new active session shows up through the subscription.
-  const fresh = active.find(s => s.learnerId === learner.id && s.id !== previous?.id);
+  // `previous` changes once the new session is active, so remember the one we replaced.
+  const [replaced, setReplaced] = useState<bigint | null>(null);
+  const fresh = waitingSince === null ? undefined : active.find(s => s.learnerId === learner.id && s.id !== replaced);
   const handled = useRef(false);
   useEffect(() => {
     if (waitingSince === null || !fresh || handled.current) return;
@@ -182,6 +184,7 @@ function StartForm({
     setBusy(true);
     setError('');
     const args = { learnerId: learner.id, taskText: task.trim() };
+    setReplaced(previous?.id ?? null);
     setWaitingSince(Date.now());
     const r = await callReducer('startSession', args, () => conn.reducers.startSession(args));
     if (!r.ok) {
@@ -207,7 +210,7 @@ function StartForm({
           Photo of the task (optional)
           <input data-testid="photo-input" type="file" accept="image/*" onChange={e => setPhoto(e.target.files?.[0] ?? null)} className="text-sm" />
         </Label>
-        {previous ? <p className="text-xs text-muted-foreground">This ends the active session {previous.code || previous.id.toString()}.</p> : null}
+        {previous && waitingSince === null ? <p className="text-xs text-muted-foreground">This ends the active session {previous.code || previous.id.toString()}.</p> : null}
         <ErrorNote>{error}</ErrorNote>
         <Button data-testid="start-session" disabled={busy}>
           {busy ? 'Starting…' : 'Start session'}

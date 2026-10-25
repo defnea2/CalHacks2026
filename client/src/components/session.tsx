@@ -114,7 +114,10 @@ export function Captions({
   }, [data.phrases, data.sentences, tutorShown]);
 
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView?.({ block: 'nearest' }), [entries]);
+  useEffect(() => {
+    // (Chrome's scrollIntoView may return a promise; an effect must not return it)
+    void end.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [entries]);
 
   return (
     <div data-testid="captions" className="flex max-h-[420px] min-h-40 flex-col gap-3 overflow-y-auto p-4">

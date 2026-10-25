@@ -49,6 +49,8 @@ export interface TutorDebug {
   /** Filled by the active screen. */
   state: Record<string, unknown>;
   config?: unknown;
+  /** The session tab's live VoiceSession (capture + playback), while talking. */
+  voice?: unknown;
 }
 
 export const eventLog = new EventLog();
