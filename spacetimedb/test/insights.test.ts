@@ -127,6 +127,38 @@ describe('learnerInsights content', () => {
     expect(m.evidence).toHaveLength(2);
   });
 
+  it('seedMemory notes are seeded, pseudo session ids are hidden, seed summary is returned', () => {
+    const env = setup();
+    const { h } = env;
+    const t = teacher(env);
+    const l = makeLearner(h, env.client, 'Ava Chen');
+    const seed = {
+      daysAgo: 2,
+      notes: [
+        { kind: 'strategy', category: 'fractions', concept: 'fractions-expand', text: 'Cutting each pizza slice into 4 made it click.', outcome: 'worked', quote: 'oh, four times more slices' },
+        { kind: 'misconception', category: 'fractions', concept: 'fractions-expand', text: 'Multiplied only the bottom number.', outcome: 'unknown' },
+      ],
+      mastery: [{ concept: 'fractions-expand', mastery: 35 }],
+      summary: { summary: 'Worked on expanding 2/3 with pizza pictures.', nextFocus: 'Same number top and bottom.' },
+    };
+    call(h, env.agent, mod.seedMemory, { learnerId: l.id, memory: JSON.stringify(seed) });
+    // A real session later reinforces the strategy note: it is no longer seeded.
+    const s = makeSession(h, env.client, l.id);
+    call(h, env.agent, mod.remember, { sessionId: s.id, kind: 'strategy', category: 'fractions', concept: 'fractions-expand', text: 'Cutting each pizza slice into 4 made it click.', outcome: 'worked' });
+
+    const json = raw(env, l.id, t.id);
+    const r = ok(JSON.parse(json));
+    expect(r.notes.map(n => [n.kind, n.seeded])).toEqual([['misconception', true], ['strategy', false]]);
+    expect(r.notes[0]!.evidence).toEqual([{ sessionId: '', fromTurn: 0, toTurn: 0, quote: '' }]);
+    expect(r.notes[1]!.evidence.map(e => e.sessionId)).toEqual([String(s.id), '']);
+    expect(r.notes[1]!.evidence[1]!.quote).toBe('oh, four times more slices');
+    expect(r.summaries).toEqual([
+      { sessionId: '', summary: seed.summary.summary, nextFocus: seed.summary.nextFocus, createdMs: expect.any(Number), taskText: '', topic: '', topicTitle: '' },
+    ]);
+    expect(r.mastery.map(m => [m.concept, m.mastery])).toEqual([['fractions-expand', 35]]);
+    expect(json).not.toContain(String((1n << 62n) + l.id));
+  });
+
   it('seeded simulation notes: seeded true, persona from sim_profile', () => {
     const env = setup();
     const t = teacher(env);

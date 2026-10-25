@@ -18,10 +18,14 @@ import {
 import { MEMORY_OUTCOMES, type MemoryKind, type MemoryOutcome } from '../../shared/src/types';
 import { type Ctx, type PCtx, truncate } from './ctx';
 import { readEnv } from './env';
+import { SEED_SESSION_BASE } from './seed';
 
 const ms = (t: Timestamp): number => Number(t.microsSinceUnixEpoch / 1000n);
 /** Newest first. */
 const desc = (a: Timestamp, b: Timestamp): number => Number(b.microsSinceUnixEpoch - a.microsSinceUnixEpoch > 0n) - Number(b.microsSinceUnixEpoch - a.microsSinceUnixEpoch < 0n);
+
+/** Session id as shown to the client: '' for the reserved seed pseudo sessions (seed.ts). */
+const sessionRef = (id: bigint): string => (id >= SEED_SESSION_BASE ? '' : String(id));
 
 function kindRank(kind: string): number {
   const i = INSIGHT_KIND_ORDER.indexOf(kind as MemoryKind);
@@ -56,9 +60,10 @@ export function readInsights(tx: Ctx, args: { learnerId: bigint; teacherId: bigi
         reinforced: n.reinforced,
         createdMs: ms(n.createdAt),
         updatedMs: ms(n.updatedAt),
-        seeded: ev.length === 0,
+        // Seeded: simulation seed notes have no evidence; seedMemory notes only pseudo-session evidence.
+        seeded: ev.every(e => e.sessionId >= SEED_SESSION_BASE),
         evidence: ev.slice(0, INSIGHT_EVIDENCE_PER_NOTE).map(e => ({
-          sessionId: String(e.sessionId),
+          sessionId: sessionRef(e.sessionId),
           fromTurn: e.fromTurn,
           toTurn: e.toTurn,
           quote: truncate(e.quote, INSIGHT_QUOTE_MAX),
@@ -95,7 +100,7 @@ export function readInsights(tx: Ctx, args: { learnerId: bigint; teacherId: bigi
       const s = tx.db.session.id.find(r.sessionId);
       const topic = s?.concept ?? '';
       return {
-        sessionId: String(r.sessionId),
+        sessionId: sessionRef(r.sessionId),
         summary: r.summary,
         nextFocus: r.nextFocus,
         createdMs: ms(r.createdAt),

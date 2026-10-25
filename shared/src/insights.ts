@@ -5,6 +5,7 @@
 import type { MemoryKind } from './types';
 
 export interface InsightEvidence {
+  /** '' for seeded evidence (demo seed, no real session). */
   sessionId: string;
   fromTurn: number;
   toTurn: number;
@@ -31,7 +32,8 @@ export interface InsightNote {
   reinforced: number;
   createdMs: number;
   updatedMs: number;
-  /** true = seeded (simulation profile / demo seed, no evidence), not learned in a session. */
+  /** true = seeded (simulation profile or demo seed), not learned in a session: no evidence,
+   *  or only seed evidence (sessionId ''). */
   seeded: boolean;
   /** Last (up to) 2 evidence rows, newest first. */
   evidence: InsightEvidence[];
@@ -48,6 +50,7 @@ export interface InsightMastery {
 }
 
 export interface InsightSummary {
+  /** '' for the demo seed summary (no real session; taskText/topic are '' then). */
   sessionId: string;
   summary: string;
   nextFocus: string;

@@ -378,7 +378,9 @@ Known limits: word budgets are prompted (the model often exceeds them: explain 1
   `JSON.stringify(LearnerInsightsResult)` (`shared/src/insights.ts`): learner (+ sim persona,
   session count, first/last seen), up to 60 notes ordered misconception → strategy → mnemonic →
   quote → understood → preference, then newest first, each with concept title, the last 2
-  evidence rows (quotes ≤ 200 chars) and `seeded` (= no evidence: simulation seed notes); concept
+  evidence rows (quotes ≤ 200 chars) and `seeded` (no evidence = simulation seed note, or only
+  evidence on the reserved seed pseudo session of `seedMemory`, `seed.ts`; pseudo session ids are
+  sent as `''`, also for the seed summary, which has task text / topic `''`); concept
   mastery with concept + category titles; the last 5 session summaries with task text and topic.
   u64 ids are strings, times are Unix ms. Errors: `locked` (module env `INSIGHTS_KEY` is set and
   the key does not match; checked first), `unknown_teacher`, `unknown_learner`.
