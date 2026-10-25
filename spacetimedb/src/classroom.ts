@@ -706,7 +706,7 @@ export function refreshDashboard(ctx: PCtx, classSessionId: bigint, scheduled: b
         system: DASHBOARD_SYSTEM,
         user: dashboardUser(cls, students),
         schema: DASHBOARD_SCHEMA,
-        effort: C.DASHBOARD_EFFORT,
+        effort: settings.dashboardEffort(ctx),
         maxTokens: C.DASHBOARD_MAX_TOKENS,
       });
       const named = students.map(s => ({ id: s.learnerId, name: s.name }));
@@ -717,7 +717,7 @@ export function refreshDashboard(ctx: PCtx, classSessionId: bigint, scheduled: b
       repairs = fixed.repairs;
       valid = fixed.valid;
       console.log(
-        `refreshDashboard c${classSessionId} ${students.length} students: ${r.model} ${Date.now() - started} ms, in=${r.usage.inputTokens} out=${r.usage.outputTokens}, clusters ${clusters.map(c => c.learnerIds.length).join('+')}${valid ? '' : ` (repaired: ${repairs.join('; ')})`}`
+        `refreshDashboard c${classSessionId} ${students.length} students: ${r.model} effort=${settings.dashboardEffort(ctx)} ${Date.now() - started} ms, in=${r.usage.inputTokens} out=${r.usage.outputTokens}, clusters ${clusters.map(c => c.learnerIds.length).join('+')}${valid ? '' : ` (repaired: ${repairs.join('; ')})`}`
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

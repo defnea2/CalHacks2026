@@ -499,10 +499,18 @@ describe('dashboard', () => {
     expect(user).not.toMatch(/Student \d+ —/);
     for (const n of names) expect(user).toContain(`=== ${n}, age`);
     expect(JSON.stringify(body.system)).toContain('Never write learner ids');
+    expect(body.output_config.effort).toBe(C.DASHBOARD_EFFORT);
     expect(h.db.classSummary.classSessionId.find(cls.id)!.summary).toBe(`${first[0]} and ${first[1]} add the bottoms; ${first[2]} is done.`);
     const descs = [...h.db.studentCluster.classSessionId.filter(cls.id)].sort((a, b) => a.position - b.position).map(c => c.description);
     expect(descs).toEqual([`${first[0]} and ${first[1]} add the denominators.`, `${names[2]} and ${first[3]} got 8/8 (= 1).`]);
     expect(clustersOf(h, cls.id).map(c => c.ids)).toEqual([ids.slice(0, 2), ids.slice(2)]);
+  });
+
+  it('DASHBOARD_EFFORT env overrides the dashboard thinking effort', () => {
+    const { h, env, cls } = classWithSims(2, setup({ ...ANTHROPIC, DASHBOARD_EFFORT: 'medium' }));
+    let req: Req | undefined;
+    (mod.refreshDashboard as any)(proc(h, env.client, r => ((req = r), anthropicResponse({ classSummary: 'ok', clusters: [] }))), { classSessionId: cls.id });
+    expect(JSON.parse(req!.text).output_config.effort).toBe('medium');
   });
 
   it('repairs invalid LLM clusters (sizes, duplicates, unknown and missing students)', () => {
