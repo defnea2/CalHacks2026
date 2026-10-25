@@ -35,10 +35,13 @@ const connHex = (ctx: Ctx) => ctx.connectionId?.toHexString() ?? '';
 
 // ================================================================ seed profiles
 
-/** Loads/updates the 20 simulation profiles (init + connect; cheap when unchanged). */
-export function ensureSimProfiles(ctx: Ctx): void {
-  for (const s of SIM_STUDENTS) {
-    const row = {
+type SimProfileRow = NonNullable<ReturnType<Ctx['db']['simProfile']['rank']['find']>>;
+let simProfileRows: Array<{ row: SimProfileRow; json: string }> | undefined;
+
+/** The seed rows and their JSON, built once per module instance (they are bundled constants). */
+function profileRows() {
+  return (simProfileRows ??= SIM_STUDENTS.map(s => {
+    const row: SimProfileRow = {
       rank: s.rank,
       name: s.name,
       age: s.age,
@@ -48,9 +51,16 @@ export function ensureSimProfiles(ctx: Ctx): void {
       misconceptions: JSON.stringify(s.misconceptions),
       memory: JSON.stringify(s.memory),
     };
-    const cur = ctx.db.simProfile.rank.find(s.rank);
+    return { row, json: JSON.stringify(row) };
+  }));
+}
+
+/** Loads/updates the 20 simulation profiles (init + connect; 20 point lookups when unchanged). */
+export function ensureSimProfiles(ctx: Ctx): void {
+  for (const { row, json } of profileRows()) {
+    const cur = ctx.db.simProfile.rank.find(row.rank);
     if (!cur) ctx.db.simProfile.insert(row);
-    else if (JSON.stringify(cur) !== JSON.stringify(row)) ctx.db.simProfile.rank.update(row);
+    else if (JSON.stringify(cur) !== json) ctx.db.simProfile.rank.update(row);
   }
 }
 
@@ -164,8 +174,8 @@ export function startClassSession(ctx: Ctx, a: StartClassArgs): ClassRow {
   if (isImageMime(mime)) ctx.db.classDocument.insert({ classSessionId: cls.id, data: a.documentData });
 
   // Every online real student joins (waiting or already in a session, ad-hoc or another class).
-  for (const p of [...ctx.db.presence.iter()]) {
-    if (p.status !== WAITING && p.status !== IN_SESSION) continue;
+  const online = [...ctx.db.presence.status.filter(WAITING), ...ctx.db.presence.status.filter(IN_SESSION)].sort((a, b) => (a.learnerId < b.learnerId ? -1 : 1));
+  for (const p of online) {
     const l = ctx.db.learner.id.find(p.learnerId);
     if (!l || l.isSimulated) continue;
     // Keeps the student's mode (a typed ad-hoc session stays in text mode).
@@ -175,8 +185,8 @@ export function startClassSession(ctx: Ctx, a: StartClassArgs): ClassRow {
   }
 
   // Simulation users: 1..n are reset (unless resetSimulated is false) and join in text mode; the others leave.
-  for (const l of [...ctx.db.learner.iter()]) {
-    if (l.isSimulated && (l.simRank < 1 || l.simRank > a.simulatedCount)) retireSimUser(ctx, l);
+  for (const l of [...ctx.db.learner.isSimulated.filter(true)]) {
+    if (l.simRank < 1 || l.simRank > a.simulatedCount) retireSimUser(ctx, l);
   }
   const reset = a.resetSimulated ?? true;
   for (let rank = 1; rank <= a.simulatedCount; rank++) {
@@ -228,7 +238,7 @@ export function endClassSession(ctx: Ctx, classSessionId: bigint): void {
 
 /** Active sessions linked to the class session. */
 export function linkedSessions(ctx: Ctx, classSessionId: bigint): SessionRow[] {
-  return [...ctx.db.session.active.filter(true)].filter(s => s.classSessionId === classSessionId).sort((a, b) => (a.id < b.id ? -1 : 1));
+  return [...ctx.db.session.classSessionId.filter(classSessionId)].filter(s => s.active).sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
 // ================================================================ simulation users
@@ -249,7 +259,7 @@ export function simSeed(p: SimStudent): SeedMemory {
 export function resetSimUser(ctx: Ctx, rank: number): LearnerRow {
   const p = ctx.db.simProfile.rank.find(rank);
   if (!p) throw new SenderError(`no simulation profile ${rank}`);
-  for (const l of [...ctx.db.learner.iter()]) if (l.isSimulated && l.simRank === rank) deleteLearner(ctx, l.id);
+  for (const l of simUsers(ctx, rank)) deleteLearner(ctx, l.id);
   const learner = ctx.db.learner.insert({
     id: 0n,
     name: p.name,
@@ -271,7 +281,12 @@ export function resetSimUser(ctx: Ctx, rank: number): LearnerRow {
 
 /** The existing simulation user of seed rank `rank` (lowest id), if any. */
 export function simUser(ctx: Ctx, rank: number): LearnerRow | undefined {
-  return [...ctx.db.learner.iter()].filter(l => l.isSimulated && l.simRank === rank).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+  return simUsers(ctx, rank)[0];
+}
+
+/** Simulation users of seed rank `rank` (simRank index; real learners have rank 0), lowest id first. */
+function simUsers(ctx: Ctx, rank: number): LearnerRow[] {
+  return [...ctx.db.learner.simRank.filter(rank)].filter(l => l.isSimulated).sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
 /** resetSimulatedStudents: simulation users 1..count (0 = all) back to their seed state (learner
@@ -302,41 +317,47 @@ function retireSimUser(ctx: Ctx, l: LearnerRow): void {
 
 function clearSimJobs(ctx: Ctx, sessionId: bigint): void {
   for (const j of [...ctx.db.simTurnJob.sessionId.filter(sessionId)]) ctx.db.simTurnJob.scheduledId.delete(j.scheduledId);
-  if (ctx.db.simRunning.sessionId.find(sessionId)) ctx.db.simRunning.sessionId.delete(sessionId);
+  ctx.db.simRunning.sessionId.delete(sessionId);
 }
 
-/** Tables keyed by sessionId that other branches add (text pipeline). Deleted when present. */
-const EXTRA_SESSION_TABLES = ['canvasState', 'beat', 'lessonState', 'learnerEvent', 'tutorRequest', 'tutorResult'];
-
-function deleteSessionData(ctx: Ctx, sessionId: bigint): void {
+/** Deletes a session and every row keyed by it (all through typed index deletes). Used when a
+ *  simulation user is reset. `seed_session` rows are not session rows (pseudo ids of the seeded
+ *  past) and go with the learner in deleteLearner. */
+export function deleteSessionData(ctx: Ctx, sessionId: bigint): void {
   const db = ctx.db;
-  for (const r of [...db.turn.sessionId.filter(sessionId)]) db.turn.id.delete(r.id);
-  for (const r of [...db.phrase.sessionId.filter(sessionId)]) db.phrase.id.delete(r.id);
-  for (const r of [...db.replySentence.sessionId.filter(sessionId)]) db.replySentence.id.delete(r.id);
-  for (const r of [...db.boardItem.sessionId.filter(sessionId)]) {
-    if (db.boardAnswer.boardItemId.find(r.id)) db.boardAnswer.boardItemId.delete(r.id);
-    db.boardItem.id.delete(r.id);
-  }
-  for (const r of [...db.turnMetrics.sessionId.filter(sessionId)]) db.turnMetrics.id.delete(r.id);
-  for (const r of [...db.audioIn.sessionId.filter(sessionId)]) db.audioIn.id.delete(r.id);
-  if (db.sessionImage.sessionId.find(sessionId)) db.sessionImage.sessionId.delete(sessionId);
-  if (db.extractionCursor.sessionId.find(sessionId)) db.extractionCursor.sessionId.delete(sessionId);
-  if (db.sessionSummary.sessionId.find(sessionId)) db.sessionSummary.sessionId.delete(sessionId);
-  for (const j of [...db.extractionJob.iter()]) if (j.sessionId === sessionId) db.extractionJob.scheduledId.delete(j.scheduledId);
-  for (const j of [...db.summaryJob.iter()]) if (j.sessionId === sessionId) db.summaryJob.scheduledId.delete(j.scheduledId);
-  for (const j of [...db.ttsJob.iter()]) if (j.sessionId === sessionId) db.ttsJob.scheduledId.delete(j.scheduledId);
-  for (const j of [...db.sttJob.iter()]) if (j.sessionId === sessionId) db.sttJob.scheduledId.delete(j.scheduledId);
+  // Voice / text pipeline.
+  db.turn.sessionId.delete(sessionId);
+  db.phrase.sessionId.delete(sessionId);
+  db.audioIn.sessionId.delete(sessionId);
+  db.replySentence.sessionId.delete(sessionId);
+  db.turnMetrics.sessionId.delete(sessionId);
+  for (const r of [...db.boardItem.sessionId.filter(sessionId)]) db.boardAnswer.boardItemId.delete(r.id);
+  db.boardItem.sessionId.delete(sessionId);
+  db.sessionImage.sessionId.delete(sessionId);
+  db.turnImage.sessionId.delete(sessionId);
+  db.sessionOwner.sessionId.delete(sessionId);
+  db.textPlayback.sessionId.delete(sessionId);
+  // Lesson planner.
+  db.canvasState.sessionId.delete(sessionId);
+  db.beat.sessionId.delete(sessionId);
+  db.lessonState.sessionId.delete(sessionId);
+  db.lessonRecord.sessionId.delete(sessionId);
+  db.lessonPlan.sessionId.delete(sessionId);
+  db.learnerEvent.sessionId.delete(sessionId);
+  db.tutorRequest.sessionId.delete(sessionId);
+  db.tutorResult.sessionId.delete(sessionId);
+  // Cloudflare dispatch (its scheduled jobs find no row any more and do nothing).
+  db.llmDispatch.sessionId.delete(sessionId);
+  // Memory bookkeeping (the learner's notes are deleted by deleteLearner).
+  db.extractionCursor.sessionId.delete(sessionId);
+  db.sessionSummary.sessionId.delete(sessionId);
+  // Scheduled jobs.
+  db.sttJob.sessionId.delete(sessionId);
+  db.ttsJob.sessionId.delete(sessionId);
+  db.textPlayJob.sessionId.delete(sessionId);
+  db.extractionJob.sessionId.delete(sessionId);
+  db.summaryJob.sessionId.delete(sessionId);
   clearSimJobs(ctx, sessionId);
-  const anyDb = db as unknown as Record<string, { iter?: () => Iterable<Record<string, unknown>>; sessionId?: { delete?: (k: bigint) => void }; id?: { delete?: (k: bigint) => void } }>;
-  for (const name of EXTRA_SESSION_TABLES) {
-    const t = anyDb[name];
-    if (!t?.iter) continue;
-    for (const r of [...t.iter()]) {
-      if (r.sessionId !== sessionId) continue;
-      if (t.id?.delete && typeof r.id === 'bigint') t.id.delete(r.id);
-      else t.sessionId?.delete?.(sessionId);
-    }
-  }
   db.session.id.delete(sessionId);
 }
 
@@ -430,16 +451,14 @@ interface SimInput {
 }
 
 function lessonStateText(ctx: Ctx, sessionId: bigint): string {
-  const t = (ctx.db as unknown as Record<string, { sessionId?: { find?: (k: bigint) => Record<string, unknown> | undefined } }>).lessonState;
-  const row = t?.sessionId?.find?.(sessionId);
+  const row = ctx.db.lessonState.sessionId.find(sessionId);
   if (!row) return '';
   return truncate(JSON.stringify({ stage: row.stage, awaitingResponse: row.awaitingResponse, checkPrompt: row.checkPrompt }), 400);
 }
 
 function canvasText(ctx: Ctx, sessionId: bigint, max: number): string {
-  const t = (ctx.db as unknown as Record<string, { sessionId?: { find?: (k: bigint) => Record<string, unknown> | undefined } }>).canvasState;
-  const row = t?.sessionId?.find?.(sessionId);
-  return row && typeof row.scene === 'string' ? truncate(row.scene, max) : '';
+  const row = ctx.db.canvasState.sessionId.find(sessionId);
+  return row ? truncate(row.scene, max) : '';
 }
 
 function transcriptLines(turns: TurnRow[], you: string, tutor: string, max: number): string {
@@ -767,6 +786,34 @@ export function refreshDashboard(ctx: PCtx, classSessionId: bigint, scheduled: b
   return { ok: true, repaired: !valid, repairs, clusters: clusters.length };
 }
 
+/** Decimal learner id strings -> u64 (anything else dropped). */
+export function memberIds(ids: readonly string[]): bigint[] {
+  return ids.filter(id => /^\d{1,20}$/.test(id)).map(id => BigInt(id));
+}
+
+let clustersBackfilled = false;
+
+/** student_cluster rows written before the typed `members` column existed get it from
+ *  learnerIds. Once per module instance (init + connect); later rows are written with both. */
+export function backfillClusterMembers(ctx: Ctx): number {
+  if (clustersBackfilled) return 0;
+  let n = 0;
+  for (const c of [...ctx.db.studentCluster.iter()]) {
+    if (c.members.length) continue;
+    const ids = memberIds(parseJson<unknown[]>(c.learnerIds, []).map(String));
+    if (!ids.length) continue;
+    ctx.db.studentCluster.id.update({ ...c, members: ids });
+    n++;
+  }
+  clustersBackfilled = true;
+  return n;
+}
+
+/** Tests only. */
+export function resetClusterBackfill(): void {
+  clustersBackfilled = false;
+}
+
 function normalizeClusters(raw: unknown): Cluster[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -786,7 +833,15 @@ export function writeDashboard(ctx: Ctx, classSessionId: bigint, summary: string
   else ctx.db.classSummary.insert(row);
   for (const c of [...ctx.db.studentCluster.classSessionId.filter(classSessionId)]) ctx.db.studentCluster.id.delete(c.id);
   clusters.forEach((c, position) =>
-    ctx.db.studentCluster.insert({ id: 0n, classSessionId, position, name: c.name || 'Group', description: c.description, learnerIds: JSON.stringify(c.learnerIds) })
+    ctx.db.studentCluster.insert({
+      id: 0n,
+      classSessionId,
+      position,
+      name: c.name || 'Group',
+      description: c.description,
+      learnerIds: JSON.stringify(c.learnerIds),
+      members: memberIds(c.learnerIds),
+    })
   );
   const st = ctx.db.dashboardState.classSessionId.find(classSessionId);
   if (!st) return;

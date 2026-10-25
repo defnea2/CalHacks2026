@@ -37,7 +37,9 @@ const T_READY: TurnStatus = 'ready';
 const T_DONE: TurnStatus = 'done';
 
 const SENTENCE_MAX = 600;
-const TTS_RETRIES = 1;
+/** Failed TTS calls are retried this often, each as a new tts_job row after TTS_RETRY_S. */
+export const TTS_RETRIES = 1;
+export const TTS_RETRY_S = 0.2;
 
 export function beginUtterance(
   ctx: Ctx,
@@ -110,6 +112,7 @@ export function addSentence(
     utteranceId: args.utteranceId,
     idx: args.idx,
     speech,
+    attempt: 0,
   });
   return row;
 }
@@ -121,20 +124,35 @@ export function addSentence(
  *  cost is one wasted TTS call for a sentence already dropped when its job starts. */
 export function synthesizeSentence(
   ctx: PCtx,
-  job: { sessionId: bigint; sentenceId: bigint; utteranceId: bigint; idx: number; speech: string },
-  attempt = 0
+  job: { sessionId: bigint; sentenceId: bigint; utteranceId: bigint; idx: number; speech: string; attempt?: number }
 ): void {
+  const attempt = job.attempt ?? 0;
   let audio;
   try {
     audio = synthesize(ctx, ttsRequest(ctx, job.speech));
   } catch (e) {
     if (!(e instanceof ProviderError)) throw e;
     console.warn(`synthesizeSentence utterance ${job.utteranceId} idx ${job.idx} attempt ${attempt}: ${e.message}`);
-    if (attempt < TTS_RETRIES) return synthesizeSentence(ctx, job, attempt + 1);
-    // Give up: mark dropped so playback (strictly by index) can skip it.
     ctx.withTx(tx => {
       const s = tx.db.replySentence.id.find(job.sentenceId);
-      if (s && s.status === PENDING) tx.db.replySentence.id.update({ ...s, status: DROPPED });
+      if (!s || s.status !== PENDING) return; // dropped meanwhile: no retry
+      if (attempt < TTS_RETRIES) {
+        // Retry as a new scheduled row (like STT and memory): the procedure slot is free meanwhile,
+        // and a barge-in can cancel it (cancelTtsJobs).
+        tx.db.ttsJob.insert({
+          scheduledId: 0n,
+          scheduledAt: dueIn(tx, TTS_RETRY_S),
+          sessionId: job.sessionId,
+          sentenceId: job.sentenceId,
+          utteranceId: job.utteranceId,
+          idx: job.idx,
+          speech: job.speech,
+          attempt: attempt + 1,
+        });
+        return;
+      }
+      // Give up: mark dropped so playback (strictly by index) can skip it.
+      tx.db.replySentence.id.update({ ...s, status: DROPPED });
       maybeFinishSpeaking(tx, job.sessionId, job.utteranceId);
     });
     return;

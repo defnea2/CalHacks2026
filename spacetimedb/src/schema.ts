@@ -24,9 +24,9 @@ export const learner = table(
     style: t.string(),
     createdAt: t.timestamp(),
     /** Classroom simulation user (night/classroom-core). */
-    isSimulated: t.bool().default(false),
+    isSimulated: t.bool().default(false).index('btree'),
     /** Seed order 1..20 of a simulation user; 0 = real learner. */
-    simRank: t.u32().default(0),
+    simRank: t.u32().default(0).index('btree'),
   }
 );
 
@@ -52,7 +52,7 @@ export const session = table(
     startedAt: t.timestamp(),
     endedAt: t.option(t.timestamp()),
     /** Linked class session (0 = ad-hoc). */
-    classSessionId: t.u64().default(0n),
+    classSessionId: t.u64().default(0n).index('btree'),
     /** false = text mode: no STT/TTS; sentences count as played after a reading delay. */
     voice: t.bool().default(true),
     /** A turn photo is waiting for the learner's next turn (no bytes; see turn_image). */
@@ -190,7 +190,7 @@ export const replySentence = table(
   {
     id: t.u64().primaryKey().autoInc(),
     sessionId: t.u64().index('btree'),
-    utteranceId: t.u64(),
+    utteranceId: t.u64().index('btree'),
     idx: t.u32(),
     display: t.string(),
     speech: t.string(),
@@ -250,6 +250,8 @@ export const boardItem = table(
      *  sentenceIdx) where the item appears (at the word there). -1 = no marker: reveal when the
      *  sentence starts playing. */
     markerPos: t.i32().default(-1),
+    /** Gap tasks: answers submitted so far (submitGapAnswer stops at GAP_MAX_ATTEMPTS). */
+    attempts: t.u32().default(0),
   }
 );
 
@@ -275,7 +277,7 @@ export const turnMetrics = table(
     sessionId: t.u64().index('btree'),
     /** Student turn idx the reply answers. */
     turnIdx: t.u32(),
-    utteranceId: t.u64(),
+    utteranceId: t.u64().index('btree'),
     turnEndAt: t.option(t.timestamp()),
     sttDoneAt: t.option(t.timestamp()),
     llmFirstTokenAt: t.option(t.timestamp()),
@@ -302,7 +304,7 @@ export const sttJob = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
-    sessionId: t.u64(),
+    sessionId: t.u64().index('btree'),
     phraseId: t.u32(),
     attempt: t.u32(),
   }
@@ -313,11 +315,13 @@ export const ttsJob = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
-    sessionId: t.u64(),
+    sessionId: t.u64().index('btree'),
     sentenceId: t.u64(),
-    utteranceId: t.u64(),
+    utteranceId: t.u64().index('btree'),
     idx: t.u32(),
     speech: t.string(),
+    /** 0 = first try; a failed call schedules attempt + 1 (TTS_RETRIES). */
+    attempt: t.u32().default(0),
   }
 );
 
@@ -326,7 +330,7 @@ export const extractionJob = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
-    sessionId: t.u64(),
+    sessionId: t.u64().index('btree'),
     learnerId: t.u64(),
     /** Turn idx range [fromIdx, toIdx). */
     fromIdx: t.u32(),
@@ -340,9 +344,19 @@ export const summaryJob = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
-    sessionId: t.u64(),
+    sessionId: t.u64().index('btree'),
     learnerId: t.u64(),
     attempt: t.u32(),
+  }
+);
+
+/** One interval row (every RETENTION_SWEEP_S): deletes photo bytes / old lesson JSON of ended
+ *  sessions (retention.ts). Created on init and on connect. */
+export const retentionJob = table(
+  { name: 'retention_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
   }
 );
 
@@ -533,6 +547,7 @@ const spacetimedb = schema(
     ttsJob,
     extractionJob,
     summaryJob,
+    retentionJob,
     memoryNote,
     noteEvidence,
     conceptState,
@@ -590,6 +605,10 @@ const spacetimedb = schema(
       LESSON_ARC: t.option(t.string()),
       /** Optional key the teacher's student-profile read (learnerInsights) must present. Unset = teacher id only. */
       INSIGHTS_KEY: t.option(t.string()),
+      /** Minutes after a session ended that its photo bytes are kept (default 30; 0/off = forever). */
+      RETENTION_IMAGE_MIN: t.option(t.string()),
+      /** Days after a session ended that its lesson JSON (lesson_record, lesson_plan, beat) is kept (default off = forever). */
+      RETENTION_DAYS: t.option(t.string()),
       /** worker (default) | cloudflare: who answers student turns (docs/CLOUD_PLAN.md Part B). */
       LLM_DISPATCH: t.option(t.string()),
       /** Cloudflare dispatch: https://<worker>.workers.dev/dispatch. */

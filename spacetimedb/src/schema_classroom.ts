@@ -18,7 +18,7 @@ export const presence = table(
   {
     learnerId: t.u64().primaryKey(),
     /** offline | waiting | in_session */
-    status: t.string(),
+    status: t.string().index('btree'),
     connectionId: t.string().index('btree'),
     updatedAt: t.timestamp(),
   }
@@ -114,8 +114,12 @@ export const studentCluster = table(
     position: t.u32(),
     name: t.string(),
     description: t.string(),
-    /** JSON string[] of learner ids (u64 as strings). */
+    /** JSON string[] of learner ids (u64 as strings). Kept (written alongside `members`) for
+     *  clients built before `members` existed. */
     learnerIds: t.string(),
+    /** Learner ids of the cluster, typed (additive column; rows written before it existed are
+     *  backfilled from learnerIds on init / first connect). */
+    members: t.array(t.u64()).default([]),
   }
 );
 

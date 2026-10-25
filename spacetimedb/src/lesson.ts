@@ -157,6 +157,7 @@ export function showBoardItem(
     lastAnswer: '',
     createdAt: ctx.timestamp,
     markerPos,
+    attempts: 0,
   });
   if (expected) ctx.db.boardAnswer.insert({ boardItemId: item.id, answer: JSON.stringify(expected) });
   return item;
@@ -181,16 +182,22 @@ export function clearBoard(ctx: Ctx, sessionId: bigint): void {
   }
 }
 
+/** Answers per gap task; more are refused (no brute-forcing the answer key). */
+export const GAP_MAX_ATTEMPTS = 10;
+
 export function submitGapAnswer(ctx: Ctx, args: { boardItemId: bigint; answer: string }): boolean {
   const item = ctx.db.boardItem.id.find(args.boardItemId);
   if (!item) throw new SenderError(`board item ${args.boardItemId} not found`);
+  getActiveSession(ctx, item.sessionId);
+  if (item.answerState === GAP_CORRECT) return true; // solved: nothing to grade again
+  if (item.attempts >= GAP_MAX_ATTEMPTS) throw new SenderError(`no more answers for this task (max ${GAP_MAX_ATTEMPTS})`);
   const stored = ctx.db.boardAnswer.boardItemId.find(item.id);
   if (!stored) throw new SenderError('this board item has no answer to check');
   const expected = parseJson<ExpectedAnswer | null>(stored.answer, null);
   if (!expected) throw new SenderError('stored answer is invalid');
   const answer = truncate(args.answer.trim(), 100);
   const ok = checkAnswer(expected, answer);
-  ctx.db.boardItem.id.update({ ...item, answerState: ok ? GAP_CORRECT : GAP_WRONG, lastAnswer: answer });
+  ctx.db.boardItem.id.update({ ...item, answerState: ok ? GAP_CORRECT : GAP_WRONG, lastAnswer: answer, attempts: item.attempts + 1 });
   return ok;
 }
 

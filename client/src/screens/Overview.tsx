@@ -10,7 +10,16 @@ import { navigate, phaseLabel, routeUrl, sessionUrl, topicLabel, tsMs } from '..
 export function Overview({ conn }: { conn: DbConnection }) {
   const [error, setError] = useState('');
   useEffect(() => {
-    const sub = subscribe(conn, ['SELECT * FROM session WHERE active = true', 'SELECT * FROM learner', 'SELECT * FROM class_session WHERE active = true'], 'overview');
+    const sub = subscribe(
+      conn,
+      [
+        'SELECT * FROM session WHERE active = true',
+        // Only the learners of the listed (active) sessions.
+        'SELECT l.* FROM learner l JOIN session s ON l.id = s.learner_id WHERE s.active = true',
+        'SELECT * FROM class_session WHERE active = true',
+      ],
+      'overview'
+    );
     sub.ready.catch(e => setError(String(e?.message ?? e)));
     return () => sub.unsubscribe();
   }, [conn]);
