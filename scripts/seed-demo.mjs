@@ -1,29 +1,28 @@
 // Seeds the demo users (real students + teachers) and the students' seed memory from
-// scripts/demo-seed.json into a LOCAL database.
+// scripts/demo-seed.json into a database (local by default).
 // Idempotent: users are matched by name; existing ones are skipped (and differences reported),
 // learner rows are never changed or deleted. Memory (`memory` per student) is written with the
 // agent-only reducer seedMemory, which replaces that student's earlier SEEDED notes and seed
 // summary (notes from real sessions are kept). For that the CLI identity registers as agent with
-// AGENT_SECRET from .env.local (read only, never printed).
+// AGENT_SECRET (shell, else .env.local; read only, never printed). On a remote server this makes
+// the logged-in CLI identity (the owner) an agent of that database, and the shell AGENT_SECRET
+// must be the remote one.
 //
-// Usage: node scripts/seed-demo.mjs [--dry-run] [--no-memory] [--file path/to/seed.json]
-//        SPACETIME_DB=voice-tutor (default) selects the database; always --server local.
+// Usage: node scripts/seed-demo.mjs [--dry-run] [--no-memory] [--file path/to/seed.json] [--yes-remote]
+//        SPACETIME_DB=voice-tutor (default) selects the database, SPACETIME_SERVER=local (default)
+//        the server; a non-local server needs --yes-remote. --dry-run prints every spacetime
+//        command and runs none (it then assumes an empty database).
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './env.mjs';
-import { call as cliCall, db, registerAgent, sql } from './stdb-cli.mjs';
+import { assertTarget, call as cliCall, db, dryRun, registerAgent, sql, target } from './stdb-cli.mjs';
 
 const argv = process.argv.slice(2);
-const dryRun = argv.includes('--dry-run');
 const withMemory = !argv.includes('--no-memory');
 const fileAt = argv.indexOf('--file');
 const seedFile = fileAt >= 0 ? path.resolve(argv[fileAt + 1]) : path.join(ROOT, 'scripts', 'demo-seed.json');
 
 function call(reducer, ...args) {
-  if (dryRun) {
-    const shown = args.map(a => (a.length > 60 ? `${a.slice(0, 57)}...` : a)).join(' ');
-    return console.log(`  [dry-run] ${reducer} ${shown}`);
-  }
   cliCall(reducer, args);
 }
 
@@ -64,7 +63,8 @@ if (problems.length) {
 // ---------------------------------------------------------------- seed
 
 try {
-  console.log(`seeding ${db} (local) from ${path.relative(ROOT, seedFile)}${dryRun ? ' (dry run)' : ''}`);
+  assertTarget('seed-demo');
+  console.log(`seeding ${db} (${target.server}) from ${path.relative(ROOT, seedFile)}${dryRun ? ' (dry run)' : ''}`);
   const learners = sql('SELECT * FROM learner');
   const simNames = new Set(learners.filter(l => l.is_simulated === 'true').map(l => l.name));
   for (const s of students) {
@@ -95,7 +95,7 @@ try {
   // ---- seed memory (agent-only reducer)
   const withSeedMemory = students.filter(s => s.memory);
   if (withMemory && withSeedMemory.length) {
-    if (!dryRun) registerAgent();
+    registerAgent();
     const real = sql('SELECT * FROM learner WHERE is_simulated = false');
     for (const s of withSeedMemory) {
       const name = s.name.trim();
@@ -127,6 +127,6 @@ try {
   }
 } catch (e) {
   console.error(`seed-demo: ${e.message}`);
-  console.error('Is the local server running (pnpm stdb:start) and the module published (node scripts/publish.mjs)?');
+  if (target.local) console.error('Is the local server running (pnpm stdb:start) and the module published (node scripts/publish.mjs)?');
   process.exit(1);
 }

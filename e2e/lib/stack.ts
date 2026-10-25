@@ -44,7 +44,7 @@ if (!process.env.PATH?.includes(path.dirname(SPACETIME))) process.env.PATH = `${
 export function publish(o: StackOptions): void {
   if (o.db === 'tutor' || o.db === 'voice-tutor') throw new Error(`refusing to publish to the live database "${o.db}"`);
   const keys = loadKeys();
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...NO_PROXY,
     CARTESIA_API_KEY: keys.CARTESIA_API_KEY ?? '',
@@ -53,8 +53,12 @@ export function publish(o: StackOptions): void {
     ...(keys.OPENROUTER_EXTRACTION_MODEL ? { OPENROUTER_EXTRACTION_MODEL: keys.OPENROUTER_EXTRACTION_MODEL } : {}),
     ...o.moduleEnv,
     SPACETIME_DB: o.db,
+    // Always the local server, whatever the shell exports (publish.mjs honours SPACETIME_SERVER).
+    SPACETIME_SERVER: 'local',
     SPACETIME_BIN: SPACETIME,
   };
+  // publish.mjs prefers a shell AGENT_SECRET; the worker below gets the .env.local one.
+  delete env.AGENT_SECRET;
   o.log(`publish ${o.db} (${Object.entries(o.moduleEnv).map(([k, v]) => `${k}=${v}`).join(' ')})`);
   const r = spawnSync('node', ['scripts/publish.mjs', '--clear'], { cwd: ROOT, env, encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`publish failed (${r.status}):\n${r.stdout}\n${r.stderr}`);
@@ -135,7 +139,7 @@ export async function up(o: StackOptions): Promise<Stack> {
     const worker = startProc(
       'pnpm',
       ['--filter', 'worker', 'start'],
-      { ...process.env, ...NO_PROXY, SPACETIME_DB: o.db, AGENT_SECRET: secret, AGENT_TOKEN_FILE: tokenFile },
+      { ...process.env, ...NO_PROXY, SPACETIME_URI: 'ws://127.0.0.1:3000', SPACETIME_DB: o.db, AGENT_SECRET: secret, AGENT_TOKEN_FILE: tokenFile },
       workerLog
     );
     procs.push(worker);
@@ -143,7 +147,7 @@ export async function up(o: StackOptions): Promise<Stack> {
     const client = startProc(
       'pnpm',
       ['--filter', 'client', 'exec', 'vite', '--host', '127.0.0.1', '--port', String(o.clientPort), '--strictPort'],
-      { ...process.env, ...NO_PROXY, VITE_SPACETIME_DB: o.db },
+      { ...process.env, ...NO_PROXY, VITE_SPACETIME_URI: 'ws://127.0.0.1:3000', VITE_SPACETIME_DB: o.db },
       clientLog
     );
     procs.push(client);

@@ -7,12 +7,14 @@
 //   node scripts/simulate.mjs --end [--teacher "Ms. Park"]     ends that teacher's running class
 //   node scripts/simulate.mjs --reset-only [--n 0]             simulated students 1..n (0 = all 20)
 //                                                              back to fresh seed memories
-//   SPACETIME_DB=<name> selects the database (default voice-tutor); always --server local.
+//   SPACETIME_DB=<name> selects the database (default voice-tutor), SPACETIME_SERVER the server
+//   (default local; a non-local server needs --yes-remote). --dry-run prints the spacetime
+//   commands and runs none.
 //
 // --reset (default, like the UI checkbox) resets simulated students 1..n to their seed memories
 // before the class starts; --no-reset keeps their memory and history from earlier runs.
 // Presets are the copy-paste classes of docs/DEMO.md.
-import { call, db, sql } from './stdb-cli.mjs';
+import { assertTarget, call, db, dryRun, sql, target } from './stdb-cli.mjs';
 
 const PRESETS = {
   A: {
@@ -66,6 +68,7 @@ function findTeacher(create) {
   let t = sql('SELECT * FROM teacher').filter(x => x.name === teacherName).sort((a, b) => Number(a.id) - Number(b.id))[0];
   if (!t && create) {
     call('create_teacher', [JSON.stringify(teacherName)]);
+    if (dryRun) return { id: '<teacher id>' };
     console.log(`created teacher "${teacherName}"`);
     t = sql('SELECT * FROM teacher').filter(x => x.name === teacherName).sort((a, b) => Number(b.id) - Number(a.id))[0];
   }
@@ -73,12 +76,13 @@ function findTeacher(create) {
 }
 
 try {
+  assertTarget('simulate');
   if (flag('--reset-only')) {
     const count = n ?? 0;
     call('reset_simulated_students', [String(count)]);
     console.log(`${db}: simulated students 1..${count || 20} reset to their seed memories`);
   } else if (flag('--end')) {
-    const t = findTeacher(false) ?? die(`no teacher "${teacherName}" in ${db}`);
+    const t = findTeacher(false) ?? (dryRun ? { id: '<teacher id>' } : die(`no teacher "${teacherName}" in ${db}`));
     const running = activeClasses(t.id);
     if (!running.length) console.log(`${db}: ${teacherName} has no running class`);
     for (const c of running) {
@@ -97,17 +101,19 @@ try {
       String(t.id), JSON.stringify(goals), JSON.stringify(content), JSON.stringify(delivery),
       '""', '""', '""', '[]', String(count), String(reset),
     ]);
+    if (dryRun) process.exit(0);
     const cls = activeClasses(t.id).filter(c => !before.has(c.id)).sort((a, b) => Number(b.id) - Number(a.id))[0]
       ?? activeClasses(t.id).sort((a, b) => Number(b.id) - Number(a.id))[0];
     if (!cls) die('class did not start');
     console.log(`${db}: class ${cls.id} started for ${teacherName} (teacher ${t.id}), preset ${presetKey}, ${count} simulated students${count ? (reset ? ', fresh memories' : ', memories kept') : ''}`);
     console.log(`class id: ${cls.id}`);
     console.log(`dashboard: ${CLIENT_URL}/?class=${cls.id}`);
-    console.log(`end it:    ${db === 'voice-tutor' ? '' : `SPACETIME_DB=${db} `}node scripts/simulate.mjs --end${teacherName === 'Ms. Park' ? '' : ` --teacher ${JSON.stringify(teacherName)}`}`);
+    const envPrefix = `${target.local ? '' : `SPACETIME_SERVER=${target.server} `}${db === 'voice-tutor' ? '' : `SPACETIME_DB=${db} `}`;
+    console.log(`end it:    ${envPrefix}node scripts/simulate.mjs --end${teacherName === 'Ms. Park' ? '' : ` --teacher ${JSON.stringify(teacherName)}`}${target.local ? '' : ' --yes-remote'}`);
     if (count) console.log('(the simulated students need the worker: pnpm worker)');
   }
 } catch (e) {
   console.error(`simulate: ${e.message}`);
-  console.error('Is the local server running (pnpm stdb:start) and the module published (node scripts/publish.mjs)?');
+  if (target.local) console.error('Is the local server running (pnpm stdb:start) and the module published (node scripts/publish.mjs)?');
   process.exit(1);
 }
