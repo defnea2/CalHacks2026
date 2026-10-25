@@ -676,6 +676,10 @@ function beginDashboard(ctx: Ctx, classSessionId: bigint, scheduled: boolean): D
   if (st.running && st.runStartedAt && now - st.runStartedAt.microsSinceUnixEpoch < micros(C.DASHBOARD_RUNNING_STALE_S)) return 'already running';
   if (scheduled && st.nextDueAt.microsSinceUnixEpoch > now + 500_000n) return 'not due';
   ctx.db.dashboardState.classSessionId.update({ ...st, running: true, runStartedAt: ctx.timestamp });
+  // Watchdog: a fatal error in the procedure would leave `running` set with no job queued. This
+  // backup job fires after the stale limit and takes the run over; a run that finishes normally
+  // replaces it with the regular next job.
+  scheduleDashboard(ctx, classSessionId, now + micros(C.DASHBOARD_RUNNING_STALE_S) + 1_000_000n);
   return { cls, students: classSnapshot(ctx, classSessionId) };
 }
 
