@@ -56,23 +56,20 @@ export function PhotoButton({ conn, sessionId, pending }: { conn: DbConnection; 
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
-  // The module bound the pending photo to a turn: show "sent" for a moment.
-  useEffect(() => {
-    if (wasPending.current && !pending && !uploading) {
-      setJustSent(true);
-      const t = setTimeout(() => setJustSent(false), 4000);
-      wasPending.current = pending;
-      return () => clearTimeout(t);
-    }
-    wasPending.current = pending;
-  }, [pending, uploading]);
+  const dropThumb = useCallback(() => setThumb(prev => (prev && URL.revokeObjectURL(prev), '')), []);
 
+  // The module bound the pending photo to a turn: show "sent" for a moment, then drop the thumbnail.
   useEffect(() => {
-    if (!pending && !uploading && thumb && !justSent) {
-      URL.revokeObjectURL(thumb);
-      setThumb('');
-    }
-  }, [pending, uploading, thumb, justSent]);
+    const was = wasPending.current;
+    wasPending.current = pending;
+    if (!was || pending) return;
+    setJustSent(true);
+    const t = setTimeout(() => {
+      setJustSent(false);
+      dropThumb();
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [pending, dropThumb]);
 
   const close = () => {
     stopCamera();
@@ -122,7 +119,6 @@ export function PhotoButton({ conn, sessionId, pending }: { conn: DbConnection; 
     if (r.ok) {
       if (thumb) URL.revokeObjectURL(thumb);
       setThumb(url);
-      wasPending.current = true;
     } else {
       URL.revokeObjectURL(url);
       setError(r.error ?? 'Could not send the photo');
@@ -131,13 +127,10 @@ export function PhotoButton({ conn, sessionId, pending }: { conn: DbConnection; 
 
   const remove = async () => {
     setError('');
+    wasPending.current = false; // removed, not sent (the row update may arrive before the call returns)
     const r = await callReducer('removePendingImage', { sessionId }, () => conn.reducers.removePendingImage({ sessionId }));
     if (!r.ok) setError(r.error ?? 'Could not remove the photo');
-    else {
-      wasPending.current = false;
-      if (thumb) URL.revokeObjectURL(thumb);
-      setThumb('');
-    }
+    else dropThumb();
   };
 
   const chip = photoChip({ pending, uploading, error, justSent });
