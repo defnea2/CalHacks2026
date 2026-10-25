@@ -39,7 +39,9 @@ import AppendTutorTurnReducer from "./append_tutor_turn_reducer";
 import BeginOpeningReducer from "./begin_opening_reducer";
 import BeginUtteranceReducer from "./begin_utterance_reducer";
 import ClearBoardReducer from "./clear_board_reducer";
+import CreateTeacherReducer from "./create_teacher_reducer";
 import CreateTestUserReducer from "./create_test_user_reducer";
+import EndClassSessionReducer from "./end_class_session_reducer";
 import EndSessionReducer from "./end_session_reducer";
 import EndTurnReducer from "./end_turn_reducer";
 import InterruptReducer from "./interrupt_reducer";
@@ -49,10 +51,13 @@ import RecordMetricReducer from "./record_metric_reducer";
 import RegisterAgentReducer from "./register_agent_reducer";
 import RememberReducer from "./remember_reducer";
 import ReportNoiseReducer from "./report_noise_reducer";
+import SetImpersonationReducer from "./set_impersonation_reducer";
 import SetPhaseReducer from "./set_phase_reducer";
+import SetPresenceReducer from "./set_presence_reducer";
 import SetSessionVoiceReducer from "./set_session_voice_reducer";
 import SetTurnStateReducer from "./set_turn_state_reducer";
 import ShowBoardItemReducer from "./show_board_item_reducer";
+import StartClassSessionReducer from "./start_class_session_reducer";
 import StartConversationReducer from "./start_conversation_reducer";
 import StartSessionReducer from "./start_session_reducer";
 import SubmitGapAnswerReducer from "./submit_gap_answer_reducer";
@@ -62,22 +67,30 @@ import UploadPhotoReducer from "./upload_photo_reducer";
 // Import all procedure arg schemas
 import * as BuildContextProcedure from "./build_context_procedure";
 import * as GetSessionImageProcedure from "./get_session_image_procedure";
+import * as RefreshDashboardProcedure from "./refresh_dashboard_procedure";
 import * as SetTopicProcedure from "./set_topic_procedure";
 
 // Import all table schema definitions
 import AudioOutRow from "./audio_out_table";
 import BoardItemRow from "./board_item_table";
 import CategoryRow from "./category_table";
+import ClassSessionRow from "./class_session_table";
+import ClassSummaryRow from "./class_summary_table";
 import ConceptRow from "./concept_table";
+import DashboardStateRow from "./dashboard_state_table";
 import ExplanationRow from "./explanation_table";
 import LearnerRow from "./learner_table";
 import PhraseRow from "./phrase_table";
 import PlaybackFlushRow from "./playback_flush_table";
+import PresenceRow from "./presence_table";
 import ReplySentenceRow from "./reply_sentence_table";
 import SessionRow from "./session_table";
+import SimProfileRow from "./sim_profile_table";
 import SkillRow from "./skill_table";
 import SpeechActivityRow from "./speech_activity_table";
+import StudentClusterRow from "./student_cluster_table";
 import TaskRow from "./task_table";
+import TeacherRow from "./teacher_table";
 import TurnRow from "./turn_table";
 import TurnMetricsRow from "./turn_metrics_table";
 
@@ -118,6 +131,34 @@ const tablesSchema = __schema({
       { name: 'category_key_key', constraint: 'unique', columns: ['key'] },
     ],
   }, CategoryRow),
+  classSession: __table({
+    name: 'class_session',
+    indexes: [
+      { accessor: 'active', name: 'class_session_active_idx_btree', algorithm: 'btree', columns: [
+        'active',
+      ] },
+      { accessor: 'id', name: 'class_session_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'teacherId', name: 'class_session_teacher_id_idx_btree', algorithm: 'btree', columns: [
+        'teacherId',
+      ] },
+    ],
+    constraints: [
+      { name: 'class_session_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ClassSessionRow),
+  classSummary: __table({
+    name: 'class_summary',
+    indexes: [
+      { accessor: 'classSessionId', name: 'class_summary_class_session_id_idx_btree', algorithm: 'btree', columns: [
+        'classSessionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'class_summary_class_session_id_key', constraint: 'unique', columns: ['classSessionId'] },
+    ],
+  }, ClassSummaryRow),
   concept: __table({
     name: 'concept',
     indexes: [
@@ -132,6 +173,17 @@ const tablesSchema = __schema({
       { name: 'concept_key_key', constraint: 'unique', columns: ['key'] },
     ],
   }, ConceptRow),
+  dashboardState: __table({
+    name: 'dashboard_state',
+    indexes: [
+      { accessor: 'classSessionId', name: 'dashboard_state_class_session_id_idx_btree', algorithm: 'btree', columns: [
+        'classSessionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'dashboard_state_class_session_id_key', constraint: 'unique', columns: ['classSessionId'] },
+    ],
+  }, DashboardStateRow),
   explanation: __table({
     name: 'explanation',
     indexes: [
@@ -183,6 +235,20 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, PlaybackFlushRow),
+  presence: __table({
+    name: 'presence',
+    indexes: [
+      { accessor: 'connectionId', name: 'presence_connection_id_idx_btree', algorithm: 'btree', columns: [
+        'connectionId',
+      ] },
+      { accessor: 'learnerId', name: 'presence_learner_id_idx_btree', algorithm: 'btree', columns: [
+        'learnerId',
+      ] },
+    ],
+    constraints: [
+      { name: 'presence_learner_id_key', constraint: 'unique', columns: ['learnerId'] },
+    ],
+  }, PresenceRow),
   replySentence: __table({
     name: 'reply_sentence',
     indexes: [
@@ -218,6 +284,17 @@ const tablesSchema = __schema({
       { name: 'session_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, SessionRow),
+  simProfile: __table({
+    name: 'sim_profile',
+    indexes: [
+      { accessor: 'rank', name: 'sim_profile_rank_idx_btree', algorithm: 'btree', columns: [
+        'rank',
+      ] },
+    ],
+    constraints: [
+      { name: 'sim_profile_rank_key', constraint: 'unique', columns: ['rank'] },
+    ],
+  }, SimProfileRow),
   skill: __table({
     name: 'skill',
     indexes: [
@@ -240,6 +317,20 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, SpeechActivityRow),
+  studentCluster: __table({
+    name: 'student_cluster',
+    indexes: [
+      { accessor: 'classSessionId', name: 'student_cluster_class_session_id_idx_btree', algorithm: 'btree', columns: [
+        'classSessionId',
+      ] },
+      { accessor: 'id', name: 'student_cluster_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'student_cluster_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, StudentClusterRow),
   task: __table({
     name: 'task',
     indexes: [
@@ -257,6 +348,17 @@ const tablesSchema = __schema({
       { name: 'task_key_key', constraint: 'unique', columns: ['key'] },
     ],
   }, TaskRow),
+  teacher: __table({
+    name: 'teacher',
+    indexes: [
+      { accessor: 'id', name: 'teacher_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'teacher_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, TeacherRow),
   turn: __table({
     name: 'turn',
     indexes: [
@@ -302,7 +404,9 @@ const reducersSchema = __reducers(
   __reducerSchema("begin_opening", BeginOpeningReducer),
   __reducerSchema("begin_utterance", BeginUtteranceReducer),
   __reducerSchema("clear_board", ClearBoardReducer),
+  __reducerSchema("create_teacher", CreateTeacherReducer),
   __reducerSchema("create_test_user", CreateTestUserReducer),
+  __reducerSchema("end_class_session", EndClassSessionReducer),
   __reducerSchema("end_session", EndSessionReducer),
   __reducerSchema("end_turn", EndTurnReducer),
   __reducerSchema("interrupt", InterruptReducer),
@@ -312,10 +416,13 @@ const reducersSchema = __reducers(
   __reducerSchema("register_agent", RegisterAgentReducer),
   __reducerSchema("remember", RememberReducer),
   __reducerSchema("report_noise", ReportNoiseReducer),
+  __reducerSchema("set_impersonation", SetImpersonationReducer),
   __reducerSchema("set_phase", SetPhaseReducer),
+  __reducerSchema("set_presence", SetPresenceReducer),
   __reducerSchema("set_session_voice", SetSessionVoiceReducer),
   __reducerSchema("set_turn_state", SetTurnStateReducer),
   __reducerSchema("show_board_item", ShowBoardItemReducer),
+  __reducerSchema("start_class_session", StartClassSessionReducer),
   __reducerSchema("start_conversation", StartConversationReducer),
   __reducerSchema("start_session", StartSessionReducer),
   __reducerSchema("submit_gap_answer", SubmitGapAnswerReducer),
@@ -327,6 +434,7 @@ const reducersSchema = __reducers(
 const proceduresSchema = __procedures(
   __procedureSchema("build_context", BuildContextProcedure.params, BuildContextProcedure.returnType),
   __procedureSchema("get_session_image", GetSessionImageProcedure.params, GetSessionImageProcedure.returnType),
+  __procedureSchema("refresh_dashboard", RefreshDashboardProcedure.params, RefreshDashboardProcedure.returnType),
   __procedureSchema("set_topic", SetTopicProcedure.params, SetTopicProcedure.returnType),
 );
 

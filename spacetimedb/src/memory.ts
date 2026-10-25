@@ -318,7 +318,7 @@ export function extractMemory(ctx: PCtx, job: ExtractionJobRow): void {
   const input = ctx.withTx(tx => {
     if (cursorOf(tx, job.sessionId) !== job.fromIdx) return null; // another run handled it
     if (extractionRunning(tx, job.sessionId)) return null; // duplicate of a window in flight
-    const since = tx.timestamp.microsSinceUnixEpoch;
+    const since = tx.timestamp.microsSinceUnixEpoch || 1n; // 0 means idle
     setRunning(tx, job.sessionId, since);
     const turns = sessionTurns(tx, job.sessionId).filter(t => t.idx >= job.fromIdx - CONTEXT_TURNS && t.idx < job.toIdx);
     return { turns, notes: learnerNotes(tx, job.learnerId), since };
