@@ -146,7 +146,8 @@ export function TeachingCanvas({
         <span className="canvas-interaction-hint">
           {choiceIds.length ||
           (interactionEnabled &&
-            (canvas.math?.visual.interactive ||
+            // A cut or reassembled parallelogram is a finished proof; only the uncut shape slants.
+            ((canvas.math?.visual.interactive && !(canvas.math.visual.kind === "parallelogram" && canvas.math.visual.stage !== "slant")) ||
               canvas.activity?.activity.allowedInteractions.length))
             ? "You can change this picture"
             : "Look at the picture"}

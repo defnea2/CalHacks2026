@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 const outputSchema = {
   type: "object", properties: { step_json: { type: "string" } },
@@ -23,15 +24,46 @@ export function codexArgs(dir: string, model = DEFAULT_TUTOR_MODEL) {
 }
 function childEnvironment() {
   // Keep normal CLI login lookup. Never read, copy, or send its credential files ourselves.
+  const keys = ["PATH", "HOME", "CODEX_HOME", "TMPDIR", "LANG", "USER", "LOGNAME", "SYSTEMROOT"];
+  if (process.platform === "win32") keys.push("USERPROFILE", "APPDATA", "LOCALAPPDATA", "HOMEDRIVE", "HOMEPATH", "TEMP", "TMP", "USERNAME");
   const env: NodeJS.ProcessEnv = {};
-  for (const key of ["PATH", "HOME", "CODEX_HOME", "TMPDIR", "LANG", "USER", "LOGNAME", "SYSTEMROOT"])
-    if (process.env[key]) env[key] = process.env[key];
+  for (const key of keys) if (process.env[key]) env[key] = process.env[key];
   return env;
+}
+function windowsCodexPackage() {
+  if (process.arch === "arm64") return { name: "codex-win32-arm64", triple: "aarch64-pc-windows-msvc" };
+  if (process.arch === "x64") return { name: "codex-win32-x64", triple: "x86_64-pc-windows-msvc" };
+  return undefined;
+}
+function codexCandidates(binary: string) {
+  const explicit = /[\\/]/.test(binary) || /^[A-Za-z]:/.test(binary);
+  if (explicit) return binary.toLowerCase().endsWith(".cmd") ? [binary] : [binary, `${binary}.cmd`];
+  const names = [binary, `${binary}.exe`, `${binary}.cmd`, `${binary}.bat`];
+  return (process.env.PATH ?? "").split(delimiter).filter(Boolean).flatMap(dir => names.map(name => join(dir, name)));
+}
+/** npm installs `codex` as a `.cmd` shim. Node's spawn does not run that shim, so use the native executable it would launch. */
+export function codexLaunch(binary: string) {
+  if (process.platform !== "win32") return { command: binary, leadingArgs: [] as string[] };
+  const pkg = windowsCodexPackage();
+  for (const candidate of codexCandidates(binary)) {
+    if (!existsSync(candidate)) continue;
+    const lower = candidate.toLowerCase();
+    if (lower.endsWith(".exe")) return { command: candidate, leadingArgs: [] as string[] };
+    if (lower.endsWith(".js")) return { command: process.execPath, leadingArgs: [candidate] };
+    if (!lower.endsWith(".cmd") && !lower.endsWith(".bat")) continue;
+    const root = join(dirname(candidate), "node_modules", "@openai", "codex");
+    const exe = pkg && join(root, "node_modules", "@openai", pkg.name, "vendor", pkg.triple, "bin", "codex.exe");
+    if (exe && existsSync(exe)) return { command: exe, leadingArgs: [] as string[] };
+    const script = join(root, "bin", "codex.js");
+    if (existsSync(script)) return { command: process.execPath, leadingArgs: [script] };
+  }
+  return { command: binary, leadingArgs: [] as string[] };
 }
 async function run(binary: string, args: string[], input: string, signal: AbortSignal) {
   signal.throwIfAborted();
+  const launch = codexLaunch(binary);
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(binary, args, { stdio: ["pipe", "ignore", "pipe"], env: childEnvironment() });
+    const child = spawn(launch.command, [...launch.leadingArgs, ...args], { stdio: ["pipe", "ignore", "pipe"], env: childEnvironment(), windowsHide: true });
     let stderr = "";
     let killTimer: ReturnType<typeof setTimeout> | undefined;
     const cancel = () => {

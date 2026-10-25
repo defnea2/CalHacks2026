@@ -1,5 +1,7 @@
 # Integrated lesson session
 
+**Current provider and voice API:** see [Anthropic streaming and voice integration](VOICE.md). Anthropic is the default; Codex below refers to the legacy opt-in bridge. `TeachingSession` now supports `{playback: "voice"}` in addition to the text flow described here.
+
 The main app at `http://127.0.0.1:5173/` integrates the teaching planner with the latest visual engine. `npm run dev` is sufficient for the three offline lessons. There is no microphone, speech service, model service, or secret required for those samples. The default question input now uses the real Codex-backed model; see [LOCAL_MODEL.md](LOCAL_MODEL.md) for setup without an API key.
 
 ## What the product does now

@@ -1,6 +1,6 @@
 # Implemented visual-engine features
 
-This inventory describes the `feature/visual-engine` branch. Offline previews run without model access; generated lessons use the local development endpoint. The engine consumes structured configuration; it includes a real-model local bridge using Codex ChatGPT sign-in; LiveKit transport remains unconnected.
+This inventory describes the `feature/visual-engine` branch. Offline previews run without model access; generated lessons use the local development endpoint with Anthropic streaming by default. A voice-ready teaching coordinator accepts STT text and exposes correlated speech/visual playback; LiveKit transport remains unconnected. See [setup and voice API](teaching/VOICE.md).
 
 ## Integrated teaching experience
 
@@ -11,10 +11,20 @@ This inventory describes the `feature/visual-engine` branch. Offline previews ru
 - An asynchronous plan is checked against both planner revision and the director's monotonic context version, including resets to identical scene contents.
 - Cancellation ignores late results even when a model ignores AbortSignal. Errors preserve the current scene; retries use current context.
 - Lesson notes, original-question handoff, independent-example evidence, keyboard responses, and narrow-screen layout. No invented mastery score.
-- Real compact-math model endpoint via the local Codex CLI, with server-owned prompts/schemas, shared validation and one bounded repair. No API key; uses the local ChatGPT login. Broad model-quality evaluation remains outstanding.
+- Compact-math planning through the Anthropic API, with server-owned schema/instructions, validated visual blueprints and streamed narration. The schema is sent as instructions, not structured output (its grammar exceeds the API limit), so replies are validated locally, with one repair only before anything is shown. The explicit legacy Codex mode retains its bounded repair. Broad model-quality evaluation remains outstanding.
 - Development tools remain available separately, retaining the active lesson.
 
 See [the session handoff](teaching/SESSION.md) for the integration API and demo.
+
+## Slant-and-reassemble area demonstration
+
+- Featured on the welcome screen: "Does slanting a shape make it bigger?" (`src/teaching/ui/SlantLesson.tsx`).
+- Phases `prediction → exploration → cut → translation → explanation` in a pure reducer (`src/visual-math/shear.ts`). The area result is hidden until a prediction is recorded and the proof has played.
+- Fixed base 6 and height 4; shear `0 ≤ s ≤ base` in steps of 0.5 via the top-edge handle (pointer, arrow keys, Home/End) or a slider. Cutting is disabled at zero shear, which has no wedge.
+- `ShearProof` (plain SVG) cuts the left wedge along the height and translates that same polygon by the base length. Input is frozen during cut and slide. Reduced motion jumps straight to the result.
+- After the proof, `/api/teaching/shear-feedback` sends the learner's real prediction, slant, largest slant, adjustment count and attempts to Anthropic with structured output. The tutor responds to the prediction, asks for an explanation, then asks a question with new numbers. Replies are accepted only for the latest request id and lesson revision.
+- Without a model, a scripted reply labeled "Offline tutor · scripted, not live" is shown. It never grades free text.
+- Generated lessons use it too: `parallelogram` is a compact visual kind (see [compact math](COMPACT_MATH.md)). The planner asks for a prediction with a choice check, then plays slant → cut → reassembled on the same scene. Verified with the live Anthropic model.
 
 ## Real-time configuration
 

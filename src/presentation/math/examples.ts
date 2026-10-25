@@ -25,6 +25,10 @@ export function createMathExample(
     );
   } else if (next.kind === "geometry") {
     next.width = intent === "simpler" ? Math.max(1, Math.ceil(next.width / 2)) : next.width === 12 ? 2 : Math.min(12, next.width + 1);
+  } else if (next.kind === "parallelogram") {
+    // A fresh slant of the same idea; the proof restarts from the uncut shape.
+    next.stage = "slant";
+    next.shear = intent === "simpler" ? Math.min(next.base, 1) : next.shear >= next.base ? 0.5 : next.shear + 0.5;
   } else if (intent === "simpler") {
     const span = next.max - next.min;
     next.markers = next.markers.map((marker) => ({

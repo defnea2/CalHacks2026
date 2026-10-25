@@ -2,6 +2,8 @@
 
 # LiveKit + Cartesia handoff
 
+**Current integration:** use the [Anthropic streaming and voice-session API](teaching/VOICE.md). `TeachingSession(..., {playback: "voice"})` now owns streaming, playback sequencing, STT submissions, interruption and replay. The manual director/RPC wiring below is the lower-level contract; do not advance it independently alongside the new coordinator. No LiveKit or Cartesia transport is installed yet.
+
 The visual engine is ready for a transport adapter. This document specifies that boundary. **This branch does not install LiveKit, start an agent server, call Cartesia, or implement the RPC adapter.** It supplies the tested director, schemas, renderer, math models, and voice-free rehearsal.
 
 Start with [MATH_CANVAS.md](MATH_CANVAS.md). Public exports are in `src/presentation/index.ts`. Cartesia/LiveKit secrets and room-token creation belong on the teammate's server.
@@ -175,4 +177,4 @@ The local test suite verifies the visual-side lifecycle and actions. Room connec
 
 The compact planner can now return 1–4 `TeachingStep.beats` from a single request. Each contains a short narration and a cue at `atMs: 0`; later beats update the existing mathematical scene. Speak each beat through Cartesia and advance only after its audio finishes, using the existing VisualDirector token lifecycle. Enable learner input and call `planner.presented(step.id)` only after the final beat. A new learner turn is the next planning boundary; do not re-query the LLM between beats.
 
-The standalone text UI currently uses local reading-time autoplay, Pause, Next and Replay. These are not speech timestamps. Disable that timer when integrating actual audio, and invalidate old callbacks when interrupted or replayed. `TeachingSession.replay()` is for the text rehearsal; voice replay must reset the corresponding audio as well. Geometry interpolation takes one second; it runs locally from the command at the beginning of a beat. See [COMPACT_MATH.md](COMPACT_MATH.md#generated-visual-sequences) for the compact `sequence` fields.
+The standalone text UI uses local reading-time autoplay, Pause, Next and Replay; these are not speech timestamps. With `{playback: "voice"}` autoplay is off and `TeachingSession.replay()` is also the voice replay: it aborts the old audio (`speech.signal`), restores the pre-lesson scene and issues fresh tokens, so the host must stop its player when the signal aborts and must ignore callbacks carrying old tokens. Geometry interpolation takes one second; it runs locally from the command at the beginning of a beat. See [COMPACT_MATH.md](COMPACT_MATH.md#generated-visual-sequences) for the compact `sequence` fields.

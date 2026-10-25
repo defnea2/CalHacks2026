@@ -1,4 +1,4 @@
-// Manual integration check: calls the real signed-in model and consumes Codex allowance.
+// Manual integration check: calls the configured provider and consumes its allowance.
 // Run with the dev server already listening: npm run test:live-model
 import { createServer } from "vite";
 import { writeFile } from "node:fs/promises";
@@ -8,16 +8,16 @@ const loader = await createServer({
 });
 try {
   const { TeachingSession } = await loader.ssrLoadModule("/src/teaching/TeachingSession.ts");
-  const { createHttpPlanningModel } = await loader.ssrLoadModule("/src/teaching/modelAdapter.ts");
+  const { createStreamingPlanningModel } = await loader.ssrLoadModule("/src/teaching/modelAdapter.ts");
   const topic = process.argv[2] || "Why does doubling the width of a rectangle double its area?";
-  const session = new TeachingSession({ sessionId: crypto.randomUUID(), age: 9, topic }, createHttpPlanningModel("http://127.0.0.1:5173/api/teaching/plan"));
+  const session = new TeachingSession({ sessionId: crypto.randomUUID(), age: 9, topic }, createStreamingPlanningModel("http://127.0.0.1:5173/api/teaching/plan"));
   const started = Date.now();
   if (!await session.plan()) throw new Error(session.getSnapshot().error);
   while (session.planner.getSnapshot().status === "presenting") {
     if (!session.presentNext()) throw new Error(session.getSnapshot().error);
   }
   const first = structuredClone(session.planner.getSnapshot().step);
-  console.log(JSON.stringify({ phase: first.phase, beats: first.beats.length, title: session.director.getSnapshot().canvas.title, check: first.check?.kind, elapsedSeconds: Math.round((Date.now()-started)/1000) }));
+  console.log(JSON.stringify({ phase: first.phase, beats: first.beats.length, title: session.director.getSnapshot().canvas.title, check: first.check?.kind, firstBeatMs: session.getSnapshot().firstBeatMs, planCompleteMs: session.getSnapshot().planCompleteMs, elapsedSeconds: Math.round((Date.now()-started)/1000) }));
   const response = first.check?.kind === "explanation" && process.env.TUTOR_SMOKE_REPLY
     ? { kind: "answer", text: process.env.TUTOR_SMOKE_REPLY }
     : first.check?.kind === "choice"
@@ -30,7 +30,7 @@ try {
   while (session.planner.getSnapshot().status === "presenting") {
     if (!session.presentNext()) throw new Error(session.getSnapshot().error);
   }
-  console.log(JSON.stringify({ phase: session.planner.getSnapshot().step.phase, beats: session.planner.getSnapshot().step.beats.length, title: session.director.getSnapshot().canvas.title, evidence: session.planner.getSnapshot().evidence.at(-1)?.outcome, elapsedSeconds: Math.round((Date.now()-started)/1000) }));
+  console.log(JSON.stringify({ phase: session.planner.getSnapshot().step.phase, beats: session.planner.getSnapshot().step.beats.length, title: session.director.getSnapshot().canvas.title, evidence: session.planner.getSnapshot().evidence.at(-1)?.outcome, firstBeatMs: session.getSnapshot().firstBeatMs, planCompleteMs: session.getSnapshot().planCompleteMs, elapsedSeconds: Math.round((Date.now()-started)/1000) }));
   if (process.env.TUTOR_SMOKE_OUTPUT) await writeFile(process.env.TUTOR_SMOKE_OUTPUT, JSON.stringify({ topic, steps: session.planner.getSnapshot().history, canvas: session.director.getSnapshot().canvas, evidence: session.planner.getSnapshot().evidence }, null, 2));
   session.cancel();
 } finally { await loader.close(); }
