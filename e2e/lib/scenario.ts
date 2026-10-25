@@ -34,6 +34,7 @@ interface DomSnapshot {
   phase: string | null;
   phaseText: string;
   noise: string | null;
+  mathBoard: { canvas: boolean; error: boolean } | null;
   board: { id: string; kind: string; revealed: boolean; known: boolean; fallback: boolean; empty: boolean }[];
   tutorCaptions: { utteranceId: string; idx: string; status: string; text: string }[];
   studentCaptions: { phraseId: string; text: string }[];
@@ -100,6 +101,11 @@ async function snapshotDom(page: Page): Promise<DomSnapshot> {
       phase: phaseEl?.getAttribute('data-phase') ?? null,
       phaseText: phaseEl?.textContent?.trim() ?? '',
       noise: document.querySelector('[data-testid="noise-indicator"]')?.getAttribute('data-noise') ?? null,
+      // Team canvas: all math_canvas items share one persistent animated canvas.
+      mathBoard: (() => {
+        const el = document.querySelector('[data-testid="animated-math-board"]');
+        return el ? { canvas: !!el.querySelector('svg,canvas,.katex'), error: !!el.querySelector('[role="alert"]') } : null;
+      })(),
       board: q('[data-testid="board-item"]').map(el => ({
         id: el.getAttribute('data-id') ?? '',
         kind: el.getAttribute('data-kind') ?? '',
@@ -330,7 +336,10 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
   else {
     const bad = dom.board.filter(b => b.revealed && (b.fallback || !b.known || b.empty));
     const hidden = dom.board.filter(b => !b.revealed);
-    const missing = srv.boardItems.filter(b => !dom.board.some(d => d.id === b.id));
+    // math_canvas items render inside the shared animated canvas (no per-item element).
+    const mathOk = !!dom.mathBoard && dom.mathBoard.canvas && !dom.mathBoard.error;
+    const missing = srv.boardItems.filter(b => !dom.board.some(d => d.id === b.id) && !(b.kind === 'math_canvas' && mathOk)); // pack-literal-ok
+    if (dom.mathBoard?.error) bad.push({ id: 'math', kind: 'math_canvas', revealed: true, known: true, fallback: true, empty: false }); // pack-literal-ok
     add(
       'board',
       !bad.length && !missing.length ? (hidden.length ? 'warn' : 'pass') : 'fail',

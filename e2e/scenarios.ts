@@ -5,7 +5,8 @@ export const E2E_DEFAULTS = {
   db: process.env.E2E_DB || 'tutor-e2e',
   clientPort: Number(process.env.E2E_CLIENT_PORT || 5180),
   /** Extra client URL params for every session tab, e.g. `smart_turn=0&vad_turn_ms=900`. */
-  clientQuery: (process.env.E2E_CLIENT_QUERY || '').replace(/^[?&]/, ''),
+  // debug=1: the team layout shows phase/topic/turn-state indicators only in the debug panel.
+  clientQuery: ['debug=1', (process.env.E2E_CLIENT_QUERY || '').replace(/^[?&]/, '')].filter(Boolean).join('&'),
   moduleEnv: {
     STT_BASE_URL: process.env.E2E_STT_BASE_URL || 'https://api.cartesia.ai',
     CARTESIA_STT_MODEL: process.env.E2E_STT_MODEL || 'ink-whisper',

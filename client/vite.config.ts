@@ -64,7 +64,8 @@ export default defineConfig({
   envDir: '..',
   resolve: { dedupe: ['react', 'react-dom'] },
   plugins: [vadAssets(), react(), tailwindcss()],
-  optimizeDeps: { include: ['@ricky0123/vad-web', 'onnxruntime-web/wasm'] },
+  // Team canvas deps pre-bundled too: a mid-session re-optimisation reloads the page (E2E flake).
+  optimizeDeps: { include: ['@ricky0123/vad-web', 'onnxruntime-web/wasm', 'katex', 'mafs', 'motion/react'] },
   // the Smart Turn worker imports ONNX Runtime, which code-splits (needs ES module workers)
   worker: { format: 'es' },
   // 5175: the team's root app (src/) keeps 5173
