@@ -24,6 +24,10 @@ export interface PhaseDef {
   label: string;
   /** Shown to the LLM in the system prompt ({{phases}}). */
   description: string;
+  /** Detailed instructions for this phase: what the tutor does, what to watch for, when to
+   *  move on. Only the CURRENT phase's block is in the system prompt ({{phaseInstructions}});
+   *  it is swapped completely when the phase changes. */
+  instructions: string;
   /** Phase ids this phase may move to. */
   next: string[];
 }
@@ -47,8 +51,11 @@ export interface TaxonomyCategory {
 }
 
 export interface PromptTemplates {
-  /** Placeholders: {{phases}} {{tools}} {{concepts}} {{board}} (kinds). */
+  /** Placeholders: {{phases}} {{tools}} {{concepts}} {{board}} (kinds), {{phase}} and
+   *  {{phaseInstructions}} (current phase; re-rendered for every LLM call). */
   system: string;
+  /** The tutor speaks first: instruction for the opening reply (no student turn yet). */
+  opening: string;
   /** Placeholders: {{learner}} {{memory}} {{task}} {{phase}} {{board}}. */
   context: string;
   /** Prompt for the background memory extractor (module). */

@@ -33,6 +33,20 @@ describe('lesson pack contract (active pack)', () => {
     for (const t of Object.values(pack.prompts)) expect(renderTemplate(t, values)).not.toMatch(/\{\{\w+\}\}/);
   });
 
+  it('every phase has its own non-empty instructions block', () => {
+    for (const p of pack.phases) expect(p.instructions.trim().length, p.id).toBeGreaterThan(20);
+    expect(new Set(pack.phases.map(p => p.instructions)).size).toBe(pack.phases.length);
+    expect(ALLOWED_PLACEHOLDERS).toContain('phaseInstructions');
+  });
+
+  it('system prompt: only the first sentence is short, every reply ends with a next step', () => {
+    const sys = pack.prompts.system;
+    expect(sys).toMatch(/FIRST sentence/);
+    expect(sys).toMatch(/next step/i);
+    // No other length limits for the rest of the reply.
+    expect(sys).not.toMatch(/12 to 15 words|1 to 3 sentences|Short sentences/);
+  });
+
   it('exports the board kind list for the client renderer registry', () => {
     expect(boardKindNames(pack)).toEqual(pack.boardKinds.map(k => k.name));
     expect(missingRenderers(pack, boardKindNames(pack))).toEqual([]);
@@ -77,6 +91,24 @@ describe('contract checks catch broken packs', () => {
     const p = clone(pack);
     (p.boardKinds[0] as { contentSchema?: unknown }).contentSchema = undefined;
     expect(PACK_CHECKS.boardKinds(p).join('\n')).toMatch(/missing content schema/);
+  });
+
+  it('phase without instructions', () => {
+    const p = clone(pack);
+    p.phases[2]!.instructions = '  ';
+    (p.phases[3] as { instructions?: string }).instructions = undefined;
+    const errs = PACK_CHECKS.phases(p).join('\n');
+    expect(errs).toMatch(new RegExp(`phase "${p.phases[2]!.id}": instructions must be non-empty`));
+    expect(errs).toMatch(new RegExp(`phase "${p.phases[3]!.id}": instructions must be non-empty`));
+  });
+
+  it('system prompt without {{phaseInstructions}}, missing opening prompt', () => {
+    const p = clone(pack);
+    p.prompts.system = p.prompts.system.replace('{{phaseInstructions}}', '');
+    delete (p.prompts as { opening?: string }).opening;
+    const errs = PACK_CHECKS.prompts(p).join('\n');
+    expect(errs).toMatch(/must contain \{\{phaseInstructions\}\}/);
+    expect(errs).toMatch(/prompt "opening" is missing/);
   });
 
   it('unknown prompt placeholder', () => {
@@ -170,7 +202,7 @@ describe('contract checks catch broken packs', () => {
 
   it('tool specs follow the pack', () => {
     const p = clone(pack);
-    p.phases.push({ id: 'extra_phase', label: 'Extra', description: 'x', next: [p.finalPhase] });
+    p.phases.push({ id: 'extra_phase', label: 'Extra', description: 'x', instructions: 'Do x.', next: [p.finalPhase] });
     expect(buildToolSpecs(p).find(s => s.name === 'set_phase')!.parameters).toMatchObject({
       properties: { phase: { enum: expect.arrayContaining(['extra_phase']) } },
     });

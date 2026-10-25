@@ -31,6 +31,10 @@ export type MemoryOutcome = (typeof MEMORY_OUTCOMES)[number];
 export const GAP_STATES = ['open', 'correct', 'wrong'] as const;
 export type GapState = (typeof GAP_STATES)[number];
 
+/** turn_metrics.turnIdx of the tutor's opening reply (the tutor speaks first, so there is no
+ *  student turn it answers). u32 max: never a real turn idx. */
+export const OPENING_TURN_IDX = 0xffffffff;
+
 /** Metric names accepted by the recordMetric reducer (columns of turn_metrics). */
 export const METRIC_NAMES = ['turnEndAt', 'sttDoneAt', 'llmFirstTokenAt', 'firstSentenceAt', 'firstAudioAt', 'firstPlaybackAt'] as const;
 export type MetricName = (typeof METRIC_NAMES)[number];

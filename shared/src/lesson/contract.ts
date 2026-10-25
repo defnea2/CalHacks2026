@@ -7,7 +7,7 @@ import { checkAnswer, parseFraction, parseNumber } from '../answers';
 import { evaluateChain, fillBlank, answerToLatex, literalFraction, rat, ratEquals, decimalToRational, BLANK, REL_SPLIT, type Chain, type Rational } from './latexMath';
 
 /** The only placeholders a pack's prompt templates may use (spec "Replaceable lesson pack"). */
-export const ALLOWED_PLACEHOLDERS = ['learner', 'memory', 'task', 'phase', 'phases', 'board', 'tools', 'concepts'] as const;
+export const ALLOWED_PLACEHOLDERS = ['learner', 'memory', 'task', 'phase', 'phases', 'phaseInstructions', 'board', 'tools', 'concepts'] as const;
 
 export const MAX_CATEGORIES = 10;
 
@@ -39,6 +39,7 @@ export function checkPhases(pack: LessonPack): string[] {
   for (const d of dupes(ids)) errs.push(`duplicate phase id "${d}"`);
   for (const p of pack.phases) {
     if (!p.id.trim() || !p.label.trim() || !p.description.trim()) errs.push(`phase "${p.id}": id, label and description must be non-empty`);
+    if (typeof p.instructions !== 'string' || !p.instructions.trim()) errs.push(`phase "${p.id}": instructions must be non-empty`);
     for (const n of p.next) if (!idSet.has(n)) errs.push(`phase "${p.id}": next "${n}" is not a phase`);
   }
   if (!idSet.has(pack.initialPhase)) errs.push(`initialPhase "${pack.initialPhase}" is not a phase`);
@@ -107,10 +108,17 @@ export function checkBoardKinds(pack: LessonPack): string[] {
 // Prompts
 // ---------------------------------------------------------------------------
 
+const REQUIRED_PROMPTS = ['system', 'opening', 'context', 'extraction', 'summary'] as const;
+
 export function checkPrompts(pack: LessonPack): string[] {
   const errs: string[] = [];
   const allowed = new Set<string>(ALLOWED_PLACEHOLDERS);
   const values = Object.fromEntries(ALLOWED_PLACEHOLDERS.map(p => [p, `<${p}>`]));
+  for (const key of REQUIRED_PROMPTS) if (typeof pack.prompts[key] !== 'string') errs.push(`prompt "${key}" is missing`);
+  // Without it the per-phase instructions would never reach the model.
+  if (typeof pack.prompts.system === 'string' && !templatePlaceholders(pack.prompts.system).includes('phaseInstructions')) {
+    errs.push('prompt "system" must contain {{phaseInstructions}}');
+  }
   for (const [name, template] of Object.entries(pack.prompts)) {
     if (typeof template !== 'string' || !template.trim()) {
       errs.push(`prompt "${name}" is empty`);

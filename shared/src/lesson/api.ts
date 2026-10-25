@@ -172,6 +172,11 @@ export function describePhases(pack: LessonPack): string {
     .join('\n');
 }
 
+/** {{phaseInstructions}} block: the instructions of ONE phase (the current one). */
+export function phaseInstructions(pack: LessonPack, phaseId: string): string {
+  return getPhase(pack, phaseId)?.instructions ?? '';
+}
+
 /** {{concepts}} block for the system prompt. */
 export function describeTaxonomy(pack: LessonPack): string {
   return pack.taxonomy.map(c => `- ${c.key}: ${c.concepts.map(k => k.key).join(', ')}`).join('\n');
