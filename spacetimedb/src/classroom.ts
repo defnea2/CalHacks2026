@@ -610,7 +610,8 @@ const DASHBOARD_SYSTEM = [
   'Return:',
   '- classSummary: 2-4 short, concrete sentences about the learning state of the whole class: what most are working on, how far they got, common difficulties or misconceptions, and who (by first name) needs the teacher now. No fluff.',
   '- clusters: group EVERY student into exactly one cluster by similarity of their learning state (same lesson phase, same problem or misconception, similar progress). name: 1-3 words (e.g. "Adding bottoms", "Ready to practise"). description: one short sentence on their shared status. learnerIds: the student ids exactly as given.',
-  'Cluster sizes are strict; follow the size rule in the message.',
+  'Check the maths yourself before calling an answer wrong (e.g. 5/8 + 3/8 = 8/8 = 1 is correct). Describe what students actually said, not what the tutor repeated.',
+  'Cluster sizes are strict; follow the size rule in the message. Never return a cluster of 1 unless the class has exactly 1 student.',
 ].join('\n');
 
 function dashboardUser(cls: ClassRow, students: StudentSnapshot[]): string {
