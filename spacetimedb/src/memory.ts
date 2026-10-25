@@ -287,6 +287,7 @@ export function extractMemory(ctx: PCtx, job: ExtractionJobRow): void {
       raw = chatJson(ctx, { system, user, schemaName: 'memory_extraction', schema: extractionSchema() });
     } catch (e) {
       if (!(e instanceof ProviderError)) throw e;
+      console.warn(`extractMemory session ${job.sessionId} [${job.fromIdx},${job.toIdx}) attempt ${job.attempt}: ${e.message}`);
       ctx.withTx(tx => {
         if (cursorOf(tx, job.sessionId) === job.fromIdx) scheduleRetry(tx, job);
       });
@@ -392,6 +393,7 @@ export function summarizeSession(ctx: PCtx, job: { scheduledId: bigint; schedule
       };
     } catch (e) {
       if (!(e instanceof ProviderError)) throw e;
+      console.warn(`summarizeSession ${job.sessionId} attempt ${job.attempt}: ${e.message}`);
       ctx.withTx(tx => {
         const delays = MODULE_DEFAULTS.EXTRACTION_RETRY_S;
         if (job.attempt < delays.length) {

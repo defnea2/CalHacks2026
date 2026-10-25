@@ -201,6 +201,7 @@ export function transcribePhrase(ctx: PCtx, job: { sessionId: bigint; phraseId: 
   if (!audio) return;
 
   if (audio.length / BYTES_PER_MS < VOICE_DEFAULTS.VAD_MIN_SPEECH_MS) {
+    console.info(`transcribePhrase: phrase ${job.phraseId} too short (${audio.length} bytes), discarded`);
     ctx.withTx(tx => finishPhrase(tx, job.sessionId, job.phraseId, null));
     return;
   }
@@ -210,6 +211,7 @@ export function transcribePhrase(ctx: PCtx, job: { sessionId: bigint; phraseId: 
     text = transcribe(ctx, audio).text;
   } catch (e) {
     if (!(e instanceof ProviderError)) throw e;
+    console.warn(`transcribePhrase session ${job.sessionId} phrase ${job.phraseId} attempt ${job.attempt}: ${e.message}`);
     ctx.withTx(tx => {
       if (job.attempt < STT_RETRIES) {
         tx.db.sttJob.insert({

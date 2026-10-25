@@ -105,6 +105,7 @@ export function synthesizeSentence(
     audio = synthesize(ctx, ttsRequest(ctx, job.speech));
   } catch (e) {
     if (!(e instanceof ProviderError)) throw e;
+    console.warn(`synthesizeSentence utterance ${job.utteranceId} idx ${job.idx} attempt ${attempt}: ${e.message}`);
     if (attempt < TTS_RETRIES) return synthesizeSentence(ctx, job, attempt + 1);
     // Give up: mark dropped so playback (strictly by index) can skip it.
     ctx.withTx(tx => {
