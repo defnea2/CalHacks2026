@@ -37,8 +37,9 @@ lesson, and then types the student lines. A `!` prefix sends a line mid-presenta
 `=correct` / `=wrong` read the open task's answer from `lesson_record` as owner.
 
 The setup was DB `night-pushback` on the shared 127.0.0.1:3000 server, worker with Claude Haiku 5.5,
-effort low, and all 10 scenarios running in parallel. The transcripts below are from the final run
-(run 3). Latency is measured from turn end to the first sentence / first beat.
+effort low, and all 10 scenarios running in parallel. The table is from run 3. The transcript files
+in this folder are from run 5, after the lead-review fixes below, and run 5 also passes 10 of 10.
+Latency is measured from turn end to the first sentence / first beat.
 
 | # | Scenario | Expected | Observed (quote) | First sentence / first beat | Result |
 | --- | --- | --- | --- | --- | --- |
@@ -63,16 +64,48 @@ guide was rewritten. "Not quite" was missing on a wrong answer, so it is now aut
 that the task stage's 3-moment cap was too tight (now 3–4), that "That's okay" was said after a wrong
 non-option answer (now "Hmm, not quite."), and that `=wrong` was needed in the harness. Run 3: all pass.
 
+## Lead-review fixes (before the merge) and run 5
+
+1. **Visible-answer guard false positive** (`teaching/src/teaching/checkGuards.ts`). A bare count now
+   counts as a drawn fraction only when the prompt names its denominator: a lone denominator word
+   ("how many sixths?") or "bottom number is N". Other numbers in the prompt are ignored.
+   - Before: "If one third is cut into two smaller pieces, how many … sixths?" (answer 2) next to a
+     drawn 2/3 was rejected, twice, and the opening fell back to "Which part feels confusing?".
+   - After: it is accepted (unit test). The real cases ("how many sixths?" with 3/6 drawn; "bottom
+     number is 12" with 8/12 drawn) are still rejected.
+   - Second rejection of the same lesson: the worker's repair round sends `acceptVisible: true` on
+     moment 1 and the module accepts it with a `console.warn`. A mild giveaway is better than the
+     fallback line. Covered by a module test. No visible-answer rejection happened in run 5, so this
+     path is only proven by the tests.
+2. **Intent false positives** (`intent.ts`).
+   - Requests now need request phrasing: "say it again", "can you repeat", "stop the lesson",
+     "I want to stop", a bare "stop", "skip this", "can we skip".
+   - A turn that contains a digit, a fraction, or a short spoken number ("it's nine") is an answer
+     first. This is checked after the safety rules.
+   - Now answers (unit tests): "let me try again", "I'll try again", "is it 8 again?", "the pizza
+     stops at the line", "we skip count by twos", "I think 3/4, just tell me the answer".
+3. **Homework numbers in the explanation**: prompt rule only (arc guide): "Explain, repair and task
+   moments never say or draw the homework's fractions or its answer … the task asks about another one,
+   not the one shown." There is no code guard. The explain meta rarely sets `exampleProblem`, so there
+   is nothing to check before speech.
+   - Run 3: 7 of 10 lessons taught with 2/3 = 8/12.
+   - Run 5: 5 of 10 (1, 3b, 6, 8, 9).
+   - Run 4 (an intermediate version of the rule that named "3/4 to eighths" as the example): the
+     model copied that example and then asked "three quarters is how many eighths" right after
+     showing it, which is a worse giveaway. Reworded.
+   - Partial improvement only.
+4. Run 5 regression to watch: scenario 1 still gives the answer kindly ("Two thirds is the same as
+   eight twelfths, because cutting each slice into four smaller pieces keeps the same amount of
+   pizza."). But it ended with "Now go back to your question" instead of "Want to see why it works?".
+   Run 3 had the offer; the model is not consistent about it.
+
 ## Seen in passing, not from this change (lesson-quality branch / planner)
 
 - **The explanation often uses the homework's own numbers as its example** ("Two thirds equals eight
   twelfths" in 3b, 8, and run-1 openings). That gives the homework answer away, even though the guide
   says "a similar example, not the homework itself". Only the *check* is guarded (`homeworkRepeat`),
   not the narration.
-- The visible-answer guard rejected a whole opening twice in run 2 (scenario 9: "Pizza A shows 2 of 3
-  parts, which is the answer to '…how many sixths?'"). It looks like a false positive (a count of 2
-  matched as the visible fraction 2/3). The learner then heard only the fallback "Which part feels
-  confusing?".
+- (Fixed above) The visible-answer guard false positive from run 2.
 - Fillers / recap lines ("Take one more careful look at the picture.") still show up when a beat is
   rejected mid-stream.
 - The homework-numbers meta guard triggers a repair round in many openings (+1.5–2.5 s, hidden by the

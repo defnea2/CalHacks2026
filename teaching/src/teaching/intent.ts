@@ -10,6 +10,7 @@
 // (LessonRecord.pending) and the decision travels to the planner in SessionConfig.decision.
 import type { LessonRecord } from "./lessonFlow";
 import type { LearnerDecision } from "./contracts";
+import { numberItems, spokenValue } from "./numbers";
 
 export type LearnerIntent =
   | "answer" // anything else: an answer to the task or plain context
@@ -48,10 +49,10 @@ const has = (s: string, re: RegExp) => re.test(s);
 const DECLINE = /^ (no|nope|nah|not really|not yet|never ?mind)\b| (let's|lets|let us|we can|i'll|i will|i want to|i can) (figure|try|work|do it|find|think|learn|keep|see|look)| figure (it|this) out | (keep|go on|continue) (going|explaining|with)| explain (it )?first | i'll try | the idea first | show me why /;
 const CONFIRM = /^ (yes|yeah|yep|yup|ya|sure|ok|okay|please|i'm sure|i am sure|i really|really|definitely|of course|do it|go ahead|just tell me|just give me|tell me)\b| i'm sure | i am sure | yes /;
 const ASK_ANSWER = / (tell|give|say|show) me the (answer|solution|result)| what's the answer | what is the answer | just (tell|give) me (it|the answer) | just tell me | (do|solve) (it|this|my homework|the homework) for me | can you (just )?(solve|do) it | (the )?answer please /;
-const SKIP = / skip | (give|get) me (a |the |another )?(task|question|problem|exercise)| (can|could) i (just )?(do|have|get|try) (a |the )?(task|question|problem|exercise)| let me (do|try) (a |the )?(task|question|problem|exercise)| i (already )?know (this|it|that)( already)? | move on | (next|go to the) (part|task|question) /;
-const END = / (stop|quit|i'm done|i am done|i want to go|i have to go|bye|goodbye|end the (lesson|session)|no more math|i'm tired|i am tired)\b/;
+const SKIP = / skip (this|it|that|the (explanation|repair|part|step|idea)|ahead)\b| (can|could) (we|i) skip | let's skip | i want to skip | move on | (give|get) me (a |the |another )?(task|question|problem|exercise)| (can|could) i (just )?(do|have|get|try) (a |the )?(task|question|problem|exercise)| let me (do|try) (a |the )?(task|question|problem|exercise)| i (already )?know (this|it|that)( already)? | (go to|skip to) the (next )?(part|task|question) /;
+const END = / (stop the (lesson|session|class)|i want to (stop|quit|go|leave|end)|i wanna (stop|quit)|can we (stop|quit|end)|let's stop|i have to go|i'm done|i am done|end the (lesson|session)|no more math|goodbye) |^ (stop|quit|bye|bye bye) $/;
 const SWITCH = / (different|another|other|new) (topic|subject|homework)| something else | change the (topic|subject)/;
-const REPEAT = / (say|tell|explain|read) (it|that|this) (again|slower)| again | repeat | slower | slow down | didn't (hear|catch|get) (that|it|you)| what did you say | one more time /;
+const REPEAT = / (say|tell|explain|read|show) (it|that|this)( to me)? (again|slower|one more time)| (can|could) you (please )?(repeat|say (it|that) again|go slower|slow down|talk slower)| repeat (that|it|please)\b|^ (repeat|again|slower|slower please|say it again) $| slow down | didn't (hear|catch) (that|it|you)| what did you say /;
 const PICTURE = / (another|different|other|new) (picture|way|drawing|example|image)| draw it (again|differently)| show (me )?another /;
 const SIMPLER = / simpler | easier | too hard | too difficult | smaller step /;
 const FEELINGS = / (i'm|i am|i feel|im) (so |really |very )?(sad|scared|afraid|lonely|upset|unhappy|worried|angry|crying)| nobody likes me | (bully|bullied|bullies|bullying) | hurt me | hits me | hate myself | (kill|die|suicide) /;
@@ -67,6 +68,8 @@ export function classifyIntent(text: string, pending = false): LearnerIntent {
   if (s.trim() === "") return "answer";
   if (has(s, FEELINGS)) return "feelings";
   if (has(s, PRIVATE)) return "private";
+  // A number or fraction in the turn is an answer first ("I'll try again: 8/12", "the pizza stops at 3").
+  if (looksLikeAnswer(text)) return "answer";
   if (pending) {
     if (has(s, DECLINE)) return "decline";
     if (has(s, CONFIRM) && !has(s, / not /)) return "confirm";
@@ -80,6 +83,13 @@ export function classifyIntent(text: string, pending = false): LearnerIntent {
   if (has(s, REPEAT)) return "repeat";
   if (has(s, OFF_TOPIC)) return "off_topic";
   return "answer";
+}
+
+/** A digit, a fraction ("eight twelfths"), or a short spoken number ("it's nine"). */
+function looksLikeAnswer(text: string): boolean {
+  if (/\d/.test(text)) return true;
+  if (numberItems(text).some(x => x.kind === "frac")) return true;
+  return text.trim().split(/\s+/).length <= 3 && spokenValue(text) !== null;
 }
 
 /** True if the turn may change the lesson flow (the worker does not plan it preemptively). */

@@ -107,6 +107,8 @@ export class LessonRun {
   /** Beats queued to the module in this attempt (index of the next one). */
   private queued = 0;
   private rejection?: string;
+  /** The previous attempt's first moment was rejected because the task's answer was visible. */
+  private acceptVisible = false;
   private finishing = false;
   private firstTokenAt = 0;
   private firstTokenRecorded = false;
@@ -240,7 +242,9 @@ export class LessonRun {
   /** Queues moment `index` (compact form; the module recompiles it). */
   private sendBeat(index: number, moment: { narration: string; [k: string]: unknown }, final: boolean) {
     const { narration, ...rest } = moment;
-    const visual = JSON.stringify(final ? { ...rest, final: true } : rest);
+    // Second visible-answer rejection of the same lesson: ask the module to accept it (logged there).
+    const flags = { ...(final ? { final: true } : {}), ...(index === 0 && this.acceptVisible && !('kind' in rest) ? { acceptVisible: true } : {}) };
+    const visual = JSON.stringify({ ...rest, ...flags });
     this.queued = Math.max(this.queued, index + 1);
     return this.enqueue(async () => {
       if (this.rejection) return;
@@ -362,6 +366,10 @@ export class LessonRun {
           } else if (!repair && out.kind !== 'silent' && error !== 'deadline') {
             this.stats.rejectedBeforeSpeech.push(error);
             repair = { output: out.output, error };
+            if (/already on the picture/.test(error)) {
+              this.acceptVisible = true;
+              this.log('visible-answer rejection: the repair round is accepted even if the answer stays visible');
+            }
             this.stats.repairs++;
             this.log(`repair round: ${error.slice(0, 200)}`);
           } else throw new Error(`lesson not usable: ${error}`);

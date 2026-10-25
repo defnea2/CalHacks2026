@@ -95,6 +95,9 @@ describe('demo2min arc', () => {
     call(e.h, e.agent, mod.beginUtterance, { sessionId: e.s.id, utteranceId: 150n, replyToIdx: turns(e.h, e.s.id).filter(t => t.role === 'student').at(-1)!.idx, preemptive: false });
     call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 150n, meta: JSON.stringify({ ...demoRepairMeta, check: { kind: 'number', prompt: 'One half is how many quarters?', rule: { operation: 'value', value: 2 } } }) });
     expect(() => addBeat(e, 150n, 0, { visual: { kind: 'bars', bars: [{ id: 'pizza', label: 'Pizza', parts: 4, shaded: 2 }] }, narration: 'Two of four slices.' }, false)).toThrow(/already on the picture/);
+    // The worker's repair round after that rejection may ask to accept it (a mild giveaway beats the fallback line).
+    addBeat(e, 150n, 0, { visual: { kind: 'bars', bars: [{ id: 'pizza', label: 'Pizza', parts: 4, shaded: 2 }] }, acceptVisible: true, narration: 'Two of four slices.' }, false);
+    expect(beats(e, 150n)).toHaveLength(1);
     call(e.h, e.agent, mod.appendTutorTurn, { sessionId: e.s.id, utteranceId: 150n, text: 'lesson', interrupted: true });
     step(e, 200n, demoRepairMeta, demoRepairMoments);
     say(e, 'five');

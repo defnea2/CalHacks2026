@@ -308,14 +308,19 @@ export function addBeat(ctx: Ctx, args: { sessionId: bigint; utteranceId: bigint
   let final = false;
   let accepted: { step: TeachingStep; evidence: Evidence[] } | undefined;
   try {
-    const input = parseBeatInput(meta, parse(args.visual, 'visual'), args.narration); // pack-literal-ok (argument name)
+    const raw = parse(args.visual, 'visual') as Record<string, unknown>; // pack-literal-ok (argument name)
+    // Worker repair round after a visible-answer rejection: a mild giveaway beats the fallback line.
+    const acceptVisible = !!raw && typeof raw === 'object' && raw.acceptVisible === true;
+    if (acceptVisible) delete raw.acceptVisible;
+    const input = parseBeatInput(meta, raw, args.narration); // pack-literal-ok (argument name)
     final = input.final;
     // The arc owns the shape: the formalization slot shows the equation, the moment cap holds.
     const moment = { ...input.moment, ...arcMoment(request.context.session.arc, meta.phase, args.idx, final, input.moment) };
     compiled = compileMoment(meta, moment, args.idx, final, sceneOf(canvas));
     // Under an arc the first moment may not draw the task's answer (before speech: the worker repairs it; later moments are not truncated).
     const visible = request.context.session.arc && args.idx === 0 ? visibleAnswer(meta.check, compiled.planned) : null;
-    if (visible) throw new SenderError(visible);
+    if (visible && !acceptVisible) throw new SenderError(visible);
+    if (visible) console.warn(`lesson: session ${session.id} u${args.utteranceId}: accepted a visible task answer on the repair round (${visible.slice(0, 120)})`);
     // Keyframes on point: the equation reveal moves to the sentence that reads it out.
     compiled = { ...compiled, beat: splitKeyframes(compiled.beat, narrationSentences(compiled.beat.narration)) };
     if (final) {

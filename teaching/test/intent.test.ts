@@ -33,6 +33,19 @@ describe("classifyIntent", () => {
     ["two quarters", "answer"],
     ["I do not get it.", "answer"],
     ["yes", "answer"], // no confirmation pending: an ordinary answer
+    // Request phrasing only (lead review): these are answers or talk, not flow requests.
+    ["let me try again", "answer"],
+    ["I'll try again", "answer"],
+    ["is it 8 again?", "answer"],
+    ["the pizza stops at the line", "answer"],
+    ["we skip count by twos", "answer"],
+    ["eight twelfths, can I stop guessing", "answer"],
+    ["I think 3/4, just tell me the answer", "answer"],
+    ["can you repeat that", "repeat"],
+    ["stop the lesson", "end"],
+    ["stop", "end"],
+    ["skip this", "skip"],
+    ["can we skip", "skip"],
   ])("%s -> %s", (text, intent) => expect(classifyIntent(text)).toBe(intent));
 
   it("yes / no only mean confirm / decline while a confirmation is pending", () => {
