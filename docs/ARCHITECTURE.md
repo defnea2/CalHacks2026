@@ -154,8 +154,8 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 | `stt_job` | procedure `transcribePhrase` | now, on a phrase's final chunk | one retry after 0.3 s, then the phrase is discarded |
 | `tts_job` | procedure `synthesizeSentence` | now, per sentence (voice mode) | a failed call schedules one retry row (`attempt` 1, after 0.2 s, only while the sentence is pending), then the sentence is `dropped` so playback skips it; barge-in deletes pending rows |
 | `text_play_job` | reducer `finishTextSentence` | after the reading time of a text-mode sentence: `max(700 ms, 280 ms × words)`, sentences one after another | scheduler-only (checks `ctx.sender == ctx.identity`) |
-| `extraction_job` | procedure `extractMemory` | every `MEMORY_EVERY_N_TURNS` (6) turns, and once at session end | retries after 10 / 30 / 90 s |
-| `summary_job` | procedure `summarizeSession` | at session end | |
+| `extraction_job` | procedure `extractMemory` | every `MEMORY_EVERY_N_TURNS` (6) turns, and once at session end | retries after 10 / 30 / 90 s; a run that takes the window also queues a backup row due after the 300 s stale limit (deleted when the run ends), so a crashed run cannot lose the window |
+| `summary_job` | procedure `summarizeSession` | at session end | one per session (not scheduled while one is queued); retries after 10 / 30 / 90 s |
 | `sim_turn_job` | procedure `simStudentTurn` | 2–5 s after the tutor finished speaking to a simulated student | busy re-check every 1.5 s (max 40), failures retried after 5 s twice; stale jobs do nothing |
 | `dashboard_job` | procedure `dashboardTick` | `DASHBOARD_INTERVAL_S` (30 s) after the previous refresh finished | failed run retried in 10 s; skipped while the teacher observes |
 | `retention_job` | reducer `runRetention` | one interval row, every 5 min (created on init and on connect) | scheduler-only; idempotent sweep, see Retention |

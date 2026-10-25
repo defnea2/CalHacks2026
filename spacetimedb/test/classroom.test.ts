@@ -648,7 +648,8 @@ describe('memory extraction window dedupe (running marker)', () => {
       // While the window is in flight two more turns arrive.
       call(hh, client, mod.submitTextTurn, { sessionId: s.id, text: 'three', intent: '' });
       tutorReplies(env, s.id, 'Four.');
-      duringCall = [...hh.db.extractionJob.iter()].length;
+      // Only the watchdog backup of the running window is queued (due after the stale limit).
+      duringCall = [...hh.db.extractionJob.iter()].filter(j => !(j.fromIdx === 0 && at(j) >= now(hh) + 300_000_000n)).length;
       return anthropicResponse({ items: [], mastery: [] });
     });
     expect(duringCall).toBe(0); // the old code scheduled [0, 4) again here

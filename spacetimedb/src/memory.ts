@@ -37,8 +37,9 @@ function pendingJob(ctx: Ctx, sessionId: bigint) {
   return undefined;
 }
 
-/** A run that crashed without clearing its marker stops blocking after this long. */
-const RUNNING_STALE_US = 300_000_000n;
+/** A run that crashed without clearing its marker stops blocking after this long; its backup job
+ *  (scheduled when the run took the window) then takes the window over. */
+export const RUNNING_STALE_US = 300_000_000n;
 
 /** An extractMemory run holds the window (its job row is already gone during the LLM call). */
 export function extractionRunning(ctx: Ctx, sessionId: bigint): boolean {
@@ -93,7 +94,15 @@ export function scheduleSessionEnd(ctx: Ctx, sessionId: bigint): void {
       attempt: 0,
     });
   }
-  ctx.db.summaryJob.insert({ scheduledId: 0n, scheduledAt: dueIn(ctx), sessionId, learnerId: session.learnerId, attempt: 0 });
+  // One summary per session end: a summary job already queued (or retrying) is not doubled.
+  if (!pendingSummary(ctx, sessionId)) {
+    ctx.db.summaryJob.insert({ scheduledId: 0n, scheduledAt: dueIn(ctx), sessionId, learnerId: session.learnerId, attempt: 0 });
+  }
+}
+
+function pendingSummary(ctx: Ctx, sessionId: bigint) {
+  for (const j of ctx.db.summaryJob.sessionId.filter(sessionId)) return j;
+  return undefined;
 }
 
 // ---------------------------------------------------------------- provider switch
@@ -320,8 +329,16 @@ export function extractMemory(ctx: PCtx, job: ExtractionJobRow): void {
     if (extractionRunning(tx, job.sessionId)) return null; // duplicate of a window in flight
     const since = tx.timestamp.microsSinceUnixEpoch || 1n; // 0 means idle
     setRunning(tx, job.sessionId, since);
+    // Watchdog (like the dashboard's): a fatal error in this procedure would leave the marker set
+    // and no job queued, so the window (at session end: the last turns) would never be extracted.
+    // The backup runs the same window once the marker is stale; every normal end deletes it.
+    const backup = tx.db.extractionJob.insert({
+      ...job,
+      scheduledId: 0n,
+      scheduledAt: dueIn(tx, Number(RUNNING_STALE_US) / 1e6 + 1),
+    }).scheduledId;
     const turns = sessionTurns(tx, job.sessionId).filter(t => t.idx >= job.fromIdx - CONTEXT_TURNS && t.idx < job.toIdx);
-    return { turns, notes: learnerNotes(tx, job.learnerId), since };
+    return { turns, notes: learnerNotes(tx, job.learnerId), since, backup };
   });
   if (!input) return;
 
@@ -360,6 +377,7 @@ export function extractMemory(ctx: PCtx, job: ExtractionJobRow): void {
         raw = { items: [], mastery: [] };
       } else {
         ctx.withTx(tx => {
+          tx.db.extractionJob.scheduledId.delete(input.backup);
           if (cursorOf(tx, job.sessionId) === job.fromIdx) scheduleRetry(tx, job);
           // Retry queued (it blocks new windows) or given up (the next turns schedule afresh).
           releaseWindow(tx, job.sessionId, input.since, false);
@@ -370,6 +388,7 @@ export function extractMemory(ctx: PCtx, job: ExtractionJobRow): void {
   }
 
   ctx.withTx(tx => {
+    tx.db.extractionJob.scheduledId.delete(input.backup);
     // raced: someone else wrote this window -> write nothing
     if (cursorOf(tx, job.sessionId) === job.fromIdx) applyExtraction(tx, job, raw);
     releaseWindow(tx, job.sessionId, input.since);
