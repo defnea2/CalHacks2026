@@ -1,12 +1,13 @@
 // Screen 2: the live session (?session=<id>; a reload resumes it).
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DbConnection } from '../module_bindings';
 import type { ReplySentence } from '../module_bindings/types';
 import type { AppSettings } from '../config';
 import { useSessionData } from '../stdb/useSessionData';
 import { callReducer } from '../stdb/connection';
 import { VoiceSession, type VoiceUiState } from '../audio/VoiceSession';
-import { Board } from '../board/Board';
+import { Board, type BoardItemView } from '../board/Board';
+import { markerOffsetMs, type SentenceTiming } from '../board/reveal';
 import { Captions, DebugPanel, Indicators, SessionTitle, useUtteranceState } from '../components/session';
 import { Button, Card, CardHeader, ErrorNote } from '../components/ui';
 import { APP_CONFIG } from '../app-config';
@@ -28,6 +29,8 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
   const [localStarted, setLocalStarted] = useState<Map<string, number>>(() => new Map());
+  /** Playback timing of the sentences this tab started ("utteranceId:idx"), for marker reveals. */
+  const timings = useRef(new Map<string, SentenceTiming>());
   const [localLatency, setLocalLatency] = useState<Map<number, number>>(() => new Map());
   const lastTurnEnd = useRef<number | null>(null);
   const turnCounter = useRef(0);
@@ -50,7 +53,7 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
     st.tutorAudio = ui.tutorAudio;
     st.phrases = data.phrases.map(p => ({ phraseId: p.phraseId, turnIdx: p.turnIdx, status: p.status, text: p.text }));
     st.sentences = data.sentences.map(s => ({ utteranceId: s.utteranceId.toString(), idx: s.idx, status: s.status, display: s.display }));
-    st.boardItems = data.boardItems.map(b => ({ id: b.id.toString(), idx: b.idx, kind: b.kind, visible: b.visible, utteranceId: b.utteranceId.toString(), sentenceIdx: b.sentenceIdx, answerState: b.answerState }));
+    st.boardItems = data.boardItems.map(b => ({ id: b.id.toString(), idx: b.idx, kind: b.kind, visible: b.visible, utteranceId: b.utteranceId.toString(), sentenceIdx: b.sentenceIdx, markerPos: b.markerPos, answerState: b.answerState }));
     st.localLatencyMs = [...localLatency.values()];
   }, [sessionId, data, session, ui, localLatency]);
 
@@ -80,7 +83,8 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
     []
   );
 
-  const onSentenceStart = useCallback((u: bigint, idx: number) => {
+  const onSentenceStart = useCallback((u: bigint, idx: number, timing: SentenceTiming) => {
+    timings.current.set(`${u}:${idx}`, timing);
     setLocalStarted(prev => {
       const k = u.toString();
       if ((prev.get(k) ?? -1) >= idx) return prev;
@@ -154,6 +158,18 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
     const r = await callReducer('submitGapAnswer', { boardItemId, answer }, () => conn.reducers.submitGapAnswer({ boardItemId, answer }));
     if (!r.ok) setError(r.error ?? 'failed');
   };
+
+  // Inline board markers: the item appears when its marker word plays.
+  const speechOf = useMemo(() => new Map(data.sentences.map(s => [`${s.utteranceId}:${s.idx}`, s.speech])), [data.sentences]);
+  const markerAt = useCallback(
+    (item: BoardItemView) => {
+      const k = `${item.utteranceId}:${item.sentenceIdx}`;
+      const t = timings.current.get(k);
+      const speech = speechOf.get(k);
+      return t && speech !== undefined ? t.startMs + markerOffsetMs(speech, item.markerPos, t) : undefined;
+    },
+    [speechOf]
+  );
 
   const tutorShown = useCallback(
     (s: ReplySentence) => s.status === PLAYED || (localStarted.get(s.utteranceId.toString()) ?? -1) >= s.idx,
@@ -240,7 +256,7 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
         <Card>
           <CardHeader title="Board" />
           <div className="p-4">
-            <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} />
+            <Board items={data.boardItems} progress={progress} serverOver={serverOver} onSubmitAnswer={submitAnswer} markerAt={markerAt} />
           </div>
         </Card>
       </div>

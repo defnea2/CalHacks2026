@@ -26,7 +26,7 @@ interface PageState {
   tutorAudio: boolean;
   phrases: { phraseId: number; turnIdx: number; status: string; text: string }[];
   sentences: { utteranceId: string; idx: number; status: string; display: string }[];
-  boardItems: { id: string; idx: number; kind: string; visible: boolean; utteranceId: string }[];
+  boardItems: { id: string; idx: number; kind: string; visible: boolean; utteranceId: string; sentenceIdx?: number; markerPos?: number }[];
   localLatencyMs: number[];
 }
 
@@ -339,6 +339,48 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
         (hidden.length ? `; still hidden after reply: ${hidden.map(b => `${b.kind}#${b.id}`).join(', ')}` : '') +
         (missing.length ? `; not rendered: ${missing.map(b => b.id).join(', ')}` : '')
     );
+  }
+
+  // Inline board markers: an item with a marker appears while its sentence plays (at the
+  // marker word), or at once if it arrived after that sentence had finished.
+  const marked = state.boardItems.filter(b => (b.markerPos ?? -1) >= 0);
+  if (!marked.length) add('board-markers', 'skip', `no board item with an inline marker (${state.boardItems.length} item(s))`);
+  else {
+    const TOL_MS = 150;
+    const issues: string[] = [];
+    const notes: string[] = [];
+    const ends = ofType('audio.play_end');
+    for (const b of marked) {
+      const reveal = ofType('board.reveal').find(e => e.id === b.id);
+      const seen = ofType('board.seen').find(e => e.id === b.id);
+      const start = plays.find(e => e.utteranceId === b.utteranceId && Number(e.idx) === b.sentenceIdx);
+      const end = ends.find(e => e.utteranceId === b.utteranceId && Number(e.idx) === b.sentenceIdx);
+      if (!reveal) {
+        issues.push(`#${b.id}: never revealed`);
+        continue;
+      }
+      if (!start || !end) {
+        notes.push(`#${b.id}: sentence ${b.sentenceIdx} not played here`);
+        continue;
+      }
+      const late = seen && seen.t > end.t; // arrived after its sentence: shown at once
+      const inMs = Math.round(reveal.t - start.t);
+      const dur = Math.round(end.t - start.t);
+      if (late) {
+        if (reveal.t - seen!.t > TOL_MS) issues.push(`#${b.id}: arrived late but revealed ${Math.round(reveal.t - seen!.t)} ms later`);
+        else notes.push(`#${b.id} late arrival, immediate`);
+      } else if (reveal.t < start.t - TOL_MS || reveal.t > end.t + TOL_MS) {
+        issues.push(`#${b.id}: revealed ${inMs} ms after its sentence started (sentence ${dur} ms)`);
+      } else {
+        // The tab's own marker-word time (TTS word timestamps or estimate), when it knew it.
+        const at = typeof reveal.markerAt === 'number' ? reveal.markerAt : null;
+        const wordMs = at === null ? null : Math.round(at - start.t);
+        const arrivedAfterWord = at !== null && !!seen && seen.t > at;
+        if (at !== null && !arrivedAfterWord && Math.abs(reveal.t - at) > TOL_MS) issues.push(`#${b.id}: revealed at ${inMs} ms, its word plays at ${wordMs} ms`);
+        else notes.push(`#${b.id} at ${inMs}/${dur} ms (word ${wordMs ?? '?'} ms${arrivedAfterWord ? ', arrived after it' : ''}, pos ${b.markerPos})`);
+      }
+    }
+    add('board-markers', issues.length ? 'fail' : 'pass', `${marked.length} marked item(s): ${[...issues, ...notes].join('; ')}`);
   }
 
   // turn_metrics.

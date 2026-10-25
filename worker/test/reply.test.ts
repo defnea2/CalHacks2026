@@ -1,6 +1,6 @@
 // One reply end to end through the Agent: sentences, metrics, tool ordering and tool rounds.
 import { describe, expect, it } from 'vitest';
-import { pack, renderPhaseBlock, TOOL_NAMES } from '@tutor/shared';
+import { markerReminder, pack, renderPhaseBlock, TOOL_NAMES } from '@tutor/shared';
 import { done, FakeLlm, makeAgent, session, text, tokens, tool, turn, waitFor } from './fakes';
 
 const S = 1n;
@@ -149,7 +149,13 @@ describe('reply', () => {
     ]);
     const { transport } = await answer(llm);
     expect(llm.calls).toHaveLength(2);
-    expect(llm.calls[1]!.messages.at(-1)).toMatchObject({ role: 'tool', toolCallId: 't1', name: TOOL_NAMES.setTopic, content: transport.topicResult });
+    // The result carries the inline-marker reminder (the next round may show board items).
+    expect(llm.calls[1]!.messages.at(-1)).toMatchObject({
+      role: 'tool',
+      toolCallId: 't1',
+      name: TOOL_NAMES.setTopic,
+      content: `${transport.topicResult}\n\n${markerReminder(TOOL_NAMES.showBoardItem)}`,
+    });
     expect(llm.calls[1]!.messages.at(-2)).toMatchObject({ role: 'assistant', content: 'Okay, fractions it is, my friend. ' });
     expect(transport.of('addSentence').map(a => a.idx)).toEqual([0, 1]);
     expect(transport.of('appendTutorTurn')[0]!.text).toBe('Okay, fractions it is, my friend. A fraction is a part of a whole thing.');
@@ -213,3 +219,81 @@ describe('reply', () => {
   });
 });
 
+describe('inline board markers', () => {
+  const board = (id: string | undefined, label: string) => tool(TOOL_NAMES.showBoardItem, { ...(id ? { id } : {}), kind, content: { text: label } });
+  const anchors = (t: ReturnType<typeof makeAgent>['transport']) =>
+    t.of('showBoardItem').map(a => [JSON.parse(a.content as string).text, a.sentenceIdx, a.markerPos]);
+  const sentences = (t: ReturnType<typeof makeAgent>['transport']) => t.of('addSentence') as { display: string; speech: string }[];
+
+  it('strips markers, anchors items at their word; tools after the text; missing marker / missing tool', async () => {
+    const llm = new FakeLlm([
+      [
+        ...tokens('Here are two thirds ⟦b1⟧, and here are eight twelfths ⟦b2⟧. Which one covers more of the bar? ⟦b3⟧ ⟦orphan⟧'),
+        board('b1', 'one'),
+        board('b2', 'two'),
+        board('b3', 'three'),
+        board('b4', 'no marker'),
+        board(undefined, 'no id'),
+        done,
+      ],
+    ]);
+    const { transport } = await answer(llm);
+    const sent = sentences(transport);
+    expect(sent.map(x => x.display)).toEqual(['Here are two thirds, and here are eight twelfths.', 'Which one covers more of the bar?']);
+    expect(sent.every(x => !/[⟦⟧]/.test(x.speech + x.display))).toBe(true);
+    const s0 = sent[0]!.speech;
+    expect(anchors(transport)).toEqual([
+      ['one', 0, s0.indexOf(', and')],
+      ['two', 0, s0.length - 1],
+      ['three', 1, sent[1]!.speech.length], // marker after the last "?" -> end of that sentence
+      ['no marker', 2, -1], // keeps the default: the sentence that was next when the call ran
+      ['no id', 2, -1],
+    ]);
+    expect(transport.of('appendTutorTurn')[0]!.text).toBe('Here are two thirds, and here are eight twelfths. Which one covers more of the bar?');
+    // "...? ⟦b3⟧ ⟦orphan⟧" ends with a next step once the markers are stripped: no extra round.
+    expect(llm.calls).toHaveLength(1);
+  });
+
+  it('a call that arrives before its marker waits for the text (order kept)', async () => {
+    const llm = new FakeLlm([
+      [
+        board('b1', 'early'),
+        tool(TOOL_NAMES.clearBoard, {}),
+        ...tokens('Can you see this picture ⟦b1⟧ of a pizza here?'),
+        done,
+      ],
+    ]);
+    const { transport } = await answer(llm);
+    const names = transport.names().filter(n => n !== 'recordMetric');
+    expect(names).toEqual(['buildContext', 'beginUtterance', 'addSentence', 'showBoardItem', 'clearBoard', 'appendTutorTurn']);
+    const sp = sentences(transport)[0]!.speech;
+    expect(anchors(transport)).toEqual([['early', 0, sp.indexOf('of a pizza')]]);
+    expect(llm.calls).toHaveLength(1); // ends with a next step: no extra round
+  });
+
+  it('a marker spoken in one round anchors the item of the next round (after a query)', async () => {
+    const llm = new FakeLlm([
+      [...tokens('Okay, here is two thirds ⟦b1⟧ on our board. '), tool(TOOL_NAMES.setTopic, { category }, 't1'), done],
+      [...tokens('Do the shaded parts look the same?'), board('b1', 'later'), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(2);
+    const sp = sentences(transport)[0]!.speech;
+    expect(anchors(transport)).toEqual([['later', 0, sp.indexOf('on our board')]]);
+    // The model sees its own markers in the history of this reply.
+    expect(llm.calls[1]!.messages.find(m => m.role === 'assistant')!.content).toContain('⟦b1⟧');
+  });
+
+  it('a reused id maps to the next unconsumed marker', async () => {
+    const llm = new FakeLlm([
+      [...tokens('First this one ⟦b1⟧ and then this one ⟦b1⟧ right here, see?'), board('b1', 'x'), board('B1', 'y'), board('b1', 'z'), done],
+    ]);
+    const { transport } = await answer(llm);
+    const sp = sentences(transport)[0]!.speech;
+    expect(anchors(transport)).toEqual([
+      ['x', 0, sp.indexOf('and then')],
+      ['y', 0, sp.indexOf('right here')],
+      ['z', 1, -1],
+    ]);
+  });
+});

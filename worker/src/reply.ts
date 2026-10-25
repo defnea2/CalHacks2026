@@ -9,7 +9,14 @@
 // while the student may still continue: its output is held in memory until release() (turn
 // became ready with the same transcript) or thrown away by discard(). Nothing reaches
 // SpacetimeDB before release(), not even beginUtterance.
-import { SentenceChunker, normalizeForSpeech, TOOL_NAMES, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+//
+// Inline board markers: the model writes ⟦b1⟧ where an item should appear and calls the board
+// tool with id "b1" after its text. Sentences go out without markers; `anchors` remembers each
+// marker's sentence + speech offset, and the tool stores that as the item's reveal anchor. A
+// tool call whose marker is still in the chunker buffer waits until the round's text is cut
+// (and every later call of the round with it, to keep their order).
+import { SentenceChunker, markerReminder, prepareSentence, stripMarkers, TOOL_NAMES, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { MarkerAnchors } from './markers';
 import { buildMessages } from './prompt';
 import type { ToolResult, ToolRouter } from './router';
 import type { Transport, TurnRow } from './transport';
@@ -80,6 +87,7 @@ export class ReplyRun {
   readonly done: Promise<void>;
 
   private readonly abort = new AbortController();
+  private readonly anchors = new MarkerAnchors();
   private releaseGate!: () => void;
   private readonly gate = new Promise<void>(r => (this.releaseGate = r));
   private chain: Promise<unknown>;
@@ -200,10 +208,17 @@ export class ReplyRun {
     return p;
   }
 
-  private enqueueSentence(display: string): void {
+  private enqueueSentence(raw: string): void {
+    this.anchors.noteText(raw);
     void this.enqueue(async () => {
+      const { display, speech, markers } = prepareSentence(raw);
+      if (!display.trim()) {
+        this.anchors.addMarkerOnly(markers);
+        return;
+      }
       const idx = this.sent.length;
       this.sent.push(display);
+      this.anchors.addSentence(idx, speech.length, markers);
       if (idx === 0) this.metric('firstSentenceAt', this.now());
       try {
         await this.deps.transport.addSentence({
@@ -211,7 +226,7 @@ export class ReplyRun {
           utteranceId: this.utteranceId,
           idx,
           display,
-          speech: normalizeForSpeech(display) || display,
+          speech,
         });
       } catch (e) {
         this.log(`addSentence ${idx} failed: ${errText(e)}`);
@@ -226,6 +241,7 @@ export class ReplyRun {
         sessionId: this.sessionId,
         utteranceId: this.utteranceId,
         nextSentenceIdx: this.sent.length,
+        anchor: id => this.anchors.take(id),
         transport: this.deps.transport,
       });
       this.toolResults.push(r);
@@ -235,6 +251,16 @@ export class ReplyRun {
       }
       return r;
     }, skipped);
+  }
+
+  /** A query result goes back to the model for another round that may show board items: remind
+   *  it of the inline markers (long library material otherwise buries the prompt rule; measured
+   *  with the real model: ~70% -> ~100% of board calls with their marker). */
+  private withMarkerReminder(r: ToolResult, nextRound: number): string {
+    const nextOffersTools = !(nextRound >= this.deps.maxToolRounds && nextRound > 0);
+    const board = this.deps.router.kindOf(TOOL_NAMES.showBoardItem) !== 'unknown';
+    if (r.kind !== 'query' || !r.ok || !nextOffersTools || !board) return r.result;
+    return `${r.result}\n\n${markerReminder(TOOL_NAMES.showBoardItem)}`;
   }
 
   private async main(): Promise<void> {
@@ -274,6 +300,7 @@ export class ReplyRun {
         let raw: unknown;
         const calls: ToolResult['call'][] = [];
         const results: Promise<ToolResult>[] = [];
+        const waiting: ToolResult['call'][] = [];
         // Last allowed round: offer no tools, so the model has to speak (it otherwise tends to
         // chain tool-only rounds and the student hears nothing).
         const last = round >= this.deps.maxToolRounds && round > 0;
@@ -296,7 +323,8 @@ export class ReplyRun {
                 // A finished sentence before the call belongs before it (board reveal index).
                 for (const s of chunker.flushComplete()) this.enqueueSentence(s);
                 calls.push(ev.call);
-                results.push(this.enqueueTool(ev.call));
+                if (waiting.length || this.anchors.waitsFor(ev.call.arguments)) waiting.push(ev.call);
+                else results.push(this.enqueueTool(ev.call));
               } else if (ev.type === 'done') {
                 raw = ev.raw;
               }
@@ -311,13 +339,14 @@ export class ReplyRun {
         }
         if (this.aborted) return;
         for (const s of chunker.flush()) this.enqueueSentence(s);
+        for (const c of waiting) results.push(this.enqueueTool(c));
         const res = await Promise.all(results);
         if (this.aborted) return;
-        if (text.trim()) said = `${said} ${text.trim()}`.trim();
+        if (text.trim()) said = `${said} ${stripMarkers(text).trim()}`.trim();
         this.history = [
           ...this.history,
           { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}), ...(raw !== undefined ? { raw } : {}) },
-          ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
+          ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: this.withMarkerReminder(r, round + 1) })),
         ];
         if (!calls.length) break;
         // Query results must go back to the LLM. After action tools the LLM continues only if the
@@ -369,8 +398,14 @@ export class ReplyRun {
     const ft = this.firstTokenAt ? `${((this.firstTokenAt - this.startedAt) / 1000).toFixed(2)}s` : '-';
     this.log(
       `${interrupted ? `interrupted${why ? ` (${why})` : ''}` : 'done'}${this.preemptive ? ' [preemptive]' : ''}: ` +
-        `${said.length}/${this.sent.length} sentences, first token ${ft}${tools ? `, tools: ${tools}` : ''}`
+        `${said.length}/${this.sent.length} sentences, first token ${ft}${tools ? `, tools: ${tools}` : ''}` +
+        (this.anchors.summary() ? `, ${this.anchors.summary()}` : '')
     );
+    if (this.anchors.missing.length) {
+      // The model gave an id without writing its marker: keep its text for prompt tuning.
+      const said = this.history.filter(m => m.role === 'assistant').map(m => (typeof m.content === 'string' ? m.content : '')).join(' | ');
+      this.log(`marker text: ${JSON.stringify(said.slice(0, 600))}`);
+    }
   }
 }
 

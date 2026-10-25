@@ -88,3 +88,29 @@ describe('PlaybackQueue scheduling', () => {
     expect(Math.abs(d[d.length - 1]!)).toBe(0);
   });
 });
+
+describe('PlaybackQueue sentence timing (inline markers)', () => {
+  const s = loadSettings('');
+  it('reports start on the performance clock, trimmed duration, trimmed lead and word times', async () => {
+    const ctx = new FakeAudioContext();
+    ctx.currentTime = 1;
+    const got: unknown[] = [];
+    q = new PlaybackQueue(ctx as unknown as AudioContext, s.playback, s.client, { onSentenceStart: (u, idx, t) => got.push({ u, idx, t }) });
+    const lead = new Uint8Array(Math.round(RATE * 0.25) * 2); // 250 ms of silence, trimmed
+    const audio = sentence(500);
+    const pcm = new Uint8Array(lead.length + audio.length);
+    pcm.set(lead);
+    pcm.set(audio, lead.length);
+    const before = performance.now();
+    q.push({ utteranceId: 3n, idx: 0, pcm, sampleRate: RATE, wordStartsMs: [260, 500], wordEndsMs: [480, 740] });
+    await new Promise(r => setTimeout(r, s.client.PLAYBACK_LEAD_MS + 30));
+    expect(got).toHaveLength(1);
+    const { t } = got[0] as { t: { startMs: number; durationMs: number; trimStartMs: number; wordStartsMs: number[] } };
+    expect(t.startMs).toBeGreaterThanOrEqual(before + s.client.PLAYBACK_LEAD_MS - 1);
+    expect(t.trimStartMs).toBeGreaterThan(240);
+    expect(t.trimStartMs).toBeLessThan(260);
+    expect(t.durationMs).toBeGreaterThan(480);
+    expect(t.durationMs).toBeLessThanOrEqual(500);
+    expect(t.wordStartsMs).toEqual([260, 500]);
+  });
+});

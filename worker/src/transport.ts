@@ -56,6 +56,8 @@ export interface Transport {
     sessionId: bigint;
     utteranceId: bigint;
     sentenceIdx: number;
+    /** Offset of the item's inline marker in the speech of sentence sentenceIdx; -1 = none. */
+    markerPos: number;
     kind: string;
     content: string;
     taskKey: string;

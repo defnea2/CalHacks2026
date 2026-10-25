@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { pack } from '../../shared/src/lesson/index';
 import { MODULE_DEFAULTS } from '../../shared/src/config';
-import { call, chatResponse, proc, makeLearner, makeSession, mod, runExtraction, runSummary, runTts, session, setup, studentSays, type H, type Req } from './helpers';
+import { call, chatResponse, proc, makeLearner, makeSession, mod, runExtraction, runSummary, runTts, session, setup, studentSays, ttsSse, type H, type Req } from './helpers';
 
 const cat = pack.taxonomy.find(c => c.concepts.length > 1)!;
 const concept = cat.concepts[0]!.key;
@@ -12,7 +12,7 @@ function exchange(h: H, env: ReturnType<typeof setup>, sessionId: bigint, utt: b
   const replyToIdx = session(h, sessionId).turnCount - 1;
   call(h, env.agent, mod.beginUtterance, { sessionId, utteranceId: utt, replyToIdx, preemptive: false });
   call(h, env.agent, mod.addSentence, { sessionId, utteranceId: utt, idx: 0, display: tutor, speech: tutor });
-  runTts(h, () => ({ status: 200, body: new Uint8Array(480) }));
+  runTts(h, () => ({ status: 200, body: ttsSse(new Uint8Array(480)) }));
   call(h, env.client, mod.markPlayed, { sessionId, utteranceId: utt, idx: 0 });
   call(h, env.agent, mod.appendTutorTurn, { sessionId, utteranceId: utt, text: tutor, interrupted: false });
 }

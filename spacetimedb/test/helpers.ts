@@ -5,6 +5,7 @@ import * as mod from '../src/index';
 import spacetimedb from '../src/schema';
 import { setEnvOverride } from '../src/env';
 import type { S } from '../src/ctx';
+import { base64 } from '../src/providers';
 
 export type H = ModuleTestHarness<S>;
 export type Req = { uri: string; method: unknown; headers: Record<string, string>; body: Uint8Array; text: string };
@@ -100,6 +101,20 @@ export function runSummary(h: H, responder?: Responder): number {
   const jobs = popJobs<any>(h, 'summaryJob');
   for (const job of jobs) (mod.summarizeSession as any)(proc(h, TestAuth.internal() as never, responder), { job });
   return jobs.length;
+}
+
+/** A Cartesia /tts/sse body: audio in two base64 chunks, optional word timestamps (seconds). */
+export function ttsSse(audio: Uint8Array, words: Array<[string, number, number]> = []): string {
+  const half = Math.floor(audio.length / 2);
+  const frame = (type: string, data: object) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+  let out = frame('chunk', { done: false, status_code: 206, data: base64(audio.subarray(0, half)) });
+  if (words.length) {
+    out += frame('timestamps', { done: false, word_timestamps: { words: words.slice(0, 1).map(w => w[0]), start: [words[0]![1]], end: [words[0]![2]] } });
+    const rest = words.slice(1);
+    if (rest.length) out += frame('timestamps', { done: false, word_timestamps: { words: rest.map(w => w[0]), start: rest.map(w => w[1]), end: rest.map(w => w[2]) } });
+  }
+  out += frame('chunk', { done: false, status_code: 206, data: base64(audio.subarray(half)) });
+  return out + frame('done', { done: true, status_code: 200 });
 }
 
 export const sttOk = (text: string): Responder => () => ({ status: 200, body: JSON.stringify({ type: 'transcript', text, duration: 1 }) });

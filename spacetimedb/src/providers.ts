@@ -1,10 +1,10 @@
 // Provider adapters on top of ctx.http.fetch (synchronous, one-shot). No SDKs in the module.
 // SttProvider: Cartesia batch STT interface (served locally by stt-proxy -> ink-2).
-// TtsProvider: Cartesia POST /tts/bytes, raw PCM16.
+// TtsProvider: Cartesia POST /tts/sse with word timestamps (or /tts/bytes), raw PCM16.
 // Chat: OpenRouter chat completions, non-streaming, structured JSON output.
 import { TimeDuration } from 'spacetimedb';
 import { MODULE_DEFAULTS, VOICE_DEFAULTS } from '../../shared/src/config';
-import type { SttResult, TtsRequest, TtsResult } from '../../shared/src/types';
+import type { SttResult, TtsRequest, TtsResult, TtsWordTimings } from '../../shared/src/types';
 import type { PCtx } from './ctx';
 import { settings } from './env';
 
@@ -123,11 +123,13 @@ export function ttsRequest(ctx: PCtx, text: string): TtsRequest {
   };
 }
 
-/** One sentence -> raw PCM16 mono. Throws ProviderError on HTTP failure. */
+/** One sentence -> raw PCM16 mono (+ word timestamps via /tts/sse when enabled). Throws
+ *  ProviderError on HTTP failure. */
 export function synthesize(ctx: PCtx, req: TtsRequest): TtsResult {
+  const sse = MODULE_DEFAULTS.TTS_WORD_TIMESTAMPS;
   let res;
   try {
-    res = ctx.http.fetch('https://api.cartesia.ai/tts/bytes', {
+    res = ctx.http.fetch(`https://api.cartesia.ai/tts/${sse ? 'sse' : 'bytes'}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${settings.cartesiaKey(ctx)}`,
@@ -141,6 +143,7 @@ export function synthesize(ctx: PCtx, req: TtsRequest): TtsResult {
         language: req.language,
         output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: req.sampleRate },
         generation_config: { speed: req.speed },
+        ...(sse ? { add_timestamps: true } : {}),
       }),
       timeout: TimeDuration.fromMillis(20_000),
     });
@@ -148,9 +151,80 @@ export function synthesize(ctx: PCtx, req: TtsRequest): TtsResult {
     throw new ProviderError(0, `tts fetch failed: ${String(e)}`);
   }
   if (res.status !== 200) throw new ProviderError(res.status, errText(res.status, res.text()));
+  if (sse) return { ...parseTtsSse(res.text()), sampleRate: req.sampleRate };
   const pcm = res.bytes();
   if (pcm.length === 0) throw new ProviderError(502, 'tts: empty audio');
   return { pcm, sampleRate: req.sampleRate };
+}
+
+/**
+ * Cartesia /tts/sse body (read in full; procedures cannot stream): frames of `event: <type>` +
+ * `data: <json>`. `chunk` carries base64 PCM, `timestamps` word_timestamps {words, start, end}
+ * in seconds, `error` a message, `done` ends the stream.
+ */
+export function parseTtsSse(body: string): { pcm: Uint8Array; words: TtsWordTimings } {
+  const audio: Uint8Array[] = [];
+  const words: TtsWordTimings = { words: [], startsMs: [], endsMs: [] };
+  for (const frame of body.split(/\r?\n\r?\n/)) {
+    const data = frame
+      .split(/\r?\n/)
+      .filter(l => l.startsWith('data:'))
+      .map(l => l.slice(5).trim())
+      .join('');
+    if (!data) continue;
+    let ev: { type?: string; data?: string; message?: string; title?: string; word_timestamps?: { words?: unknown; start?: unknown; end?: unknown } };
+    try {
+      ev = JSON.parse(data);
+    } catch {
+      continue; // keep-alive or partial frame
+    }
+    if (ev.type === 'chunk' && typeof ev.data === 'string') audio.push(fromBase64(ev.data));
+    else if (ev.type === 'timestamps' && ev.word_timestamps) {
+      const w = ev.word_timestamps;
+      const ws = Array.isArray(w.words) ? w.words : [];
+      const st = Array.isArray(w.start) ? w.start : [];
+      const en = Array.isArray(w.end) ? w.end : [];
+      for (let i = 0; i < ws.length; i++) {
+        const a = Number(st[i]);
+        const b = Number(en[i]);
+        if (typeof ws[i] !== 'string' || !Number.isFinite(a)) continue;
+        words.words.push(ws[i] as string);
+        words.startsMs.push(Math.max(0, Math.round(a * 1000)));
+        words.endsMs.push(Math.max(0, Math.round((Number.isFinite(b) ? b : a) * 1000)));
+      }
+    } else if (ev.type === 'error') {
+      throw new ProviderError(502, `tts error: ${ev.title ?? ''} ${ev.message ?? ''}`.trim());
+    }
+  }
+  const pcm = concatBytes(audio);
+  if (pcm.length === 0) throw new ProviderError(502, 'tts: empty audio');
+  return { pcm, words };
+}
+
+const B64_INDEX = (() => {
+  const t = new Int16Array(128).fill(-1);
+  for (let i = 0; i < B64.length; i++) t[B64.charCodeAt(i)] = i;
+  return t;
+})();
+
+/** Standard base64 -> bytes (no atob in the module runtime). Ignores padding and whitespace. */
+export function fromBase64(s: string): Uint8Array {
+  const out = new Uint8Array(Math.floor((s.length * 3) / 4));
+  let n = 0;
+  let bits = 0;
+  let acc = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    const v = c < 128 ? B64_INDEX[c]! : -1;
+    if (v < 0) continue;
+    acc = (acc << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[n++] = (acc >> bits) & 0xff;
+    }
+  }
+  return out.subarray(0, n);
 }
 
 /** Non-streaming OpenRouter chat completion with a JSON schema response. Returns parsed JSON. */

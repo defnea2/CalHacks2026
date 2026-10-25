@@ -25,6 +25,9 @@ export const AudioOut = __t.object("AudioOut", {
   idx: __t.u32(),
   pcm: __t.byteArray(),
   sampleRate: __t.u32(),
+  words: __t.array(__t.string()),
+  wordStartsMs: __t.array(__t.u32()),
+  wordEndsMs: __t.array(__t.u32()),
 });
 export type AudioOut = __Infer<typeof AudioOut>;
 
@@ -48,6 +51,7 @@ export const BoardItem = __t.object("BoardItem", {
   answerState: __t.string(),
   lastAnswer: __t.string(),
   createdAt: __t.timestamp(),
+  markerPos: __t.i32(),
 });
 export type BoardItem = __Infer<typeof BoardItem>;
 

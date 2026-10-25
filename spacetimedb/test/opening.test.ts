@@ -2,9 +2,9 @@
 // appendTutorTurn, without a student turn to answer.
 import { describe, it, expect } from 'vitest';
 import { OPENING_TURN_IDX } from '../../shared/src/types';
-import { auth, call, makeLearner, makeSession, mod, pcm, runTts, session, setup, studentSays, turns, type Req } from './helpers';
+import { auth, call, makeLearner, makeSession, mod, pcm, runTts, session, setup, studentSays, ttsSse, turns, type Req } from './helpers';
 
-const ttsOk = (_req: Req) => ({ status: 200, body: new Uint8Array(4800).fill(1) });
+const ttsOk = (_req: Req) => ({ status: 200, body: ttsSse(new Uint8Array(4800).fill(1)) });
 
 function fresh() {
   const env = setup();

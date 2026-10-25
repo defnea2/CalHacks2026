@@ -14,6 +14,7 @@ export default {
   sessionId: __t.u64(),
   utteranceId: __t.u64(),
   sentenceIdx: __t.u32(),
+  markerPos: __t.i32(),
   kind: __t.string(),
   content: __t.string(),
   taskKey: __t.string(),

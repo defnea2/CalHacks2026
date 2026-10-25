@@ -162,6 +162,11 @@ export const audioOut = table(
     idx: t.u32(),
     pcm: t.byteArray(),
     sampleRate: t.u32(),
+    /** Word timestamps from TTS (ms from the start of `pcm`), parallel arrays; empty when the
+     *  provider gave none. Words are the whitespace-separated tokens of the sentence speech. */
+    words: t.array(t.string()),
+    wordStartsMs: t.array(t.u32()),
+    wordEndsMs: t.array(t.u32()),
   }
 );
 
@@ -195,6 +200,10 @@ export const boardItem = table(
     answerState: t.string(),
     lastAnswer: t.string(),
     createdAt: t.timestamp(),
+    /** Inline marker anchor: character offset in the speech of sentence (utteranceId,
+     *  sentenceIdx) where the item appears (at the word there). -1 = no marker: reveal when the
+     *  sentence starts playing. */
+    markerPos: t.i32().default(-1),
   }
 );
 

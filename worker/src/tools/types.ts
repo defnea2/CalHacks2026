@@ -7,6 +7,8 @@ export interface ToolContext {
   utteranceId: bigint;
   /** Index the next sentence added to this utterance will get (board reveal sync). */
   nextSentenceIdx: number;
+  /** Reveal anchor of the inline marker ⟦id⟧ in this reply's speech (consumed), if any. */
+  anchor?: (id: unknown) => { sentenceIdx: number; pos: number } | undefined;
   transport: Transport;
 }
 

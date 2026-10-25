@@ -43,6 +43,8 @@ VAD assets (Silero and Smart Turn models, worklet, ORT wasm + glue) are served u
 
 Reveal sync (`board/reveal.ts`): an item tagged `(utteranceId, sentenceIdx)` shows when that sentence starts playing (session tab: local playback; observer: status `played`), untagged (`0`) items show immediately, and everything shows once the utterance is over. `worked_steps` reveals one step per sentence played after it appeared.
 
+Inline markers: the tutor writes `⟦b1⟧` in its text where an item belongs and calls `show_board_item` with `id: "b1"` after its text; the worker strips the marker and the item gets `markerPos` (character offset in the tagged sentence's `speech`; `-1` = no marker). The session tab reveals it at that word: `PlaybackQueue` reports each sentence's start on the `performance.now()` clock, its trimmed duration and leading trim, plus the TTS word timestamps from `audio_out` (`wordStartsMs`/`wordEndsMs`, Cartesia `/tts/sse`); `markerOffsetMs` maps the marker to the start of the word at/after it (end of the last word for a marker at the end), or estimates `duration × pos / speech length` without timestamps. An item whose word already played when it arrived shows at once; the observer (no audio) and a reloaded tab reveal at the sentence start.
+
 ## E2E contract
 
 ### Chrome
@@ -101,7 +103,7 @@ window.__tutor = {
     listening, noise, noiseFloorDb, tutorAudio, localLatencyMs: number[],
     phrases: {phraseId, turnIdx, status, text}[],
     sentences: {utteranceId, idx, status, display}[],
-    boardItems: {id, idx, kind, visible, utteranceId, sentenceIdx, answerState}[],
+    boardItems: {id, idx, kind, visible, utteranceId, sentenceIdx, markerPos, answerState}[],
     observing, flushes,          // observer only
   },
   voice,                         // VoiceSession while talking (voice.playback, voice.ctx)
@@ -130,7 +132,8 @@ Event types:
 | `audio.context` | sampleRate, state |
 | `audio.received` | utteranceId, idx, bytes, sampleRate |
 | `audio.scheduled` | utteranceId, idx, durationMs, inMs, trimmedStart, trimmedEnd |
-| `audio.play_start` / `audio.play_end` | utteranceId, idx |
+| `audio.play_start` / `audio.play_end` | utteranceId, idx (play_start also durationMs, words = number of TTS word timestamps) |
+| `board.seen` / `board.reveal` | id, utteranceId, sentenceIdx, markerPos (reveal also markerAt: when the marker word plays, `performance.now()` clock, or null) |
 | `audio.dropped` / `audio.empty` | utteranceId, idx |
 | `audio.flush` | utteranceId (0 = current), reason = playback_flush / barge_in / destroy, stopped |
 | `latency.turn_end_to_first_audio` | ms, utteranceId |

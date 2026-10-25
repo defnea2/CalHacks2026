@@ -5,6 +5,7 @@
   "scripts": {
     "start": "NO_PROXY=127.0.0.1,localhost tsx src/main.ts",
     "smoke:llm": "tsx src/smoke-llm.ts",
+    "smoke:markers": "tsx src/smoke-markers.ts",
     "test": "vitest run",
     "typecheck": "tsc -p ."
   },
