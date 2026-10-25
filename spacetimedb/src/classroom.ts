@@ -71,6 +71,32 @@ export function setPresence(ctx: Ctx, learnerId: bigint, status: string): void {
   if (!PRESENCE.includes(status as PresenceStatus)) throw new SenderError(`status must be one of ${PRESENCE.join(', ')}`);
   if (!ctx.db.learner.id.find(learnerId)) throw new SenderError(`learner ${learnerId} not found`);
   writePresence(ctx, learnerId, status as PresenceStatus, connHex(ctx));
+  if (status === WAITING) joinActiveClass(ctx, learnerId);
+}
+
+/** The newest active class session, if any. */
+function activeClass(ctx: Ctx): ClassRow | undefined {
+  return [...ctx.db.classSession.active.filter(true)].sort((a, b) => (a.id < b.id ? 1 : -1))[0];
+}
+
+/**
+ * Late joiner: a real student who goes `waiting` while a class session is active joins it at
+ * once (same path as startClassSession: new linked session, mode of the previous session kept).
+ * A student already in a session of an active class stays there. Explicit ad-hoc sessions
+ * (`in_session`, "learn by myself") are NOT pulled in: only `waiting` joins. Returns the new
+ * linked session, if one was created.
+ */
+export function joinActiveClass(ctx: Ctx, learnerId: bigint): SessionRow | undefined {
+  const l = ctx.db.learner.id.find(learnerId);
+  if (!l || l.isSimulated) return undefined;
+  const cls = activeClass(ctx);
+  if (!cls) return undefined;
+  const prev = [...ctx.db.session.learnerId.filter(learnerId)].find(s => s.active);
+  if (prev && prev.classSessionId !== 0n && ctx.db.classSession.id.find(prev.classSessionId)?.active) return undefined;
+  const s = linkedSession(ctx, cls, learnerId, prev?.voice ?? true);
+  writePresence(ctx, learnerId, IN_SESSION);
+  console.log(`joinActiveClass: learner ${learnerId} late-joined class ${cls.id} (session ${s.id}, ${s.voice ? 'voice' : 'text'})`);
+  return s;
 }
 
 /** clientDisconnected: that connection's (real) learners go offline. */

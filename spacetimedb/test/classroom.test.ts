@@ -211,6 +211,73 @@ describe('startClassSession', () => {
   });
 });
 
+describe('late joiners (class session already active)', () => {
+  it('a real student who goes waiting during an active class is linked at once; voice/text mode kept', () => {
+    const env = setup(ANTHROPIC);
+    const { h, client } = env;
+    const t = teacher(env);
+    const cls = startClass(env, t.id, { simulatedCount: 2 });
+    expect(linked(h, cls.id)).toHaveLength(2);
+
+    const late = makeLearner(h, client, 'Lena');
+    call(h, client, mod.setPresence, { learnerId: late.id, status: 'waiting' });
+    const mine = linked(h, cls.id).filter(s => s.learnerId === late.id);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.voice).toBe(true);
+    expect(mine[0]!.taskText).toBe('Adding fractions with the same denominator');
+    expect(presenceOf(h, late.id)).toBe('in_session');
+
+    // Re-asserting `waiting` (hidden tab becomes visible) does not create another session.
+    call(h, client, mod.setPresence, { learnerId: late.id, status: 'waiting' });
+    expect(linked(h, cls.id).filter(s => s.learnerId === late.id).map(s => s.id)).toEqual([mine[0]!.id]);
+
+    // A typed ad-hoc session that switches to "wait for my teacher" joins in text mode.
+    const typed = makeLearner(h, client, 'Tom');
+    const adhoc = makeSession(h, client, typed.id);
+    call(h, client, mod.setSessionVoice, { sessionId: adhoc.id, voice: false });
+    call(h, client, mod.setPresence, { learnerId: typed.id, status: 'waiting' });
+    expect(session(h, adhoc.id).active).toBe(false);
+    expect(linked(h, cls.id).find(s => s.learnerId === typed.id)!.voice).toBe(false);
+  });
+
+  it('an explicit ad-hoc session ("learn by myself") during an active class stays ad-hoc', () => {
+    const env = setup();
+    const { h, client } = env;
+    const cls = startClass(env, teacher(env).id);
+    const solo = makeLearner(h, client, 'Sol');
+    const adhoc = makeSession(h, client, solo.id);
+    call(h, client, mod.setPresence, { learnerId: solo.id, status: 'in_session' });
+    expect(session(h, adhoc.id)).toMatchObject({ active: true, classSessionId: 0n });
+    expect(linked(h, cls.id)).toHaveLength(0);
+  });
+
+  it('nothing happens without an active class; the newest active class wins; ended class -> waiting stays', () => {
+    const env = setup();
+    const { h, client } = env;
+    const l = makeLearner(h, client, 'Nia');
+    call(h, client, mod.setPresence, { learnerId: l.id, status: 'waiting' });
+    expect([...h.db.session.iter()].some(s => s.learnerId === l.id)).toBe(false);
+    expect(presenceOf(h, l.id)).toBe('waiting');
+
+    const a = startClass(env, teacher(env, 'Mr. A').id); // Nia joins at start
+    expect(linked(h, a.id).map(s => s.learnerId)).toEqual([l.id]);
+    call(h, client, mod.endClassSession, { classSessionId: a.id });
+    expect(presenceOf(h, l.id)).toBe('waiting'); // module-written waiting does not re-link
+    expect([...h.db.session.iter()].filter(s => s.learnerId === l.id && s.active)).toHaveLength(0);
+
+    const other = makeLearner(h, client, 'Oli');
+    const b = startClass(env, teacher(env, 'Ms. B').id); // Nia (waiting) joins b
+    const c = startClass(env, teacher(env, 'Dr. C').id); // Nia moves to c (newest)
+    expect(linked(h, b.id)).toHaveLength(0);
+    call(h, client, mod.setPresence, { learnerId: other.id, status: 'waiting' });
+    expect(linked(h, c.id).map(s => s.learnerId).sort()).toEqual([l.id, other.id].sort());
+    // A student already in an active class is not moved by a repeated `waiting`.
+    const before = linked(h, c.id).find(s => s.learnerId === l.id)!.id;
+    call(h, client, mod.setPresence, { learnerId: l.id, status: 'waiting' });
+    expect(linked(h, c.id).find(s => s.learnerId === l.id)!.id).toBe(before);
+  });
+});
+
 // ---------------------------------------------------------------- simulation
 
 describe('simulation', () => {
