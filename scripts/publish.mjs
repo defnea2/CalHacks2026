@@ -13,7 +13,7 @@ const moduleEnv = {
   OPENROUTER_EXTRACTION_MODEL: env.OPENROUTER_EXTRACTION_MODEL || env.OPENROUTER_MODEL,
   AGENT_SECRET: env.AGENT_SECRET,
 };
-for (const k of ['CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS']) if (env[k]) moduleEnv[k] = env[k];
+for (const k of ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS']) if (env[k]) moduleEnv[k] = env[k];
 
 const db = env.SPACETIME_DB || 'tutor';
 const args = ['publish', db, '--server', 'local', '--module-path', 'spacetimedb', '--yes'];
