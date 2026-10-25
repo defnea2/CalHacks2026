@@ -1,6 +1,6 @@
 // Voice output: utterances, sentences, TTS jobs, playback state, interrupts, tutor turns.
 import { SenderError } from 'spacetimedb/server';
-import type { SentenceStatus, TtsResult, TurnState, TurnStatus } from '../../shared/src/types';
+import { OPENING_TURN_IDX, type SentenceStatus, type TtsResult, type TurnState, type TurnStatus } from '../../shared/src/types';
 import {
   type Ctx,
   type PCtx,
@@ -216,7 +216,8 @@ export function appendTutorTurn(
   if (args.utteranceId === 0n) throw new SenderError('utteranceId must be non-zero');
   if (tutorTurnFor(ctx, args.sessionId, args.utteranceId)) throw new SenderError(`tutor turn for utterance ${args.utteranceId} exists`);
   const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
-  const replyToIdx = m ? m.turnIdx : -1;
+  // The opening reply (OPENING_TURN_IDX) answers no student turn: it goes before all of them.
+  const replyToIdx = m && m.turnIdx !== OPENING_TURN_IDX ? m.turnIdx : -1;
   const text = args.text.trim();
 
   if (m) {

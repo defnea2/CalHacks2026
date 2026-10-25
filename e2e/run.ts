@@ -12,6 +12,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { OPENING_TURN_IDX } from '@tutor/shared';
 import { E2E_DIR, FIXTURES, OUT_DIR, ROOT } from './lib/env';
 import { externalEvidence, loadFixture, runScenario, type Check, type RunContext, type ScenarioRun } from './lib/scenario';
 import { countMemoryNotes, learnerIdOf } from './lib/server';
@@ -133,7 +134,7 @@ function printReport(results: GroupResult[], globalChecks: Check[], externalFlak
     r.status.toUpperCase(),
     String(r.attempt),
     ...names.map(n => SYM[r.checks.find(c => c.name === n)?.status ?? 'skip']!),
-    r.metrics.filter(m => m.utteranceId !== '0').map(m => m.firstAudio ?? '–').join('/') || '–',
+    r.metrics.filter(m => m.utteranceId !== '0' && m.turnIdx !== OPENING_TURN_IDX).map(m => m.firstAudio ?? '–').join('/') || '–',
     r.localLatencyMs.map(String).join('/') || '–',
   ]);
   const w = head.map((h, i) => Math.max(h.length, ...rows.map(r => r[i]!.length)));
@@ -147,11 +148,17 @@ function printReport(results: GroupResult[], globalChecks: Check[], externalFlak
     for (const e of r.externalEvidence.slice(0, 3)) console.log(`  ${r.id} external: ${e.slice(0, 240)}`);
   }
   for (const c of [...results.flatMap(g => g.checks), ...globalChecks]) console.log(`  ${c.name} [${SYM[c.status]}]: ${c.detail}`);
-  const lat = runs.flatMap(r => r.metrics.filter(m => m.utteranceId !== '0').map(m => m.firstAudio)).filter((x): x is number => x !== null).sort((a, b) => a - b);
-  if (lat.length) {
+  const stat = (label: string, opening: boolean) => {
+    const lat = runs
+      .flatMap(r => r.metrics.filter(m => m.utteranceId !== '0' && (m.turnIdx === OPENING_TURN_IDX) === opening).map(m => m.firstAudio))
+      .filter((x): x is number => x !== null)
+      .sort((a, b) => a - b);
+    if (!lat.length) return;
     const p = (q: number) => lat[Math.min(lat.length - 1, Math.floor(q * lat.length))];
-    console.log(`  latency turn end → first audio (server): n=${lat.length} min ${lat[0]} p50 ${p(0.5)} max ${lat[lat.length - 1]} ms (target ${E2E_DEFAULTS.latencyTargetMs})`);
-  }
+    console.log(`  latency ${label} (server): n=${lat.length} min ${lat[0]} p50 ${p(0.5)} max ${lat[lat.length - 1]} ms${opening ? '' : ` (target ${E2E_DEFAULTS.latencyTargetMs})`}`);
+  };
+  stat('turn end → first audio', false);
+  stat('"Start talking" → opening first audio', true);
   console.log(`  external flakes: ${externalFlakes}`);
 }
 

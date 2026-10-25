@@ -43,6 +43,7 @@ export class FakeTransport implements Transport {
   }
 
   beginUtterance = (a: object) => this.rec('beginUtterance', a);
+  beginOpening = (a: object) => this.rec('beginOpening', a);
   addSentence = (a: object) => this.rec('addSentence', a);
   appendTutorTurn = (a: object) => this.rec('appendTutorTurn', a);
   recordMetric = (a: object) => this.rec('recordMetric', a);
@@ -100,7 +101,7 @@ export function makeAgent(llm: LlmProvider, transport = new FakeTransport(), opt
 }
 
 export function session(id: bigint, over: Partial<SessionRow> = {}): SessionRow {
-  return { id, taskText: 'Expand 2/3 to twelfths', phase: pack.initialPhase, turnState: 'listening', active: true, hasImage: false, currentUtteranceId: 0n, ...over };
+  return { id, taskText: 'Expand 2/3 to twelfths', phase: pack.initialPhase, turnState: 'listening', active: true, hasImage: false, currentUtteranceId: 0n, turnCount: 0, ...over };
 }
 
 export function turn(sessionId: bigint, idx: number, textValue: string, status = 'ready', role = 'student'): TurnRow {
@@ -110,3 +111,6 @@ export function turn(sessionId: bigint, idx: number, textValue: string, status =
 export function phrase(sessionId: bigint, phraseId: number, turnIdx: number, status: string, textValue = ''): PhraseRow {
   return { sessionId, phraseId, turnIdx, status, text: textValue };
 }
+
+/** The last user message (the current turn; the phase block system message follows it). */
+export const lastUser = (msgs: ChatMessage[]) => [...msgs].reverse().find(m => m.role === 'user');

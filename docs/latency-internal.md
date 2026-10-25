@@ -55,6 +55,36 @@ All values in ms unless the name says bytes. n = number of samples.
 
 The decision itself costs ~1 ms of CPU after the frame arrives. The cost of VAD is entirely the configured silence windows plus ≤ 32 ms of frame quantisation.
 
+### Smart Turn (semantic turn end, added 2026-10-24)
+
+Pipecat Smart Turn v3.2 (`smart-turn-v3.2-cpu.onnx`, int8, 8.7 MB, BSD-2) runs in a Web Worker
+on onnxruntime-web wasm (1 thread, SIMD) at every silence phrase end, on the turn's audio (last ≤ 8 s).
+Headless Chrome on the same MacBook, `vad.smart_turn` / `smart_turn.ready` events:
+
+| Stage | n | typical | range | Notes |
+| --- | --- | --- | --- | --- |
+| Model load (fetch + session + warm-up run) | 13 | 400 ms | 385–680 | fetch from `/vad/` ~35 ms; starts after the mic, turns end on silence until it is ready. 650–680 ms with 3 parallel Chromes |
+| Log-mel features (TS, worker) | ~40 | 50 ms | 44–73 | 801 × FFT-400 + 80 mel bands |
+| Inference (worker) | ~40 | 220 ms | 215–224 | Whisper-Tiny encoder on 8 s; node wasm gives the same ~215 ms |
+| Request → verdict on the main thread | ~40 | 270 ms | 264–350 | so a verdict lands at ≈ 590 ms of silence (320 ms phrase end + 270 ms) |
+
+Turn end = silence after the last voiced frame (`vad.turn_end.silenceMs`), `VAD_TURN_MS=900`:
+
+| Scenario | silence only | Smart Turn | Verdicts (P complete) |
+| --- | --- | --- | --- |
+| correct-step | 928 | **608** | 0.98 |
+| noisy | 928 | **608** | 0.89–0.92 |
+| interrupt, 1st turn | 928 | **608** | 0.99 |
+| interrupt, barge-in turn | 928 | 928 | 0.03–0.18 (question: "incomplete") |
+| wrong-step | 928 | 928 | 1st sentence 0.95–0.97 but speech resumed after the 490 ms gap before the verdict (stale); last sentence 0.16–0.26 |
+| um-pauses | 928, one turn | 928, **one turn** | "Um, so," 0.005; "…how many pieces." 0.90–0.93 (complete, but held by the 600 ms minimum silence, speech resumed after the 590 ms pause); last sentence 0.19–0.33 |
+
+`SMART_TURN_MIN_SILENCE_MS` is 600, not 300: with 300 the um-pauses fixture splits into two turns
+(the sentence before the 590 ms thinking pause is grammatically complete and scores 0.9). Since the
+verdict needs ~590 ms of silence anyway, 600 costs only ~20 ms against 300 on the turns it shortens.
+The model often scores the *last* sentence of these TTS child-voice fixtures low (0.16–0.33), so those
+turns still wait for the 900 ms fallback.
+
 ### Upload transport (client → SpacetimeDB)
 
 | Stage | Method | n | p50 | p95 | max | Notes |

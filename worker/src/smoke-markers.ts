@@ -4,7 +4,7 @@
 // phase, no topic yet, like the E2E fixtures), else mid-lesson with the topic set.
 // Prints a per-try line and the rates, never keys.
 import fs from 'node:fs';
-import { markerIds, markerReminder, pack, prepareSentence, SentenceChunker, TOOL_NAMES, type ChatMessage } from '@tutor/shared';
+import { markerIds, markerReminder, renderPhaseBlock, pack, prepareSentence, SentenceChunker, TOOL_NAMES, type ChatMessage } from '@tutor/shared';
 import { loadConfig } from './env';
 import { createLlm } from './providers';
 import { buildSystemPrompt } from './prompt';
@@ -39,6 +39,7 @@ function conversation(user: string): ChatMessage[] {
         content: `Learner: Mia, 10, grade 5, likes pictures.\nOriginal task: Expand 2/3 so the bottom number is 12.\nCurrent phase: ${phase}\nBoard right now: empty\n\nTopic: not set yet. Find it and call set_topic.`,
       },
       { role: 'user', content: user },
+      { role: 'system', content: renderPhaseBlock(pack, phase) },
     ];
   }
   return [
@@ -50,6 +51,7 @@ function conversation(user: string): ChatMessage[] {
     { role: 'user', content: 'Hi, I need help with my fractions homework.' },
     { role: 'assistant', content: 'Sure! Let us look at it together. What part feels tricky?' },
     { role: 'user', content: user },
+    { role: 'system', content: renderPhaseBlock(pack, phase) },
   ];
 }
 

@@ -6,6 +6,7 @@ import { utteranceProgress, type UtteranceProgress } from '../board/reveal';
 import { Badge, Card, CardHeader, cx } from './ui';
 import { diffMs, fmtMs, phaseLabel, topicLabel, tsMs } from '../lib/format';
 import { eventLog, type LogEvent } from '../lib/debug';
+import { metricsSortKey, metricsTurnLabel } from '../lib/conversation';
 import type { NoiseState } from '../audio/noise';
 
 const PLAYED = 'played';
@@ -158,7 +159,7 @@ const METRIC_COLS: { key: 'sttDoneAt' | 'llmFirstTokenAt' | 'firstSentenceAt' | 
 ];
 
 export function MetricsTable({ data, localLatency }: { data: SessionData; localLatency?: Map<number, number> }) {
-  const rows = [...data.metrics].sort((a, b) => a.turnIdx - b.turnIdx);
+  const rows = [...data.metrics].sort((a, b) => metricsSortKey(a.turnIdx) - metricsSortKey(b.turnIdx));
   return (
     <div className="overflow-x-auto">
       <table data-testid="metrics-table" className="w-full text-xs">
@@ -194,7 +195,7 @@ export function MetricsTable({ data, localLatency }: { data: SessionData; localL
                 data-first-playback-ms={d.firstPlaybackAt ?? ''}
                 className="border-t"
               >
-                <td className="px-2 py-1">{m.turnIdx}</td>
+                <td className="px-2 py-1">{metricsTurnLabel(m.turnIdx)}</td>
                 {METRIC_COLS.map(c => (
                   <td key={c.key} className={cx('px-2 py-1', c.key === 'firstAudioAt' && (d[c.key] ?? 0) > 2500 ? 'text-destructive' : '')}>
                     {fmtMs(d[c.key] ?? null)}

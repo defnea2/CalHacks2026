@@ -1,6 +1,6 @@
 // One reply end to end through the Agent: sentences, metrics, tool ordering and tool rounds.
 import { describe, expect, it } from 'vitest';
-import { markerReminder, pack, TOOL_NAMES } from '@tutor/shared';
+import { markerReminder, pack, renderPhaseBlock, TOOL_NAMES } from '@tutor/shared';
 import { done, FakeLlm, makeAgent, session, text, tokens, tool, turn, waitFor } from './fakes';
 
 const S = 1n;
@@ -57,6 +57,7 @@ describe('reply', () => {
       { role: 'user', content: 'Hi there.' },
       { role: 'assistant', content: 'Hello! What are you working on?' },
       { role: 'user', content: 'Fractions.' },
+      { role: 'system', content: renderPhaseBlock(pack, pack.initialPhase) },
     ]);
     expect(llm.calls[0]!.tools.map(t => t.name)).toContain(TOOL_NAMES.setTopic);
   });
@@ -84,14 +85,31 @@ describe('reply', () => {
         tool(TOOL_NAMES.setPhase, { phase: phaseId, reason: 'found the gap' }),
         ...tokens('Look at the board with me for a second. '),
         tool(TOOL_NAMES.showBoardItem, { kind, content: { text: 'pizza' } }),
-        ...tokens('Each slice is the same size as the others.'),
+        ...tokens('Is each slice the same size as the others?'),
         done,
       ],
     ]);
     const { transport } = await answer(llm);
     expect(transport.names()).toEqual(['buildContext', 'beginUtterance', 'addSentence', 'setPhase', 'addSentence', 'showBoardItem', 'addSentence', 'appendTutorTurn']);
     expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(2);
-    expect(llm.calls).toHaveLength(1); // actions with spoken text: no extra LLM call
+    expect(llm.calls).toHaveLength(1); // actions, and the reply already ends with a next step: no extra LLM call
+  });
+
+  it('short first sentence + action tools without a next step: the LLM continues the same reply', async () => {
+    const llm = new FakeLlm([
+      [...tokens('Okay, let us draw it together. '), tool(TOOL_NAMES.showBoardItem, { kind, content: { text: 'pizza' } }, 'b1'), done],
+      [...tokens('Here is a pizza cut into three slices. How many slices are shaded?'), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(2);
+    expect(llm.calls[1]!.messages.at(-1)).toMatchObject({ role: 'tool', toolCallId: 'b1' });
+    expect(transport.of('addSentence').map(x => x.display)).toEqual([
+      'Okay, let us draw it together.',
+      'Here is a pizza cut into three slices.',
+      'How many slices are shaded?',
+    ]);
+    expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(1);
+    expect(transport.of('appendTutorTurn')[0]!.text).toBe('Okay, let us draw it together. Here is a pizza cut into three slices. How many slices are shaded?');
   });
 
   it('board item before any text points at sentence 0', async () => {
@@ -108,10 +126,12 @@ describe('reply', () => {
     const { transport } = await answer(llm);
     expect(llm.calls).toHaveLength(2);
     const second = llm.calls[1]!.messages;
-    const tail = second.slice(-3);
+    const tail = second.slice(-4);
     expect(tail[0]).toMatchObject({ role: 'assistant', content: '', toolCalls: [{ id: 'p1' }, { id: 'c1' }] });
     expect(tail[1]).toMatchObject({ role: 'tool', toolCallId: 'p1', content: 'ok' });
     expect(tail[2]).toMatchObject({ role: 'tool', toolCallId: 'c1', content: 'ok' });
+    // set_phase succeeded: the new phase block follows the tool results.
+    expect(tail[3]).toEqual({ role: 'system', content: renderPhaseBlock(pack, phaseId, true) });
     expect(transport.of('addSentence')).toHaveLength(1);
   });
 
@@ -230,6 +250,8 @@ describe('inline board markers', () => {
       ['no id', 2, -1],
     ]);
     expect(transport.of('appendTutorTurn')[0]!.text).toBe('Here are two thirds, and here are eight twelfths. Which one covers more of the bar?');
+    // "...? ⟦b3⟧ ⟦orphan⟧" ends with a next step once the markers are stripped: no extra round.
+    expect(llm.calls).toHaveLength(1);
   });
 
   it('a call that arrives before its marker waits for the text (order kept)', async () => {
@@ -237,7 +259,7 @@ describe('inline board markers', () => {
       [
         board('b1', 'early'),
         tool(TOOL_NAMES.clearBoard, {}),
-        ...tokens('Let us look at this picture ⟦b1⟧ of a pizza together.'),
+        ...tokens('Can you see this picture ⟦b1⟧ of a pizza here?'),
         done,
       ],
     ]);
@@ -246,12 +268,13 @@ describe('inline board markers', () => {
     expect(names).toEqual(['buildContext', 'beginUtterance', 'addSentence', 'showBoardItem', 'clearBoard', 'appendTutorTurn']);
     const sp = sentences(transport)[0]!.speech;
     expect(anchors(transport)).toEqual([['early', 0, sp.indexOf('of a pizza')]]);
+    expect(llm.calls).toHaveLength(1); // ends with a next step: no extra round
   });
 
   it('a marker spoken in one round anchors the item of the next round (after a query)', async () => {
     const llm = new FakeLlm([
       [...tokens('Okay, here is two thirds ⟦b1⟧ on our board. '), tool(TOOL_NAMES.setTopic, { category }, 't1'), done],
-      [...tokens('Look closely at the shaded parts now.'), board('b1', 'later'), done],
+      [...tokens('Do the shaded parts look the same?'), board('b1', 'later'), done],
     ]);
     const { transport } = await answer(llm);
     expect(llm.calls).toHaveLength(2);
@@ -263,7 +286,7 @@ describe('inline board markers', () => {
 
   it('a reused id maps to the next unconsumed marker', async () => {
     const llm = new FakeLlm([
-      [...tokens('First this one ⟦b1⟧ and then this one ⟦b1⟧ right here.'), board('b1', 'x'), board('B1', 'y'), board('b1', 'z'), done],
+      [...tokens('First this one ⟦b1⟧ and then this one ⟦b1⟧ right here, see?'), board('b1', 'x'), board('B1', 'y'), board('b1', 'z'), done],
     ]);
     const { transport } = await answer(llm);
     const sp = sentences(transport)[0]!.speech;

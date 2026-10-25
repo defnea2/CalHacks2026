@@ -14,6 +14,7 @@ import { APP_CONFIG } from '../app-config';
 import { compressPhoto } from '../lib/photo';
 import { eventLog } from '../lib/debug';
 import { navigate, sessionUrl } from '../lib/format';
+import { shouldStartConversation } from '../lib/conversation';
 
 const PLAYED = 'played';
 const SPEAKING = 'speaking';
@@ -121,6 +122,13 @@ export function SessionScreen({ conn, sessionId, settings }: { conn: DbConnectio
       setVoice(v);
       eventLog.log('ui.start_talking', {});
       await v.start();
+      // Fresh session: the tutor speaks first (audio can play now that the click created the AudioContext).
+      if (shouldStartConversation(session)) {
+        lastTurnEnd.current = Date.now();
+        turnCounter.current += 1;
+        const r = await callReducer('startConversation', { sessionId }, () => conn.reducers.startConversation({ sessionId }));
+        if (!r.ok) eventLog.log('ui.start_conversation_failed', { error: r.error ?? '' });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       eventLog.log('ui.start_failed', { error: msg });

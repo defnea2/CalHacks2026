@@ -1,6 +1,6 @@
 // Session map isolation, interruptions and preemptive generation.
 import { describe, expect, it } from 'vitest';
-import { done, FakeLlm, makeAgent, phrase, session, sleep, tokens, turn, waitFor, type Step } from './fakes';
+import { done, FakeLlm, makeAgent, phrase, session, sleep, tokens, turn, waitFor, type Step, lastUser } from './fakes';
 
 const A = 1n;
 const B = 2n;
@@ -16,7 +16,7 @@ describe('session isolation', () => {
   it('a slow reply in one session never blocks another', async () => {
     const g = gate();
     const llm = new FakeLlm((_i, msgs) => {
-      const last = String(msgs.at(-1)!.content);
+      const last = String(lastUser(msgs)!.content);
       return last.startsWith('slow')
         ? [...tokens('This is the slow session speaking right now. '), ...tokens('And '), { type: 'wait', until: g.p }, ...tokens('it continues after the wait.'), done]
         : [...tokens('This is the fast session and it is done.'), done];
@@ -211,7 +211,7 @@ describe('preemptive generation', () => {
     expect(llm.calls).toHaveLength(2);
     expect(llm.calls[0]!.signal.aborted).toBe(true);
     expect(transport.of('beginUtterance')[0]).toMatchObject({ preemptive: false });
-    expect(String(llm.calls[1]!.messages.at(-1)!.content)).toBe('Two thirds');
+    expect(String(lastUser(llm.calls[1]!.messages)!.content)).toBe('Two thirds');
   });
 
   it('off when PREEMPTIVE_LLM is false', async () => {
@@ -306,7 +306,7 @@ describe('preemptive start counted from the end of speech', () => {
     agent.onPhrase(phrase(A, 2, 0, 'done', 'thirds'));
     agent.onTurn(turn(A, 0, 'Two thirds', 'open'));
     await waitFor(() => llm.calls.length === 2, 60);
-    expect(String(llm.calls[1]!.messages.at(-1)!.content)).toBe('Two thirds');
+    expect(String(lastUser(llm.calls[1]!.messages)!.content)).toBe('Two thirds');
   });
 
   it('a non-final chunk alone waits the full PREEMPTIVE_SILENCE_MS', async () => {

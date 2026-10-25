@@ -24,6 +24,10 @@ export interface PhaseDef {
   label: string;
   /** Shown to the LLM in the system prompt ({{phases}}). */
   description: string;
+  /** Detailed instructions for this phase: what the tutor does, what to watch for, when to
+   *  move on. Only the CURRENT phase's block is sent ({{phaseInstructions}} in prompts.phase),
+   *  as a system message after the current turn; a phase change appends the new block. */
+  instructions: string;
   /** Phase ids this phase may move to. */
   next: string[];
 }
@@ -47,8 +51,17 @@ export interface TaxonomyCategory {
 }
 
 export interface PromptTemplates {
-  /** Placeholders: {{phases}} {{tools}} {{concepts}} {{board}} (kinds). */
+  /** Placeholders: {{phases}} {{tools}} {{concepts}} {{board}} (kinds). Must not depend on the
+   *  phase: it stays byte-identical for the whole session (prompt cache, replayed thinking). */
   system: string;
+  /** Current phase block, sent as a system message right after the current turn.
+   *  Placeholders: {{phase}} {{phaseInstructions}} (that phase's instructions only). */
+  phase: string;
+  /** Appended after the tool results when set_phase succeeds mid-reply (append-only).
+   *  Placeholders: {{phase}} {{phaseInstructions}}. */
+  phaseChange: string;
+  /** The tutor speaks first: instruction for the opening reply (no student turn yet). */
+  opening: string;
   /** Placeholders: {{learner}} {{memory}} {{task}} {{phase}} {{board}}. */
   context: string;
   /** Prompt for the background memory extractor (module). */
