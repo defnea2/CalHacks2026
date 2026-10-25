@@ -2,11 +2,20 @@
 // regenerates bindings, then runs stt-proxy, worker and client with prefixed logs.
 // Usage: node scripts/dev.mjs [--clear] [--no-client]     (Ctrl+C stops everything it started)
 import { spawn, spawnSync } from 'node:child_process';
+import { spacetimeCommand } from './spacetime.mjs';
 import { ROOT, loadEnv } from './env.mjs';
 
 const NO_PROXY = { NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
-const env = { ...process.env, ...NO_PROXY, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}` };
+const env = { ...loadEnv(), ...process.env, ...NO_PROXY, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}` };
 const children = [];
+const provider = env.LLM_PROVIDER || (env.ANTHROPIC_API_KEY ? 'anthropic' : 'openrouter');
+const required = ['CARTESIA_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', ...(provider === 'anthropic' ? ['ANTHROPIC_API_KEY'] : [])];
+const missing = required.filter(key => !env[key]?.trim());
+if (missing.length) {
+  console.error(`Missing local voice configuration: ${missing.join(', ')}. Fill .env.local before starting.`);
+  process.exit(1);
+}
+
 
 function run(name, cmd, args, color) {
   const child = spawn(cmd, args, { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -44,10 +53,10 @@ async function waitFor(url, ms = 30000) {
   throw new Error(`timeout waiting for ${url}`);
 }
 
-loadEnv(); // creates .env.local with AGENT_SECRET on first run
+const cli = spacetimeCommand(env);
 
 if (!(await up('http://127.0.0.1:3000/v1/ping'))) {
-  run('stdb', 'spacetime', ['start', '--data-dir', './.spacetime-data', '--non-interactive'], '35');
+  run('stdb', cli.command, [...cli.prefix, 'start', '--listen-addr', '127.0.0.1:3000', '--data-dir', './.spacetime-data', '--non-interactive'], '35');
   await waitFor('http://127.0.0.1:3000/v1/ping');
 }
 const publishArgs = ['scripts/publish.mjs', ...(process.argv.includes('--clear') ? ['--clear'] : [])];
@@ -56,7 +65,7 @@ spawnSync('pnpm', ['stdb:generate'], { cwd: ROOT, env, stdio: 'inherit' });
 
 if (!(await up('http://127.0.0.1:8787/health'))) run('stt', 'pnpm', ['--filter', 'stt-proxy', 'start'], '36');
 run('worker', 'pnpm', ['--filter', 'worker', 'start'], '33');
-if (!process.argv.includes('--no-client')) run('client', 'pnpm', ['--filter', 'client', 'dev'], '32');
+if (!process.argv.includes('--no-client')) run('client', 'pnpm', ['--filter', 'client', 'dev', '--port', env.VOICE_CLIENT_PORT || '5175'], '32');
 
 const stop = () => {
   for (const c of children) c.kill('SIGTERM');

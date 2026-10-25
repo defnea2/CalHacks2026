@@ -21,11 +21,11 @@ function readEnvFile(file: string): Record<string, string> {
   return fs.existsSync(file) ? parseEnv(fs.readFileSync(file, 'utf8')) : {};
 }
 
-/** Directory holding .env: the repo root, else the nearest ancestor with one (worktrees). */
+/** Directory holding .env or .env.local: prefer this checkout before searching ancestors. */
 export function findEnvDir(start = REPO_ROOT): string {
   let dir = start;
   for (;;) {
-    if (fs.existsSync(path.join(dir, '.env'))) return dir;
+    if (fs.existsSync(path.join(dir, '.env')) || fs.existsSync(path.join(dir, '.env.local'))) return dir;
     const up = path.dirname(dir);
     if (up === dir) return start;
     dir = up;

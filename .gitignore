@@ -23,3 +23,6 @@ recordings/
 .claude/
 # generated E2E speech (regenerate with pnpm --filter e2e gen-speech)
 e2e/fixtures/
+
+# Project-local development tools
+.tools/
