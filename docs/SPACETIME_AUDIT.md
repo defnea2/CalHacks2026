@@ -75,13 +75,13 @@ Not changed: `text_playback.endsAtMicros` / `extraction_cursor.runningSinceMicro
 
 **After the hackathon:**
 
-- Real identities and `ctx.sender` checks on session, teacher and presence reducers (`night/identity`).
-- Join-filtered worker subscriptions instead of table-wide ones.
-- Retention (expiry of transcripts, metrics, summaries) and a complete `deleteSessionData`.
-- Indexes on the filtered columns above.
-- Typed product returns instead of JSON strings; enums instead of strings where the SDK allows.
-- TTS retries as new scheduled rows with backoff, like STT; module watchdogs for stuck jobs.
-- `summary_job` dedupe and a backup reschedule; cache the pack hash instead of hashing per connect.
+- Real identities and `ctx.sender` checks on session, teacher and presence reducers, and on the
+  client-callable scheduled procedures (finding 13) (`night/identity`).
+- Retention of transcripts, metrics and summaries (photos and optional lesson JSON expire already).
+- Enums instead of strings where the SDK allows; typed `learnerInsights` once clients can be
+  redeployed together with the module.
+(Done in `night/stdb-hardening`: join-filtered subscriptions, complete `deleteSessionData`, indexes,
+TTS retry rows, extraction watchdog, summary dedupe, cached pack hash, typed `refreshDashboard`.)
 
 ## Story for judges
 
@@ -110,11 +110,7 @@ Not changed: `text_playback.endsAtMicros` / `extraction_cursor.runningSinceMicro
 
 1. No `ctx.sender` authorization on client reducers: any client can call session and teacher
    reducers, and `setPresence` can take over a learner's presence. Test users only, by spec.
-2. Table-wide worker subscriptions (with a guard), not join-filtered ones.
-3. No retention; JSON in string columns, string enums, JSON-string procedure returns.
-4. Missing indexes: `session.classSessionId`, `learner.simRank`, job `sessionId` columns,
-   `turnMetrics.utteranceId`.
-5. `deleteSessionData` misses `lesson_record`, `lesson_plan`, `text_playback`, `text_play_job`,
-   `turn_image`, `session_owner`.
-6. The TTS retry happens inside the same procedure call, while other jobs retry with scheduled rows.
-7. `onConnect` hashes the pack on every connect; `summary_job` has no dedupe or backup.
+2. Scheduled reducers and procedures are client-callable in 2.13; only the scheduled reducers check
+   the scheduler identity (finding 13).
+3. Transcripts, metrics and memory have no expiry (photos expire after 30 min); JSON in string
+   columns, string enums, `learnerInsights` returns a JSON string.
