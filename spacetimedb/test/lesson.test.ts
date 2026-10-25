@@ -68,6 +68,19 @@ describe('board', () => {
     expect([...h.db.boardItem.sessionId.filter(s.id)][0]!.visible).toBe(false);
   });
 
+  it('stores sentence-tagged animated math and rejects invalid command shapes', () => {
+    const { h, agent, s } = start();
+    const kind = pack.boardKinds.find(k => k.contentSchema.properties?.moments)!.name;
+    const content = { title: 'Stretch the rectangle', moments: [
+      { sentenceOffset: 0, visual: { kind: 'geometry', shape: 'rectangle', width: 3, height: 2 } },
+      { sentenceOffset: 1, visual: { kind: 'update', changes: [{ type: 'set_geometry', width: 6 }] } },
+    ] };
+    call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind, content: JSON.stringify(content) }), utteranceId: 7n, sentenceIdx: 1 });
+    expect([...h.db.boardItem.sessionId.filter(s.id)][0]).toMatchObject({ utteranceId: 7n, sentenceIdx: 1, kind });
+    const bad = { ...content, moments: [{ sentenceOffset: 0, visual: { kind: 'geometry', shape: 'rectangle', width: 3.2, height: 2 } }] };
+    expect(() => call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind, content: JSON.stringify(bad) }) })).toThrow(/invalid content/);
+  });
+
   it('gap tasks need an expected answer; submitGapAnswer checks deterministically', () => {
     const { h, agent, client, s } = start();
     const content = JSON.stringify({ latex: '\\frac{1}{2} = \\frac{\\square}{6}', prompt: 'Fill the box' });

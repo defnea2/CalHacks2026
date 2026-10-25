@@ -80,7 +80,7 @@ export function LessonWorkspace() {
             <Sketch kind={subject.kind} /><h2>{subject.title}</h2><p>{subject.detail}</p><span className="lesson-card-link">Start lesson <span aria-hidden="true">↗</span></span>
           </button>)}
         </div>
-        <p className="lesson-sample-note">You can type your answers. Voice is not connected yet.</p>
+        <p className="lesson-sample-note">This tutor works with typed answers. {import.meta.env.DEV && <a href="http://127.0.0.1:5175/">Open the voice tutor</a>}</p>
 
       </div>}
   </section>;

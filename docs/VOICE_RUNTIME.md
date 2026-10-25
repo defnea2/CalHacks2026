@@ -1,5 +1,7 @@
 # Voice Math Tutor
 
+For the integrated animated canvas and voice-free preview, see [VOICE_CANVAS.md](VOICE_CANVAS.md).
+
 A voice math tutor for students aged 8–12. Real-time voice (speech-to-text → LLM → text-to-speech), lesson phases, a shared board, and learner memory. Everything runs locally on top of SpacetimeDB.
 
 Test users only. Never use real children's data.
@@ -22,7 +24,7 @@ Requirements: Node 22+, pnpm, the `spacetime` CLI (2.13), and a root `.env` with
 
 ```bash
 pnpm install
-pnpm dev                   # everything below in one command (add -- --clear to reset the DB)
+pnpm dev:voice             # everything below in one command (add -- --clear to reset the DB)
 
 # or step by step:
 pnpm stdb:start            # terminal 1: local SpacetimeDB, data in ./.spacetime-data (git-ignored)
@@ -93,7 +95,7 @@ SPACETIME_SERVER=maincloud SPACETIME_DB=<unique-name> \
   STT_BASE_URL=https://<your-host>/stt-proxy.php CARTESIA_STT_MODEL=ink-2 \
   node scripts/publish.mjs                        # or STT_BASE_URL=https://api.cartesia.ai CARTESIA_STT_MODEL=ink-whisper
 SPACETIME_URI=wss://maincloud.spacetimedb.com SPACETIME_DB=<unique-name> pnpm worker
-pnpm client   # open http://127.0.0.1:5173/?uri=wss://maincloud.spacetimedb.com&db=<unique-name>
+pnpm client   # open http://127.0.0.1:5175/?uri=wss://maincloud.spacetimedb.com&db=<unique-name>
 ```
 
 Notes: database names on Maincloud are global, so pick a unique one. The module env (API keys) is then stored by Maincloud. Every hop (audio chunks up, sentences and audio down, worker ↔ database) crosses the internet, so expect more latency than locally, and more sensitivity to an unstable connection. Procedures on Maincloud can reach public hosts, so the PHP proxy (or Cartesia directly) works; localhost does not.

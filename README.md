@@ -140,4 +140,4 @@ Each feature is a separate commit on `feature/visual-engine`. The branch starts 
 
 ## Voice runtime
 
-The Cartesia/SpacetimeDB voice runtime is now included alongside the text-only tutor. See [voice setup](docs/VOICE_RUNTIME.md). Use `pnpm dev:voice` for the voice stack; `npm run dev` still starts the text-only tutor.
+The Cartesia/SpacetimeDB voice runtime is now included alongside the text-only tutor. See [animated voice canvas integration](docs/VOICE_CANVAS.md) and [voice setup](docs/VOICE_RUNTIME.md). The voice client uses port 5175; its `?canvasPreview` route works without microphone access or API keys. Use `pnpm dev:voice` for the voice stack; `npm run dev` still starts the text-only tutor.

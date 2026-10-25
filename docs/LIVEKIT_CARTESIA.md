@@ -1,3 +1,5 @@
+> Current runtime: the merged voice branch uses Cartesia with SpacetimeDB, not LiveKit. See [VOICE_CANVAS.md](VOICE_CANVAS.md) for the implemented adapter. This document is retained for a future LiveKit transport.
+
 # LiveKit + Cartesia handoff
 
 The visual engine is ready for a transport adapter. This document specifies that boundary. **This branch does not install LiveKit, start an agent server, call Cartesia, or implement the RPC adapter.** It supplies the tested director, schemas, renderer, math models, and voice-free rehearsal.

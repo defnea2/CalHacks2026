@@ -1,9 +1,11 @@
+> Integrated canvas: see [VOICE_CANVAS.md](../docs/VOICE_CANVAS.md). Open `http://127.0.0.1:5175/?canvasPreview` for a database-free test.
+
 # Client
 
 Local web client: Vite + React + TypeScript + Tailwind v4 (neutral oklch tokens as in the neoknow test client). It talks only to SpacetimeDB, through the generated bindings in `src/module_bindings/`.
 
 ```bash
-pnpm --filter client dev     # http://127.0.0.1:5173
+pnpm --filter client dev     # http://127.0.0.1:5175
 pnpm --filter client test    # vitest: VAD state machine, noise floor, PCM, playback ordering, board registry
 pnpm --filter client build
 ```
