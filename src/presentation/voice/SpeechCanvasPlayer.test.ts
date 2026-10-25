@@ -70,6 +70,25 @@ describe('speech canvas', () => {
     p.sync([], heard(), false);
     expect(visual(p)).toBeUndefined();
   });
+  it('plays Abdul’s cut-and-slide proof from speech and keeps the equation hidden until the final sentence', () => {
+    const p = new SpeechCanvasPlayer();
+    const proof = { ...item, content: { title: 'Same pieces, same area', moments: [
+      { sentenceOffset: 0, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'slant' } },
+      { sentenceOffset: 1, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+      { sentenceOffset: 2, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'reassembled' }] } },
+      { sentenceOffset: 3, visual: { kind: 'keep' }, showEquation: true },
+    ] } };
+    p.sync([proof], heard(1), false);
+    expect(visual(p)).toMatchObject({ kind: 'parallelogram', stage: 'slant', base: 6, height: 4, showEquation: false });
+    p.sync([proof], heard(1, 2), false);
+    expect(visual(p)).toMatchObject({ stage: 'cut', showEquation: false });
+    p.sync([proof], heard(1, 2, 3), false);
+    expect(visual(p)).toMatchObject({ stage: 'reassembled', base: 6, height: 4, showEquation: false });
+    p.sync([proof], heard(1, 2, 3, 4), true);
+    expect(visual(p)).toMatchObject({ stage: 'reassembled', showEquation: true });
+    expect(p.error).toBeNull();
+  });
+
   it('the voice database schema matches the canonical canvas schema', () => {
     expect(schema).toEqual(z.toJSONSchema(VoiceCanvasContentSchema, { io: 'input' }));
     expect(validateJson(schema as unknown as JsonSchema, content)).toEqual([]);

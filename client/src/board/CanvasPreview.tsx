@@ -4,6 +4,17 @@ import { utteranceProgress } from './reveal';
 import type { VoiceCanvasContent } from '../../../src/presentation/voice/contracts';
 
 const examples: { title: string; speech: string[]; content: VoiceCanvasContent }[] = [
+  { title: 'Slant, cut, slide', speech: [
+    'This slanted shape is six units across and four units high.',
+    'Cut the triangle along the dotted height line.',
+    'Slide that same triangle across to make a rectangle.',
+    'No pieces grew or disappeared, so the area is still six times four.',
+  ], content: { title: 'Does slanting change the area?', moments: [
+    { sentenceOffset: 0, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'slant' } },
+    { sentenceOffset: 1, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+    { sentenceOffset: 2, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'reassembled' }] } },
+    { sentenceOffset: 3, visual: { kind: 'keep' }, showEquation: true },
+  ] } },
   { title: 'Split a multiplication', speech: [
     'There are four rows, with eight squares in each row.',
     'Split each row into five and three squares without adding any squares.',
