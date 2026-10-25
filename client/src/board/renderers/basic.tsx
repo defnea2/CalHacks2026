@@ -37,7 +37,7 @@ export function WorkedStepsRenderer({ content, reveal }: RendererProps) {
               {i + 1}
             </span>
             <div className="flex flex-col">
-              <Tex latex={str(s.show)} />
+              <Tex latex={str(s.show)} className="text-lg" />
               {s.note ? <span className="text-sm text-muted-foreground">{s.note}</span> : null}
             </div>
           </li>

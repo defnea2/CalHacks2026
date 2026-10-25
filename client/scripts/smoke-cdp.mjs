@@ -80,6 +80,12 @@ await send('Page.navigate', { url });
 await sleep(3000);
 if (js) console.error('[js]', JSON.stringify(await evaluate(js)));
 await sleep(Number(secs) * 1000);
+if (process.env.SHOT) {
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1600, deviceScaleFactor: 1, mobile: false });
+  await sleep(300);
+  const shot = await send('Page.captureScreenshot', { format: 'png' });
+  (await import('node:fs')).writeFileSync(process.env.SHOT, Buffer.from(shot.result.data, 'base64'));
+}
 const res = await evaluate('JSON.stringify(window.__tutor ? window.__tutor.events : null)');
 const events = JSON.parse(res.result?.value ?? 'null') ?? [];
 for (const e of events) console.log(JSON.stringify(e));
