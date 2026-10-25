@@ -2,7 +2,7 @@
 //
 // Layout rule (user spec): four student cards per row. A cluster has exactly 2 or 4 students,
 // so a row holds one cluster of 4 or two clusters of 2. The module's only arithmetic exceptions
-// (an odd class: one cluster of 3; a class of one: a cluster of 1) take the slots of a 4 / a 2.
+// (none since the module never returns a 3 or a 1; kept defensive) take the slots of a 4 / a 2.
 
 export interface ClusterIn {
   id: string;

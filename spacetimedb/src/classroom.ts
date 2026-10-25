@@ -681,9 +681,9 @@ const DASHBOARD_SYSTEM = [
   'Return:',
   '- classSummary: 2-4 short, concrete sentences about the learning state of the whole class: what most are working on, how far they got, common difficulties or misconceptions, and who (by first name) needs the teacher now. No fluff.',
   'In classSummary, cluster names and descriptions refer to students by first name only. Never write learner ids or any number in brackets after a name (write "Jonas", not "Jonas (16)"); ids go ONLY into learnerIds.',
-  '- clusters: group EVERY student into exactly one cluster by similarity of their learning state (same lesson phase, same problem or misconception, similar progress). name: 1-3 words (e.g. "Adding bottoms", "Ready to practise"). description: one short sentence on their shared status. learnerIds: the learnerIds from the roster, exactly as given.',
+  '- clusters: group every student (in an odd class all but the one the size rule leaves out) into exactly one cluster by similarity of their learning state (same lesson phase, same problem or misconception, similar progress). name: 1-3 words (e.g. "Adding bottoms", "Ready to practise"). description: one short sentence on their shared status. learnerIds: the learnerIds from the roster, exactly as given.',
   'Check the maths yourself before calling an answer wrong (e.g. 5/8 + 3/8 = 8/8 = 1 is correct). Describe what students actually said, not what the tutor repeated.',
-  'Cluster sizes are strict; follow the size rule in the message. Never return a cluster of 1 unless the class has exactly 1 student.',
+  'Cluster sizes are strict; follow the size rule in the message. Every cluster has exactly 2 or 4 students; never return a cluster of 1 or 3.',
 ].join('\n');
 
 function dashboardUser(cls: ClassRow, students: StudentSnapshot[]): string {
@@ -732,6 +732,8 @@ export interface DashboardResult {
   repaired?: boolean;
   repairs?: string[];
   clusters?: number;
+  /** Students in no cluster (exactly one in an odd class; the dashboard shows "Not grouped yet"). */
+  ungrouped?: string[];
 }
 
 /** refreshDashboard (button) and dashboard_job (every DASHBOARD_INTERVAL_S). */
@@ -742,6 +744,7 @@ export function refreshDashboard(ctx: PCtx, classSessionId: bigint, scheduled: b
   let summary = '';
   let clusters: Cluster[] = [];
   let repairs: string[] = [];
+  let ungrouped: string[] = [];
   let valid = true;
   if (students.length === 0) {
     summary = 'No students are in this class session right now.';
@@ -762,8 +765,9 @@ export function refreshDashboard(ctx: PCtx, classSessionId: bigint, scheduled: b
       clusters = fixed.clusters;
       repairs = fixed.repairs;
       valid = fixed.valid;
+      ungrouped = fixed.ungrouped;
       console.log(
-        `refreshDashboard c${classSessionId} ${students.length} students: ${r.model} effort=${settings.dashboardEffort(ctx)} ${Date.now() - started} ms, in=${r.usage.inputTokens} out=${r.usage.outputTokens}, clusters ${clusters.map(c => c.learnerIds.length).join('+')}${valid ? '' : ` (repaired: ${repairs.join('; ')})`}`
+        `refreshDashboard c${classSessionId} ${students.length} students: ${r.model} effort=${settings.dashboardEffort(ctx)} ${Date.now() - started} ms, in=${r.usage.inputTokens} out=${r.usage.outputTokens}, clusters ${clusters.map(c => c.learnerIds.length).join('+')}${ungrouped.length ? ` + ${ungrouped.length} ungrouped` : ''}${valid ? '' : ` (repaired: ${repairs.join('; ')})`}`
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -781,7 +785,7 @@ export function refreshDashboard(ctx: PCtx, classSessionId: bigint, scheduled: b
     }
   }
   ctx.withTx(tx => writeDashboard(tx, classSessionId, summary, clusters));
-  return { ok: true, repaired: !valid, repairs, clusters: clusters.length };
+  return { ok: true, repaired: !valid, repairs, clusters: clusters.length, ungrouped };
 }
 
 /** Decimal learner id strings -> u64 (anything else dropped). */

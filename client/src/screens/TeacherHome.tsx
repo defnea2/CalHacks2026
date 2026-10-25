@@ -247,7 +247,7 @@ export function ClassSetup({ conn, teacherId }: { conn: DbConnection; teacherId:
             </div>
             <p className="pr-note" style={{ margin: '10px 0 0' }}>
               AI students with their own personalities and memories, typing to the tutor. The dashboard groups students in twos or fours, so an even number works best.
-              {simulated % 2 === 1 && <strong data-testid="sim-odd"> With an odd number one group has three.</strong>}
+              {simulated % 2 === 1 && <strong data-testid="sim-odd"> With an odd number one student stays ungrouped.</strong>}
             </p>
             <label className="pr-check" style={{ marginTop: 10 }}>
               <input data-testid="sim-reset" type="checkbox" checked={resetSim} onChange={e => setResetSim(e.target.checked)} />
