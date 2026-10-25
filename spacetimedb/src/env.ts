@@ -1,7 +1,7 @@
 // Module environment access. Reads ctx.env (SpacetimeDB module env, set at publish) and
 // treats missing/empty values as undefined. Unit tests have no env syscall, so they install
 // an override map instead (setEnvOverride); in production the override is never set.
-import { MODULE_DEFAULTS, PLAYBACK_DEFAULTS } from '../../shared/src/config';
+import { CLASSROOM_DEFAULTS, MODULE_DEFAULTS, PLAYBACK_DEFAULTS } from '../../shared/src/config';
 
 export type EnvName =
   | 'CARTESIA_API_KEY'
@@ -16,7 +16,9 @@ export type EnvName =
   | 'CARTESIA_TTS_MODEL'
   | 'CARTESIA_VOICE_ID'
   | 'TTS_SAMPLE_RATE'
-  | 'MEMORY_EVERY_N_TURNS';
+  | 'MEMORY_EVERY_N_TURNS'
+  | 'SIM_MAX_TURNS'
+  | 'DASHBOARD_INTERVAL_S';
 
 let override: Partial<Record<EnvName, string>> | null = null;
 
@@ -62,4 +64,6 @@ export const settings = {
     return readEnv(ctx, 'ANTHROPIC_API_KEY') ? 'anthropic' : 'openrouter';
   },
   agentSecret: (ctx: { env: unknown }) => readEnv(ctx, 'AGENT_SECRET') ?? '',
+  simMaxTurns: (ctx: { env: unknown }) => intEnv(ctx, 'SIM_MAX_TURNS', CLASSROOM_DEFAULTS.SIM_MAX_TURNS),
+  dashboardIntervalS: (ctx: { env: unknown }) => intEnv(ctx, 'DASHBOARD_INTERVAL_S', CLASSROOM_DEFAULTS.DASHBOARD_INTERVAL_S),
 };

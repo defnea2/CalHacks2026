@@ -23,6 +23,8 @@ export function createTestUser(ctx: Ctx, args: { name: string; age: number; grad
     grade: args.grade,
     style: args.style.trim().slice(0, 200),
     createdAt: ctx.timestamp,
+    isSimulated: false,
+    simRank: 0,
   });
 }
 
@@ -51,8 +53,9 @@ export function startSession(ctx: Ctx, args: { learnerId: bigint; taskText: stri
     currentUtteranceId: 0n,
     startedAt: ctx.timestamp,
     endedAt: undefined,
+    classSessionId: 0n,
   });
-  ctx.db.extractionCursor.insert({ sessionId: session.id, nextIdx: 0 });
+  ctx.db.extractionCursor.insert({ sessionId: session.id, nextIdx: 0, runningSinceMicros: 0n });
   return session;
 }
 

@@ -37,6 +37,21 @@ function pendingJob(ctx: Ctx, sessionId: bigint) {
   return undefined;
 }
 
+/** A run that crashed without clearing its marker stops blocking after this long. */
+const RUNNING_STALE_US = 300_000_000n;
+
+/** An extractMemory run holds the window (its job row is already gone during the LLM call). */
+export function extractionRunning(ctx: Ctx, sessionId: bigint): boolean {
+  const since = ctx.db.extractionCursor.sessionId.find(sessionId)?.runningSinceMicros ?? 0n;
+  return since !== 0n && ctx.timestamp.microsSinceUnixEpoch - since < RUNNING_STALE_US;
+}
+
+function setRunning(ctx: Ctx, sessionId: bigint, since: bigint): void {
+  const c = ctx.db.extractionCursor.sessionId.find(sessionId);
+  if (c) ctx.db.extractionCursor.sessionId.update({ ...c, runningSinceMicros: since });
+  else ctx.db.extractionCursor.insert({ sessionId, nextIdx: 0, runningSinceMicros: since });
+}
+
 /** Called whenever a student or tutor turn is appended (turnCount already raised). */
 export function onTurnAppended(ctx: Ctx, sessionId: bigint): void {
   const session = ctx.db.session.id.find(sessionId);
@@ -45,6 +60,7 @@ export function onTurnAppended(ctx: Ctx, sessionId: bigint): void {
   const to = processableEnd(ctx, sessionId, session.turnCount);
   if (to - from < settings.memoryEveryN(ctx)) return;
   if (pendingJob(ctx, sessionId)) return; // a run (or its retry) is queued; it advances the cursor first
+  if (extractionRunning(ctx, sessionId)) return; // the running window schedules the follow-up when done
   ctx.db.extractionJob.insert({
     scheduledId: 0n,
     scheduledAt: dueIn(ctx),
@@ -62,7 +78,9 @@ export function scheduleSessionEnd(ctx: Ctx, sessionId: bigint): void {
   const from = cursorOf(ctx, sessionId);
   const to = session.turnCount;
   const job = pendingJob(ctx, sessionId);
-  if (job && job.fromIdx === from) {
+  if (extractionRunning(ctx, sessionId)) {
+    // The running window schedules the leftover turns when it finishes (session inactive).
+  } else if (job && job.fromIdx === from) {
     if (job.toIdx < to) ctx.db.extractionJob.scheduledId.update({ ...job, toIdx: to });
   } else if (to > from) {
     ctx.db.extractionJob.insert({
@@ -277,11 +295,33 @@ type ExtractionJobRow = {
   attempt: number;
 };
 
+/** After a run released the window: schedule the turns that arrived meanwhile (N reached, or
+ *  any leftover once the session has ended). */
+function scheduleFollowUp(ctx: Ctx, sessionId: bigint): void {
+  const session = ctx.db.session.id.find(sessionId);
+  if (!session || pendingJob(ctx, sessionId)) return;
+  const from = cursorOf(ctx, sessionId);
+  const to = processableEnd(ctx, sessionId, session.turnCount);
+  if (to - from >= settings.memoryEveryN(ctx) || (!session.active && to > from)) {
+    ctx.db.extractionJob.insert({ scheduledId: 0n, scheduledAt: dueIn(ctx), sessionId, learnerId: session.learnerId, fromIdx: from, toIdx: to, attempt: 0 });
+  }
+}
+
+/** Clears this run's marker (only if it is still ours) and schedules what queued up. */
+function releaseWindow(ctx: Ctx, sessionId: bigint, since: bigint, followUp = true): void {
+  const c = ctx.db.extractionCursor.sessionId.find(sessionId);
+  if (c && c.runningSinceMicros === since) ctx.db.extractionCursor.sessionId.update({ ...c, runningSinceMicros: 0n });
+  if (followUp) scheduleFollowUp(ctx, sessionId);
+}
+
 export function extractMemory(ctx: PCtx, job: ExtractionJobRow): void {
   const input = ctx.withTx(tx => {
     if (cursorOf(tx, job.sessionId) !== job.fromIdx) return null; // another run handled it
+    if (extractionRunning(tx, job.sessionId)) return null; // duplicate of a window in flight
+    const since = tx.timestamp.microsSinceUnixEpoch;
+    setRunning(tx, job.sessionId, since);
     const turns = sessionTurns(tx, job.sessionId).filter(t => t.idx >= job.fromIdx - CONTEXT_TURNS && t.idx < job.toIdx);
-    return { turns, notes: learnerNotes(tx, job.learnerId) };
+    return { turns, notes: learnerNotes(tx, job.learnerId), since };
   });
   if (!input) return;
 
@@ -321,6 +361,8 @@ export function extractMemory(ctx: PCtx, job: ExtractionJobRow): void {
       } else {
         ctx.withTx(tx => {
           if (cursorOf(tx, job.sessionId) === job.fromIdx) scheduleRetry(tx, job);
+          // Retry queued (it blocks new windows) or given up (the next turns schedule afresh).
+          releaseWindow(tx, job.sessionId, input.since, false);
         });
         return;
       }
@@ -328,8 +370,9 @@ export function extractMemory(ctx: PCtx, job: ExtractionJobRow): void {
   }
 
   ctx.withTx(tx => {
-    if (cursorOf(tx, job.sessionId) !== job.fromIdx) return; // raced: someone else wrote this window
-    applyExtraction(tx, job, raw);
+    // raced: someone else wrote this window -> write nothing
+    if (cursorOf(tx, job.sessionId) === job.fromIdx) applyExtraction(tx, job, raw);
+    releaseWindow(tx, job.sessionId, input.since);
   });
 }
 
@@ -381,7 +424,7 @@ export function applyExtraction(ctx: Ctx, job: { sessionId: bigint; learnerId: b
 
   const cursor = ctx.db.extractionCursor.sessionId.find(job.sessionId);
   if (cursor) ctx.db.extractionCursor.sessionId.update({ ...cursor, nextIdx: job.toIdx });
-  else ctx.db.extractionCursor.insert({ sessionId: job.sessionId, nextIdx: job.toIdx });
+  else ctx.db.extractionCursor.insert({ sessionId: job.sessionId, nextIdx: job.toIdx, runningSinceMicros: 0n });
 }
 
 function setMastery(ctx: Ctx, learnerId: bigint, concept: string, mastery: number): void {
