@@ -98,6 +98,11 @@ interface MasteryChange {
 
 const conceptKeys = () => pack.taxonomy.flatMap(c => c.concepts.map(k => k.key));
 
+/** Strict JSON schema mode needs every property listed as required. */
+const ITEM_FIELDS = Object.keys({
+  action: 1, noteId: 1, kind: 1, category: 1, concept: 1, text: 1, outcome: 1, confidence: 1, evidence: 1,
+} satisfies Record<keyof ExtractionItem, 1>);
+
 function extractionSchema(): Record<string, unknown> {
   return {
     type: 'object',
@@ -109,7 +114,7 @@ function extractionSchema(): Record<string, unknown> {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['action', 'noteId', 'kind', 'category', 'concept', 'text', 'outcome', 'confidence', 'evidence'],
+          required: ITEM_FIELDS,
           properties: {
             action: { type: 'string', enum: [...ACTIONS] },
             noteId: { type: 'integer', description: 'Existing note id for update/reinforce, 0 for create.' },

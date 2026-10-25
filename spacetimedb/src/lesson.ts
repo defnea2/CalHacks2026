@@ -10,7 +10,9 @@ import { GAP_STATES, type ExpectedAnswer, type GapState, type MemoryKind } from 
 import { type Ctx, type BoardItemRow, type SessionRow, getActiveSession, getSession, parseJson, truncate, updateSession } from './ctx';
 
 const [GAP_OPEN, GAP_CORRECT, GAP_WRONG] = GAP_STATES as unknown as [GapState, GapState, GapState];
-const ANSWER_FORMS: ExpectedAnswer['form'][] = ['number', 'fraction', 'choice', 'text'];
+// Exhaustive over ExpectedAnswer['form'] (keys, so no string literal collides with a pack kind name).
+const ANSWER_FORM_SET = { number: true, fraction: true, choice: true, text: true } satisfies Record<ExpectedAnswer['form'], true>;
+const ANSWER_FORMS = Object.keys(ANSWER_FORM_SET) as ExpectedAnswer['form'][];
 
 // ---------------------------------------------------------------- phases
 
