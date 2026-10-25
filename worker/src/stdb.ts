@@ -167,6 +167,9 @@ export class StdbLink {
           .registerAgent({ secret: this.o.agentSecret })
           .then(() => this.log('[stdb] registered as agent'))
           .catch(e => this.log(`[stdb] registerAgent failed: ${e instanceof Error ? e.message : String(e)}`));
+        // Fresh per-session state: after a reconnect or a cleared database (session ids restart
+        // at 1) a reused SessionAgent would hold stale turns/utterances and stay silent.
+        agent.closeAll();
         this.wire(conn, agent);
       })
       .onConnectError((_ctx, err) => {

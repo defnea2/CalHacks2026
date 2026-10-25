@@ -18,6 +18,8 @@ export interface SessionRow {
   category?: string;
   concept?: string;
   learnerId?: bigint;
+  /** Tells a new session from an old one with the same id (ids restart after a cleared database). */
+  startedAt?: { microsSinceUnixEpoch: bigint };
 }
 
 export interface TurnRow {

@@ -117,6 +117,9 @@ export class Agent {
 
   onSession(row: SessionRow): void {
     if (!row.active) return this.onSessionGone(row.id);
+    // Same id, different session (ids restart at 1 after `--clear` / a republished database).
+    const prev = this.sessions.get(row.id)?.row?.startedAt?.microsSinceUnixEpoch;
+    if (prev !== undefined && row.startedAt && prev !== row.startedAt.microsSinceUnixEpoch) this.onSessionGone(row.id);
     this.session(row.id).setSession(row);
   }
 
@@ -159,7 +162,7 @@ export class Agent {
     this.sessions.get(sessionId)?.playbackFlush(utteranceId);
   }
 
-  /** Abort everything (shutdown). */
+  /** Abort everything (shutdown, and on every (re)connect: the subscription re-delivers all rows). */
   closeAll(): void {
     for (const id of [...this.sessions.keys()]) this.onSessionGone(id);
   }
