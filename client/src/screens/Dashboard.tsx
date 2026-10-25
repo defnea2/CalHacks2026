@@ -1,12 +1,15 @@
 // Teacher dashboard (?class=<classSessionId>), user spec in docs/NIGHT_PLAN.md "Classroom feature":
 // top: the class learning-state summary (class_summary; the module refreshes it every 30 s, the
 // button calls refreshDashboard); below: the clusters (student_cluster, 2 or 4 students each, four
-// student cards per row); hover a card → Observe → the student's live session (<SessionView
-// readOnly />) in a frame with previous / next / stop. Observing calls setImpersonation, which
-// pauses the summaries in the module (and catches up at once on stop when a refresh is overdue).
+// student cards per row; the odd student of an odd class in "Not grouped yet" at the end). Each
+// card is a small live chat window (StudentCard): the class's `turn` + `reply_sentence` rows,
+// subscribed once per class, stream in as bubbles. Hover / focus a card → Observe (the student's
+// live session, <SessionView readOnly />, in a frame with previous / next / stop) or Profile (the
+// half-screen drawer). Observing calls setImpersonation, which pauses the summaries in the module
+// (and catches up at once on stop when a refresh is overdue).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DbConnection } from '../module_bindings';
-import type { ClassSession, ClassSummary, DashboardState, Learner, LessonState, Session, StudentCluster, Teacher, Turn } from '../module_bindings/types';
+import type { ClassSession, ClassSummary, DashboardState, Learner, LessonState, ReplySentence, Session, StudentCluster, Teacher, Turn } from '../module_bindings/types';
 import { callReducer, subscribe } from '../stdb/connection';
 import { useRows } from '../stdb/useRows';
 import { navigate, phaseLabel, routeUrl, tsMs } from '../lib/format';
@@ -18,6 +21,9 @@ import { SessionView } from '../session/SessionView';
 import { STAGE_LABELS } from '../session/stages';
 import { Initial } from './StudentHome';
 import { ProfileDrawer } from '../insights/ProfileDrawer';
+import { bubblesSignature, sessionBubbles, type Bubble } from '../lib/bubbles';
+import { NextIcon, ObserveIcon, PrevIcon, ProfileIcon, StopIcon } from '../brand/icons';
+import { StudentCard } from './StudentCard';
 
 interface Student {
   id: string;
@@ -26,7 +32,6 @@ interface Student {
   stage: string;
   lastIn: string;
   lastOut: string;
-  lastOrder: 'in-first' | 'out-first';
   turns: number;
 }
 
@@ -68,17 +73,50 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
   const learners = useRows<Learner>(conn.db.learner, () => true, []);
   const teacher = useRows<Teacher>(conn.db.teacher, t => t.id === cls?.teacherId, [cls?.teacherId])[0];
 
-  // Per-student rows: chat in/out (turn) and the lesson stage (lesson_state) of every linked session.
+  // Per-student rows of every linked session, in ONE subscription for the class (not per card):
+  // chat in/out (turn), tutor sentences as they are played (reply_sentence), lesson stage.
   const sessionKey = sessions.map(s => s.id.toString()).sort().join(',');
   useEffect(() => {
     if (!sessionKey) return;
     const ids = sessionKey.split(',');
-    const sub = subscribe(conn, ids.flatMap(id => [`SELECT * FROM turn WHERE session_id = ${id}`, `SELECT * FROM lesson_state WHERE session_id = ${id}`]), `dashboard turns ${ids.length}`);
+    const sub = subscribe(
+      conn,
+      ids.flatMap(id => [`SELECT * FROM turn WHERE session_id = ${id}`, `SELECT * FROM reply_sentence WHERE session_id = ${id}`, `SELECT * FROM lesson_state WHERE session_id = ${id}`]),
+      `dashboard live ${ids.length}`
+    );
     return () => sub.unsubscribe();
   }, [conn, sessionKey]);
   const sessionIds = useMemo(() => new Set(sessionKey.split(',')), [sessionKey]);
   const turns = useRows<Turn>(conn.db.turn, t => sessionIds.has(t.sessionId.toString()), [sessionIds]);
+  const sentences = useRows<ReplySentence>(conn.db.replySentence, r => sessionIds.has(r.sessionId.toString()), [sessionIds]);
   const lessons = useRows<LessonState>(conn.db.lessonState, l => sessionIds.has(l.sessionId.toString()), [sessionIds]);
+
+  // Bubbles per session; an unchanged list keeps its previous array so the (memo) card skips.
+  const bubbleCache = useRef(new Map<string, { sig: string; bubbles: Bubble[] }>());
+  const bubbles = useMemo(() => {
+    const turnsBy = new Map<string, Turn[]>();
+    for (const t of turns) turnsBy.set(t.sessionId.toString(), [...(turnsBy.get(t.sessionId.toString()) ?? []), t]);
+    const sentBy = new Map<string, ReplySentence[]>();
+    for (const r of sentences) sentBy.set(r.sessionId.toString(), [...(sentBy.get(r.sessionId.toString()) ?? []), r]);
+    const out = new Map<string, Bubble[]>();
+    for (const id of sessionIds) {
+      if (!id) continue;
+      const list = sessionBubbles(
+        (turnsBy.get(id) ?? []).map(t => ({ idx: t.idx, role: t.role, text: t.text, intent: t.intent, utteranceId: t.utteranceId.toString(), createdAtMs: tsMs(t.createdAt) ?? 0 })),
+        (sentBy.get(id) ?? []).map(r => ({ utteranceId: r.utteranceId.toString(), idx: r.idx, display: r.display, speech: r.speech, status: r.status, createdAtMs: tsMs(r.createdAt) ?? 0 })),
+        { label: typedTurnText }
+      );
+      const sig = bubblesSignature(list);
+      const hit = bubbleCache.current.get(id);
+      if (hit && hit.sig === sig) out.set(id, hit.bubbles);
+      else {
+        bubbleCache.current.set(id, { sig, bubbles: list });
+        out.set(id, list);
+      }
+    }
+    for (const id of bubbleCache.current.keys()) if (!sessionIds.has(id)) bubbleCache.current.delete(id);
+    return out;
+  }, [turns, sentences, sessionIds]);
 
   const students = useMemo(() => {
     const m = new Map<string, Student>();
@@ -96,7 +134,6 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
         stage: STAGE_LABELS[notes.phase ?? ''] ?? (s.phase ? phaseLabel(s.phase) : 'Starting'),
         lastIn: lastIn ? typedTurnText(lastIn.text, lastIn.intent) : '',
         lastOut: lastOut?.text ?? '',
-        lastOrder: lastIn && lastOut && lastIn.idx > lastOut.idx ? 'out-first' : 'in-first',
         turns: ts.filter(t => t.role === 'student').length,
       });
     }
@@ -124,10 +161,13 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
     },
     [conn, classSessionId]
   );
-  const observe = (id: string | null) => {
-    setObserving(id);
-    impersonate(id);
-  };
+  const observe = useCallback(
+    (id: string | null) => {
+      setObserving(id);
+      impersonate(id);
+    },
+    [impersonate]
+  );
   // Leaving the page while observing resumes the summaries.
   useEffect(() => {
     if (!observing) return;
@@ -197,6 +237,25 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
 
   const observed = observing ? students.get(observing) : undefined;
   const title = cls.content || cls.goals || 'Class session';
+  // "Not grouped yet": the odd student of an odd class (or everyone before the first summary).
+  // It fills the half-empty last row when it fits, otherwise it gets a row of its own.
+  const lastRow = rows[rows.length - 1];
+  const ungroupedInline = !!lastRow && ungrouped.length <= 2 && lastRow.reduce((n, c) => n + c.slots, 0) === 2;
+  const ungroupedSlot =
+    ungrouped.length > 0 ? (
+      <section className="db-cluster db-cluster-ungrouped" data-testid="ungrouped" data-slots={ungrouped.length <= 2 ? 2 : 4} aria-label="Not grouped yet">
+        {rows.length > 0 && (
+          <div className="db-cluster-head">
+            <h3 className="db-ungrouped-title">Not grouped yet</h3>
+          </div>
+        )}
+        <div className="db-cards">
+          {ungrouped.map(id => (
+            <Card key={id} s={students.get(id)!} bubbles={bubbles} onObserve={observe} onProfile={setProfileId} />
+          ))}
+        </div>
+      </section>
+    ) : null;
 
   return (
     <div data-testid="dashboard-screen" data-class-session-id={cid} data-active={cls.active}>
@@ -244,9 +303,12 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
         {refreshNote && <span className="pr-note" data-testid="refresh-note">{refreshNote}</span>}
       </section>
 
-      <div className="db-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'groups'} data-testid="tab-groups" onClick={() => setTab('groups')}>Groups<span>{rows.flat().length}</span></button>
-        <button role="tab" aria-selected={tab === 'all'} data-testid="tab-all" onClick={() => setTab('all')}>All sessions<span>{students.size}</span></button>
+      <div className="db-view-switch">
+        {tab === 'groups' ? (
+          <button className="db-textlink" data-testid="tab-all" onClick={() => setTab('all')}>All sessions ({students.size})</button>
+        ) : (
+          <button className="db-textlink" data-testid="tab-groups" onClick={() => setTab('groups')}>← Back to groups</button>
+        )}
       </div>
 
       {tab === 'groups' ? (
@@ -255,19 +317,15 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
           {rows.map((row, i) => (
             <div key={i} className="db-row" data-testid="cluster-row" data-sizes={row.map(c => c.learnerIds.length).join('+')}>
               {row.map(c => (
-                <Cluster key={c.id} cluster={c} students={students} onObserve={observe} onProfile={setProfileId} />
+                <Cluster key={c.id} cluster={c} students={students} bubbles={bubbles} onObserve={observe} onProfile={setProfileId} />
               ))}
+              {i === rows.length - 1 && ungroupedInline && ungroupedSlot}
             </div>
           ))}
-          {ungrouped.length > 0 && (
-            <>
-              {rows.length > 0 && <p className="db-ungrouped-title">Not grouped yet</p>}
-              <div className="db-row" data-testid="ungrouped">
-                {ungrouped.map(id => (
-                  <StudentCard key={id} s={students.get(id)!} onObserve={observe} onProfile={setProfileId} />
-                ))}
-              </div>
-            </>
+          {ungrouped.length > 0 && !ungroupedInline && (
+            <div className="db-row" data-testid="ungrouped-row">
+              {ungroupedSlot}
+            </div>
           )}
         </div>
       ) : (
@@ -275,7 +333,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
       )}
 
       <footer className="db-footer">
-        <span>Groups have two or four students (one group of three when the class is odd). The summary updates every 30 s and pauses while you observe a student.</span>
+        <span>Groups have two or four students; in an odd class one student waits in “Not grouped yet”. The summary updates every 30 s and pauses while you observe a student.</span>
         {state?.lastError ? <span data-testid="dashboard-error">Last update failed: {state.lastError}</span> : null}
       </footer>
 
@@ -299,7 +357,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
   );
 }
 
-function Cluster({ cluster, students, onObserve, onProfile }: { cluster: ClusterBlock; students: Map<string, Student>; onObserve: (id: string) => void; onProfile: (id: string) => void }) {
+function Cluster({ cluster, students, bubbles, onObserve, onProfile }: { cluster: ClusterBlock; students: Map<string, Student>; bubbles: Map<string, Bubble[]>; onObserve: (id: string) => void; onProfile: (id: string) => void }) {
   return (
     <section className="db-cluster" data-testid="cluster" data-slots={cluster.slots} data-size={cluster.learnerIds.length} aria-label={cluster.name}>
       <div className="db-cluster-head">
@@ -309,42 +367,29 @@ function Cluster({ cluster, students, onObserve, onProfile }: { cluster: Cluster
       <div className="db-cards">
         {cluster.learnerIds.map(id => {
           const s = students.get(id);
-          return s ? <StudentCard key={id} s={s} cluster={cluster.name} onObserve={onObserve} onProfile={onProfile} /> : null;
+          return s ? <Card key={id} s={s} bubbles={bubbles} cluster={cluster.name} onObserve={onObserve} onProfile={onProfile} /> : null;
         })}
       </div>
     </section>
   );
 }
 
-function StudentCard({ s, cluster, onObserve, onProfile }: { s: Student; cluster?: string; onObserve: (id: string) => void; onProfile: (id: string) => void }) {
-  const name = s.learner?.name ?? `Student ${s.id}`;
-  const out = s.lastOut ? { k: 'out', who: 'Tutor', text: s.lastOut } : null;
-  const inp = s.lastIn ? { k: 'in', who: name.split(' ')[0]!, text: s.lastIn } : null;
-  // chronological: the newer line last
-  const lines = (s.lastOrder === 'out-first' ? [out, inp] : [inp, out]).filter((l): l is { k: string; who: string; text: string } => !!l);
+const NO_BUBBLES: Bubble[] = [];
+
+/** Flattens a student to the memo card's primitive props. */
+function Card({ s, bubbles, cluster, onObserve, onProfile }: { s: Student; bubbles: Map<string, Bubble[]>; cluster?: string; onObserve: (id: string) => void; onProfile: (id: string) => void }) {
   return (
-    <article className="db-card" data-testid="student-card" data-learner-id={s.id} data-session-id={s.session.id.toString()} data-cluster={cluster ?? ''} tabIndex={-1}>
-      <div className="db-card-top">
-        <Initial name={name} />
-        <strong>{name}</strong>
-        <span className="db-turn" data-state={s.session.turnState} title={s.session.turnState} />
-        <span className="db-stage" data-testid="student-stage">{s.stage}</span>
-      </div>
-      <div className="db-chat" data-testid="student-chat">
-        {lines.length === 0 ? <p>Getting started…</p> : lines.map(l => (
-          <p key={l.k} className={l.k === 'in' ? 'db-in' : ''}>
-            <b>{l.who}</b>
-            {l.text}
-          </p>
-        ))}
-      </div>
-      <div className="db-card-actions">
-        <button className="pr-secondary db-profile" data-testid="open-profile" data-learner-id={s.id} onClick={() => onProfile(s.id)}>Profile</button>
-        <button className="pr-primary db-observe" data-testid="observe-student" data-learner-id={s.id} onClick={() => onObserve(s.id)}>
-          <span>Observe</span>
-        </button>
-      </div>
-    </article>
+    <StudentCard
+      id={s.id}
+      name={s.learner?.name ?? `Student ${s.id}`}
+      sessionId={s.session.id.toString()}
+      stage={s.stage}
+      turnState={s.session.turnState}
+      bubbles={bubbles.get(s.session.id.toString()) ?? NO_BUBBLES}
+      cluster={cluster}
+      onObserve={onObserve}
+      onProfile={onProfile}
+    />
   );
 }
 
@@ -375,8 +420,8 @@ function AllSessions({ order, students, clusterOf, onObserve, onProfile }: { ord
               <td>{s.turns}</td>
               <td className="db-last"><span>{s.lastIn || s.lastOut || '—'}</span></td>
               <td style={{ textAlign: 'right' }}>
-                <button className="pr-secondary" data-testid="open-profile-row" onClick={() => onProfile(id)} style={{ marginRight: 6 }}>Profile</button>
-                <button className="pr-secondary" data-testid="observe-student-row" onClick={() => onObserve(id)}>Observe</button>
+                <button className="pr-secondary db-icon-btn" data-testid="open-profile-row" onClick={() => onProfile(id)} style={{ marginRight: 6 }}><ProfileIcon size={16} />Profile</button>
+                <button className="pr-secondary db-icon-btn" data-testid="observe-student-row" onClick={() => onObserve(id)}><ObserveIcon size={16} />Observe</button>
               </td>
             </tr>
           );
@@ -402,15 +447,16 @@ function ObserveFrame({ conn, student, cluster, position, total, onStep, onStop 
       <div className="db-frame" data-testid="observe-frame" data-learner-id={student?.id ?? ''} data-session-id={student?.session.id.toString() ?? ''}>
         <div className="db-frame-bar">
           <div className="db-who">
+            <span className="db-frame-icon"><ObserveIcon size={20} /></span>
             <Initial name={name} />
             <strong data-testid="observe-name">{name}</strong>
             <small>{[cluster?.name, student?.stage].filter(Boolean).join(' · ')} · summaries paused</small>
           </div>
           <div className="db-frame-nav">
             <span>{position + 1} / {total}</span>
-            <button className="pr-secondary" data-testid="observe-prev" onClick={() => onStep(-1)} disabled={total < 2}>← Previous</button>
-            <button className="pr-secondary" data-testid="observe-next" onClick={() => onStep(1)} disabled={total < 2}>Next →</button>
-            <button className="pr-primary" data-testid="observe-stop" onClick={onStop}><span>Stop observing</span></button>
+            <button className="pr-secondary db-icon-btn" data-testid="observe-prev" onClick={() => onStep(-1)} disabled={total < 2}><PrevIcon size={16} />Previous</button>
+            <button className="pr-secondary db-icon-btn" data-testid="observe-next" onClick={() => onStep(1)} disabled={total < 2}>Next<NextIcon size={16} /></button>
+            <button className="pr-primary db-icon-btn" data-testid="observe-stop" onClick={onStop}><StopIcon size={16} /><span>Stop observing</span></button>
           </div>
         </div>
         <div className="db-frame-body">
