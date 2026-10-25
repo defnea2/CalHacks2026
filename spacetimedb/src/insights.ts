@@ -1,0 +1,133 @@
+// Teacher-facing student profile (contract: shared/src/insights.ts). Long-term information
+// only: memory notes with evidence, concept mastery, the last session summaries.
+//
+// Privacy: memory_note / note_evidence / concept_state / session_summary stay private tables
+// (no subscription path). This procedure is their only client read path, gated by an existing
+// teacher id and, when the module env INSIGHTS_KEY is set, a matching key. Without real teacher
+// auth anyone who knows a teacher id can read a profile: acceptable for test users only.
+import type { Timestamp } from 'spacetimedb';
+import {
+  INSIGHT_EVIDENCE_PER_NOTE,
+  INSIGHT_KIND_ORDER,
+  INSIGHT_MAX_NOTES,
+  INSIGHT_MAX_SUMMARIES,
+  INSIGHT_QUOTE_MAX,
+  type InsightNote,
+  type LearnerInsightsResult,
+} from '../../shared/src/insights';
+import { MEMORY_OUTCOMES, type MemoryKind, type MemoryOutcome } from '../../shared/src/types';
+import { type Ctx, type PCtx, truncate } from './ctx';
+import { readEnv } from './env';
+
+const ms = (t: Timestamp): number => Number(t.microsSinceUnixEpoch / 1000n);
+/** Newest first. */
+const desc = (a: Timestamp, b: Timestamp): number => Number(b.microsSinceUnixEpoch - a.microsSinceUnixEpoch > 0n) - Number(b.microsSinceUnixEpoch - a.microsSinceUnixEpoch < 0n);
+
+function kindRank(kind: string): number {
+  const i = INSIGHT_KIND_ORDER.indexOf(kind as MemoryKind);
+  return i < 0 ? INSIGHT_KIND_ORDER.length : i;
+}
+
+/** Read-only; runs inside one transaction. */
+export function readInsights(tx: Ctx, args: { learnerId: bigint; teacherId: bigint; key: string }): LearnerInsightsResult {
+  const required = readEnv(tx, 'INSIGHTS_KEY');
+  if (required !== undefined && args.key.trim() !== required) return { ok: false, error: 'locked' };
+  if (!tx.db.teacher.id.find(args.teacherId)) return { ok: false, error: 'unknown_teacher' };
+  const l = tx.db.learner.id.find(args.learnerId);
+  if (!l) return { ok: false, error: 'unknown_learner' };
+
+  const conceptTitle = (key: string) => (key ? tx.db.concept.key.find(key)?.title ?? '' : '');
+  const categoryTitle = (key: string) => (key ? tx.db.category.key.find(key)?.title ?? '' : '');
+
+  const notes: InsightNote[] = [...tx.db.memoryNote.learnerId.filter(l.id)]
+    .sort((a, b) => kindRank(a.kind) - kindRank(b.kind) || desc(a.updatedAt, b.updatedAt) || (b.id > a.id ? 1 : -1))
+    .slice(0, INSIGHT_MAX_NOTES)
+    .map(n => {
+      const ev = [...tx.db.noteEvidence.noteId.filter(n.id)].sort((a, b) => (b.id > a.id ? 1 : -1));
+      return {
+        id: String(n.id),
+        kind: n.kind as MemoryKind,
+        category: n.category,
+        concept: n.concept,
+        conceptTitle: conceptTitle(n.concept),
+        text: n.text,
+        outcome: (MEMORY_OUTCOMES.includes(n.outcome as MemoryOutcome) ? n.outcome : 'unknown') as MemoryOutcome,
+        confidence: n.confidence,
+        reinforced: n.reinforced,
+        createdMs: ms(n.createdAt),
+        updatedMs: ms(n.updatedAt),
+        seeded: ev.length === 0,
+        evidence: ev.slice(0, INSIGHT_EVIDENCE_PER_NOTE).map(e => ({
+          sessionId: String(e.sessionId),
+          fromTurn: e.fromTurn,
+          toTurn: e.toTurn,
+          quote: truncate(e.quote, INSIGHT_QUOTE_MAX),
+        })),
+      };
+    });
+
+  const mastery = [...tx.db.conceptState.learnerId.filter(l.id)]
+    .sort((a, b) => desc(a.updatedAt, b.updatedAt))
+    .map(c => {
+      const category = c.category || tx.db.concept.key.find(c.concept)?.category || '';
+      return {
+        concept: c.concept,
+        title: conceptTitle(c.concept) || c.concept,
+        category,
+        categoryTitle: categoryTitle(category),
+        mastery: c.mastery,
+        updatedMs: ms(c.updatedAt),
+      };
+    });
+
+  const sessions = [...tx.db.session.learnerId.filter(l.id)];
+  let first = ms(l.createdAt);
+  let last = first;
+  if (sessions.length) {
+    first = Math.min(...sessions.map(s => ms(s.startedAt)));
+    last = Math.max(...sessions.map(s => ms(s.endedAt ?? s.startedAt)));
+  }
+
+  const summaries = [...tx.db.sessionSummary.learnerId.filter(l.id)]
+    .sort((a, b) => desc(a.createdAt, b.createdAt))
+    .slice(0, INSIGHT_MAX_SUMMARIES)
+    .map(r => {
+      const s = tx.db.session.id.find(r.sessionId);
+      const topic = s?.concept ?? '';
+      return {
+        sessionId: String(r.sessionId),
+        summary: r.summary,
+        nextFocus: r.nextFocus,
+        createdMs: ms(r.createdAt),
+        taskText: s?.taskText ?? '',
+        topic,
+        topicTitle: conceptTitle(topic) || categoryTitle(s?.category ?? ''),
+      };
+    });
+
+  const persona = l.isSimulated ? tx.db.simProfile.rank.find(l.simRank)?.persona ?? '' : '';
+
+  return {
+    ok: true,
+    learner: {
+      id: String(l.id),
+      name: l.name,
+      age: l.age,
+      grade: l.grade,
+      style: l.style,
+      isSimulated: l.isSimulated,
+      persona,
+      sessionCount: sessions.length,
+      firstSeenMs: first,
+      lastSeenMs: last,
+    },
+    notes,
+    mastery,
+    summaries,
+    generatedMs: ms(tx.timestamp),
+  };
+}
+
+export function learnerInsights(ctx: PCtx, args: { learnerId: bigint; teacherId: bigint; key: string }): LearnerInsightsResult {
+  return ctx.withTx(tx => readInsights(tx, args));
+}
