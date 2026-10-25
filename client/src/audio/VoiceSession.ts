@@ -126,7 +126,7 @@ export class VoiceSession {
         break;
       case 'turn_end': {
         const wall = Date.now();
-        eventLog.log('vad.turn_end', { noiseDb: e.noiseDb });
+        eventLog.log('vad.turn_end', { noiseDb: e.noiseDb, reason: e.reason, silenceMs: Math.round(e.silenceMs) });
         void callReducer('endTurn', { sessionId }, () => conn.reducers.endTurn({ sessionId }));
         // once per turn: the noise floor for turn_metrics.noiseDb
         const noiseArgs = { sessionId, noiseDb: e.noiseDb ?? -100 };

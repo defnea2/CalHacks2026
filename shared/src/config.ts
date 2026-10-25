@@ -28,6 +28,14 @@ export const VOICE_DEFAULTS = {
   /** In `noisy` state: threshold += this, min speech = NOISY_MIN_SPEECH_MS. */
   NOISY_THRESHOLD_BOOST: 0.1,
   NOISY_MIN_SPEECH_MS: 200,
+  /** Semantic turn end (Pipecat Smart Turn v3, in the browser): 1 = on, 0 = silence only. */
+  SMART_TURN: 1,
+  /** P(turn complete) at or above this ends the turn early (model's own cut-off: 0.5). */
+  SMART_TURN_THRESHOLD: 0.5,
+  /** A "complete" verdict ends the turn once this much silence has passed (else VAD_TURN_MS).
+   *  Above children's ~500-600 ms thinking pauses after a complete-sounding sentence; the verdict
+   *  itself only lands ~270 ms after the phrase end (≈ 590 ms of silence) anyway. */
+  SMART_TURN_MIN_SILENCE_MS: 600,
 } as const;
 
 export const PLAYBACK_DEFAULTS = {
