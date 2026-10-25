@@ -66,7 +66,7 @@ describe('VadMachine + Smart Turn', () => {
   });
 
   it('"complete" ends the turn right at the phrase end instead of after VAD_TURN_MS', () => {
-    const d = new Driver(new VadMachine(cfg('?vad_turn_ms=900')), (r, dd) => dd.answer(r.requestId, 0.9));
+    const d = new Driver(new VadMachine(cfg('?vad_turn_ms=900&smart_turn_min_silence_ms=300')), (r, dd) => dd.answer(r.requestId, 0.9));
     d.silence(1000).speech(800).silence(1500);
     const ends = d.of('turn_end');
     expect(ends).toHaveLength(1);
@@ -89,7 +89,7 @@ describe('VadMachine + Smart Turn', () => {
 
   it('a late "complete" verdict ends the turn when it arrives', () => {
     let pending = 0;
-    const d = new Driver(new VadMachine(cfg('?vad_turn_ms=900')), r => (pending = r.requestId));
+    const d = new Driver(new VadMachine(cfg('?vad_turn_ms=900&smart_turn_min_silence_ms=300')), r => (pending = r.requestId));
     d.silence(1000).speech(800).silence(320 + 5 * FRAME_MS); // inference "takes" ~160 ms
     expect(d.of('turn_end')).toHaveLength(0);
     d.answer(pending, 0.8);
@@ -97,6 +97,21 @@ describe('VadMachine + Smart Turn', () => {
     expect(ends).toHaveLength(1);
     expect(ends[0]!.e.reason).toBe('smart_turn');
     expect(ends[0]!.e.silenceMs).toBeGreaterThanOrEqual(480);
+  });
+
+  it('defaults: a "complete" verdict at the phrase end ends the turn at 600 ms of silence', () => {
+    const d = new Driver(new VadMachine(cfg('?vad_turn_ms=900')), (r, dd) => dd.answer(r.requestId, 0.9));
+    d.silence(1000).speech(800).silence(1500);
+    const end = d.of('turn_end')[0]!.e;
+    expect(end.reason).toBe('smart_turn');
+    expect(end.silenceMs).toBe(608); // 19 frames
+  });
+
+  it('a 590 ms thinking pause after a "complete" sentence stays in the turn (defaults)', () => {
+    const d = new Driver(new VadMachine(cfg('?vad_turn_ms=900')), (r, dd) => dd.answer(r.requestId, 0.93));
+    d.silence(1000).speech(1500).silence(576).speech(1500).silence(1500);
+    expect(d.of('turn_end')).toHaveLength(1);
+    expect(d.of('speech_start')).toHaveLength(2);
   });
 
   it('SMART_TURN_MIN_SILENCE_MS above the phrase end delays a "complete" turn end', () => {

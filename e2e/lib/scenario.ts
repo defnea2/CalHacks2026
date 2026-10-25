@@ -163,7 +163,7 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
   let stopObserver = () => {};
   try {
     const page = await mic.newPage(sc.id, m => pageLog.push(m));
-    const base = `${ctx.baseUrl}?db=${encodeURIComponent(ctx.db)}`;
+    const base = `${ctx.baseUrl}?db=${encodeURIComponent(ctx.db)}${E2E_DEFAULTS.clientQuery ? `&${E2E_DEFAULTS.clientQuery}` : ''}`;
     run.sessionId = await createSessionViaUi(page, base, learnerName, TASK_TEXT);
     log(`session ${run.sessionId} (learner "${learnerName}")`);
     run.checks.push({ name: 'ui.session', status: 'pass', detail: `session ${run.sessionId} via create-user → learner → start-session` });
@@ -264,6 +264,20 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
   } else {
     add('student-turns', studentTurns.length === sc.turns ? 'pass' : 'warn', `${studentTurns.length} student turn(s), expected ${sc.turns}`);
   }
+
+  // Turn ends: silence after the last speech when the turn ended, and why (Smart Turn verdict
+  // or the VAD_TURN_MS fallback). Informational; warns only if Smart Turn never answered.
+  const smart = ofType('vad.smart_turn');
+  const smartReady = ofType('smart_turn.ready');
+  const smartFailed = ofType('smart_turn.error');
+  add(
+    'turn-end',
+    smartFailed.length || (smartReady.length && !smart.some(e => e.prob !== null)) ? 'warn' : 'pass',
+    turnEnds.map(e => `${e.reason ?? '?'} after ${e.silenceMs ?? '?'} ms silence`).join('; ') +
+      (smart.length ? ` | smart_turn: ${smart.map(e => `p=${e.prob ?? '–'} ${e.decision} ${e.ms} ms`).join(', ')}` : '') +
+      (smartReady.length ? ` | model ready in ${smartReady[0]!.loadMs} ms` : '') +
+      (smartFailed.length ? ` | errors: ${smartFailed.map(e => e.error).join(', ')}` : '')
+  );
 
   // Tutor replies: sentences in order, audio received and played in idx order.
   const utterances = [...new Set(srv.sentences.map(s => s.utteranceId))];
