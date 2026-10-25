@@ -28,9 +28,8 @@ Speech and tools:
 Lesson phases (move with set_phase; only the listed moves succeed):
 {{phases}}
 
-Current phase: {{phase}}
-What to do in this phase:
-{{phaseInstructions}}
+The current phase and what to do in it come in a separate system message after the student's turn.
+Follow the latest phase message; it replaces any earlier one.
 
 How you teach:
 - First find out the topic and call set_topic. It returns library material and notes about this learner.
@@ -49,6 +48,14 @@ Tools:
 
 Topics (category: concepts):
 {{concepts}}`,
+
+  phase: `Current lesson phase: {{phase}}
+What to do in this phase:
+{{phaseInstructions}}`,
+
+  phaseChange: `Phase changed to {{phase}}. These instructions replace the previous phase instructions:
+{{phaseInstructions}}
+Continue your reply in this phase.`,
 
   opening: `The session just started and the student has not said anything yet. You speak first.
 - Start with a short greeting sentence of about six words.

@@ -6,10 +6,15 @@ export const VOICE_DEFAULTS = {
   INPUT_SAMPLE_RATE: 16000,
   AUDIO_CHUNK_MS: 150,
   VAD_THRESHOLD: 0.5,
-  VAD_MIN_SPEECH_MS: 100,
+  /** Speech this long confirms a phrase start (2 Silero frames of 32 ms). In `noisy` state
+   *  NOISY_MIN_SPEECH_MS applies instead; the energy gate filters steady noise. */
+  VAD_MIN_SPEECH_MS: 50,
   VAD_PREROLL_MS: 300,
   VAD_PHRASE_MS: 300,
-  VAD_TURN_MS: 700,
+  /** Silence after the last phrase that ends the student turn. 900 ms: thinking pauses of
+   *  ~0.6 s stay in one turn, and the preemptive LLM call (PREEMPTIVE_SILENCE_MS after the
+   *  end of speech) gets ~700 ms of head start before the turn is ready. */
+  VAD_TURN_MS: 900,
   VAD_MAX_PHRASE_MS: 15000,
   BARGE_IN_THRESHOLD: 0.7,
   BARGE_IN_MIN_MS: 400,
@@ -35,7 +40,13 @@ export const PLAYBACK_DEFAULTS = {
 
 export const WORKER_DEFAULTS = {
   PREEMPTIVE_LLM: true,
-  PREEMPTIVE_SILENCE_MS: 400,
+  /** Silence after the END OF SPEECH before the worker starts the LLM preemptively (output is
+   *  held until the turn is ready; aborted and thrown away if the student goes on or the
+   *  transcript changes). The worker learns of the speech end from the phrase's final chunk,
+   *  which arrives VAD_PHRASE_MS after it, so it waits max(0, this - VAD_PHRASE_MS) from there,
+   *  and only once every phrase of the turn is transcribed. Short on purpose: wasted LLM calls
+   *  are accepted for latency. */
+  PREEMPTIVE_SILENCE_MS: 200,
   MAX_TOOL_ROUNDS: 2,
   /** OpenRouter reasoning effort; `none` measured fastest first token (First check #5). */
   LLM_REASONING_EFFORT: 'none',

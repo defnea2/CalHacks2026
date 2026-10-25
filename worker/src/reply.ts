@@ -21,8 +21,10 @@ export interface ReplyDeps {
   transport: Transport;
   llm: LlmProvider;
   router: ToolRouter;
-  /** System prompt for a phase (only that phase's instructions). Rendered per LLM call. */
-  systemFor: (phase: string) => string;
+  /** Stable system prompt (never changes during a session). */
+  system: string;
+  /** Phase block for a phase (only its instructions); `changed` = the mid-reply variant. */
+  phaseBlock: (phase: string, changed: boolean) => string;
   /** The pack's opening instruction (used when the reply is the opening). */
   openingPrompt?: string;
   maxToolRounds: number;
@@ -70,7 +72,7 @@ export class ReplyRun {
   imageIncluded = false;
   preemptive = false;
   readonly opening: boolean;
-  /** Phase of the system prompt per LLM call (tests, logs). */
+  /** Phase whose block was the latest one in the history, per LLM call (tests, logs). */
   readonly promptPhases: string[] = [];
   /** Phase set by a successful set_phase in this reply (wins over a lagging subscription). */
   private phaseSet?: string;
@@ -245,33 +247,30 @@ export class ReplyRun {
       this.imageIncluded = !!image;
       let promptPhase = this.currentPhase();
       this.history = buildMessages({
-        system: this.deps.systemFor(promptPhase),
+        system: this.deps.system,
+        phaseBlock: this.deps.phaseBlock(promptPhase, false),
         context,
         turns: this.p.turns(),
         current: this.opening ? { opening: this.deps.openingPrompt ?? '' } : { idx: this.turnIdx, text: this.transcript },
         recentTurns: this.deps.recentTurns,
         image,
       });
-      const hasContext = !!context.trim();
       let said = '';
       for (let round = 0; ; round++) {
-        // The system prompt carries only the current phase's instructions: after a set_phase
-        // (in this reply or elsewhere) the whole block is replaced before the next LLM call,
-        // and the context (which names the phase) is fetched again.
+        // After a set_phase (in this reply, or seen via the subscription) the new phase's block
+        // is APPENDED (after the tool results) and replaces the earlier one by its wording. The
+        // history is append-only: the system prompt and earlier messages never change, so the
+        // prompt cache and replayed thinking blocks stay valid.
         const phase = this.currentPhase();
         if (phase !== promptPhase) {
           promptPhase = phase;
-          this.history = [{ role: 'system', content: this.deps.systemFor(phase) }, ...this.history.slice(1)];
-          if (hasContext) {
-            const fresh = await this.deps.transport.buildContext({ sessionId: this.sessionId }).catch(() => '');
-            if (this.aborted) return;
-            if (fresh.trim()) this.history = [this.history[0]!, { role: 'system', content: fresh }, ...this.history.slice(2)];
-          }
-          this.log(`phase -> ${phase}: system prompt swapped`);
+          this.history = [...this.history, { role: 'system', content: this.deps.phaseBlock(phase, true) }];
+          this.log(`phase -> ${phase}: phase block appended`);
         }
         this.promptPhases.push(phase);
         const chunker = new SentenceChunker();
         let text = '';
+        let raw: unknown;
         const calls: ToolResult['call'][] = [];
         const results: Promise<ToolResult>[] = [];
         // Last allowed round: offer no tools, so the model has to speak (it otherwise tends to
@@ -297,6 +296,8 @@ export class ReplyRun {
                 for (const s of chunker.flushComplete()) this.enqueueSentence(s);
                 calls.push(ev.call);
                 results.push(this.enqueueTool(ev.call));
+              } else if (ev.type === 'done') {
+                raw = ev.raw;
               }
             }
             break;
@@ -314,7 +315,7 @@ export class ReplyRun {
         if (text.trim()) said = `${said} ${text.trim()}`.trim();
         this.history = [
           ...this.history,
-          { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}) },
+          { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}), ...(raw !== undefined ? { raw } : {}) },
           ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
         ];
         if (!calls.length) break;

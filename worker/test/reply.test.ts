@@ -1,6 +1,6 @@
 // One reply end to end through the Agent: sentences, metrics, tool ordering and tool rounds.
 import { describe, expect, it } from 'vitest';
-import { pack, TOOL_NAMES } from '@tutor/shared';
+import { pack, renderPhaseBlock, TOOL_NAMES } from '@tutor/shared';
 import { done, FakeLlm, makeAgent, session, text, tokens, tool, turn, waitFor } from './fakes';
 
 const S = 1n;
@@ -57,6 +57,7 @@ describe('reply', () => {
       { role: 'user', content: 'Hi there.' },
       { role: 'assistant', content: 'Hello! What are you working on?' },
       { role: 'user', content: 'Fractions.' },
+      { role: 'system', content: renderPhaseBlock(pack, pack.initialPhase) },
     ]);
     expect(llm.calls[0]!.tools.map(t => t.name)).toContain(TOOL_NAMES.setTopic);
   });
@@ -125,15 +126,17 @@ describe('reply', () => {
     const { transport } = await answer(llm);
     expect(llm.calls).toHaveLength(2);
     const second = llm.calls[1]!.messages;
-    const tail = second.slice(-3);
+    const tail = second.slice(-4);
     expect(tail[0]).toMatchObject({ role: 'assistant', content: '', toolCalls: [{ id: 'p1' }, { id: 'c1' }] });
     expect(tail[1]).toMatchObject({ role: 'tool', toolCallId: 'p1', content: 'ok' });
     expect(tail[2]).toMatchObject({ role: 'tool', toolCallId: 'c1', content: 'ok' });
+    // set_phase succeeded: the new phase block follows the tool results.
+    expect(tail[3]).toEqual({ role: 'system', content: renderPhaseBlock(pack, phaseId, true) });
     expect(transport.of('addSentence')).toHaveLength(1);
   });
 
   it('errors come back as tool results, not exceptions', async () => {
-    const llm = new FakeLlm([[tool(TOOL_NAMES.setPhase, { phase: 'nope', reason: 'r' }, 'p1'), done], [...tokens('Let us stay here a little bit longer then.'), done]]);
+    const llm = new FakeLlm([[tool(TOOL_NAMES.setPhase, { phase: phaseId, reason: 'r' }, 'p1'), done], [...tokens('Let us stay here a little bit longer then.'), done]]);
     const { transport } = await answer(llm, t => (t.fail.setPhase = 'invalid transition'));
     expect(llm.calls[1]!.messages.at(-1)).toMatchObject({ role: 'tool', toolCallId: 'p1', content: 'error: invalid transition' });
     expect(transport.of('appendTutorTurn')[0]!.interrupted).toBe(false);

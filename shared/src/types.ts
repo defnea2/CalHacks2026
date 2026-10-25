@@ -91,6 +91,9 @@ export interface ChatMessage {
   toolCalls?: ChatToolCall[];
   toolCallId?: string;
   name?: string;
+  /** Provider-specific original content of an assistant message (e.g. Anthropic content blocks
+   *  including thinking blocks), passed back unchanged within a reply's tool rounds. */
+  raw?: unknown;
 }
 export type ChatContentPart =
   | { type: 'text'; text: string }
@@ -107,7 +110,7 @@ export interface ToolSpec {
 export type LlmEvent =
   | { type: 'text'; delta: string }
   | { type: 'tool_call'; call: ChatToolCall }
-  | { type: 'done'; finishReason: string };
+  | { type: 'done'; finishReason: string; raw?: unknown };
 
 export interface LlmProvider {
   stream(opts: { messages: ChatMessage[]; tools: ToolSpec[]; signal: AbortSignal }): AsyncIterable<LlmEvent>;

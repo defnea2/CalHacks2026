@@ -68,7 +68,7 @@ interface Scenario {
   description: string;
 }
 
-// Turn ends need > VAD_TURN_MS (700) of silence; phrase ends > VAD_PHRASE_MS (300).
+// Turn ends need > VAD_TURN_MS (900) of silence; phrase ends > VAD_PHRASE_MS (300).
 export const SCENARIOS: Scenario[] = [
   {
     name: 'correct-step',

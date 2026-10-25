@@ -12,6 +12,10 @@ export interface SessionRow {
   currentUtteranceId: bigint;
   /** Turns appended so far (0 = nothing said yet: the tutor may open). */
   turnCount: number;
+  /** Read for context-prefetch invalidation (topic, learner). */
+  category?: string;
+  concept?: string;
+  learnerId?: bigint;
 }
 
 export interface TurnRow {

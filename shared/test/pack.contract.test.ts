@@ -12,7 +12,7 @@ import {
   missingRenderers,
 } from '../src/lesson/contract';
 import { evaluateChain, fillBlank } from '../src/lesson/latexMath';
-import { buildToolSpecs, canTransition, renderTemplate } from '../src/lesson/api';
+import { buildToolSpecs, canTransition, renderPhaseBlock, renderTemplate } from '../src/lesson/api';
 
 const clone = (p: LessonPack): LessonPack => structuredClone(p);
 
@@ -102,13 +102,27 @@ describe('contract checks catch broken packs', () => {
     expect(errs).toMatch(new RegExp(`phase "${p.phases[3]!.id}": instructions must be non-empty`));
   });
 
-  it('system prompt without {{phaseInstructions}}, missing opening prompt', () => {
+  it('phase block without {{phaseInstructions}}, phase placeholder in the system prompt, missing opening', () => {
     const p = clone(pack);
-    p.prompts.system = p.prompts.system.replace('{{phaseInstructions}}', '');
+    p.prompts.phase = p.prompts.phase.replace('{{phaseInstructions}}', '');
+    p.prompts.system += '\n{{phaseInstructions}}';
     delete (p.prompts as { opening?: string }).opening;
     const errs = PACK_CHECKS.prompts(p).join('\n');
-    expect(errs).toMatch(/must contain \{\{phaseInstructions\}\}/);
+    expect(errs).toMatch(/prompt "phase" must contain \{\{phaseInstructions\}\}/);
+    expect(errs).toMatch(/"system" must not contain \{\{phaseInstructions\}\}/);
     expect(errs).toMatch(/prompt "opening" is missing/);
+  });
+
+  it('renderPhaseBlock contains exactly one phase\'s instructions', () => {
+    for (const ph of pack.phases) {
+      for (const changed of [false, true]) {
+        const b = renderPhaseBlock(pack, ph.id, changed);
+        expect(b).toContain(ph.instructions);
+        expect(b).not.toMatch(/\{\{\w+\}\}/);
+        for (const o of pack.phases) if (o.id !== ph.id) expect(b).not.toContain(o.instructions);
+      }
+    }
+    expect(renderPhaseBlock(pack, pack.phases[1]!.id, true)).toMatch(/replace/);
   });
 
   it('unknown prompt placeholder', () => {

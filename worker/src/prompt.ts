@@ -1,25 +1,13 @@
 // Prompt layout (spec): 1. system prompt from the pack, 2. context from buildContext,
-// 3. recent turns, 4. the task photo on the first call.
-import {
-  describeBoardKinds,
-  describePhases,
-  describeTaxonomy,
-  getPhase,
-  phaseInstructions,
-  renderTemplate,
-  type ChatMessage,
-  type LessonPack,
-  type ToolSpec,
-} from '@tutor/shared';
+// 3. the task photo on the first call, 4. recent turns, 5. the current turn (or the opening
+// instruction), 6. the current phase block (pack.prompts.phase) as a system message.
+// The system prompt never changes during a session (prompt cache; replayed thinking blocks
+// are rejected after any change to it), so phase instructions live only in the phase block.
+import { describeBoardKinds, describePhases, describeTaxonomy, renderTemplate, type ChatMessage, type LessonPack, type ToolSpec } from '@tutor/shared';
 import type { TurnRow } from './transport';
 
-/** System prompt for one LLM call. `phase` is the session's CURRENT phase: only its
- *  instructions are in the prompt, so a phase change swaps the whole block. */
-export function buildSystemPrompt(pack: LessonPack, tools: ToolSpec[], phase: string = pack.initialPhase): string {
-  const p = getPhase(pack, phase);
+export function buildSystemPrompt(pack: LessonPack, tools: ToolSpec[]): string {
   return renderTemplate(pack.prompts.system, {
-    phase: p ? `${p.id} (${p.label})` : phase,
-    phaseInstructions: phaseInstructions(pack, phase),
     phases: describePhases(pack),
     concepts: describeTaxonomy(pack),
     board: describeBoardKinds(pack),
@@ -38,6 +26,8 @@ export interface PromptInput {
   recentTurns: number;
   /** Data URL of the task photo, or ''. */
   image: string;
+  /** Current phase block (renderPhaseBlock), appended after the current turn; '' = none. */
+  phaseBlock?: string;
 }
 
 export function buildMessages(p: PromptInput): ChatMessage[] {
@@ -55,6 +45,7 @@ export function buildMessages(p: PromptInput): ChatMessage[] {
   const cur = p.current;
   if ('opening' in cur) {
     msgs.push({ role: 'user', content: cur.opening });
+    if (p.phaseBlock) msgs.push({ role: 'system', content: p.phaseBlock });
     return msgs;
   }
   const earlier = p.turns
@@ -66,5 +57,6 @@ export function buildMessages(p: PromptInput): ChatMessage[] {
     else msgs.push({ role: 'user', content: t.text });
   }
   msgs.push({ role: 'user', content: cur.text });
+  if (p.phaseBlock) msgs.push({ role: 'system', content: p.phaseBlock });
   return msgs;
 }

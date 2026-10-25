@@ -1,12 +1,11 @@
-// The tutor speaks first (opening reply) and the per-call phase prompt swap.
+// The tutor speaks first (opening reply) and the phase block (current phase instructions).
 import { describe, expect, it } from 'vitest';
-import { OPENING_TURN_IDX, pack, TOOL_NAMES } from '@tutor/shared';
-import { done, FakeLlm, makeAgent, phrase, session, sleep, tokens, tool, turn, waitFor } from './fakes';
+import { OPENING_TURN_IDX, pack, renderPhaseBlock, TOOL_NAMES } from '@tutor/shared';
+import { done, FakeLlm, makeAgent, phrase, session, sleep, tokens, tool, turn, waitFor, lastUser } from './fakes';
 
 const S = 1n;
 const category = pack.taxonomy[0]!.key;
 const [p0, p1, p2] = pack.phases;
-const sys = (llm: FakeLlm, i: number) => String(llm.calls[i]!.messages[0]!.content);
 
 describe('opening reply', () => {
   it('thinking on a session without turns -> opening via beginOpening, pack opening prompt, metrics at OPENING_TURN_IDX', async () => {
@@ -23,7 +22,7 @@ describe('opening reply', () => {
     expect(transport.of('recordMetric').every(m => m.turnIdx === OPENING_TURN_IDX)).toBe(true);
     // Prompt: system + context + the opening instruction, no student turn.
     const msgs = llm.calls[0]!.messages;
-    expect(msgs.at(-1)).toEqual({ role: 'user', content: pack.prompts.opening });
+    expect(lastUser(msgs)).toEqual({ role: 'user', content: pack.prompts.opening });
     expect(msgs.filter(m => m.role === 'user')).toHaveLength(1);
     expect(llm.calls[0]!.tools.length).toBeGreaterThan(0);
     // Further session updates (speaking, listening, the new turn) never open again.
@@ -60,7 +59,7 @@ describe('opening reply', () => {
     // Once the missing turn arrives and it is a finished student turn: answered, not greeted.
     agent.onTurn(turn(4n, 0, 'Can you help me?'));
     await waitFor(() => llm.calls.length === 1);
-    expect(llm.calls[0]!.messages.at(-1)).toEqual({ role: 'user', content: 'Can you help me?' });
+    expect(lastUser(llm.calls[0]!.messages)).toEqual({ role: 'user', content: 'Can you help me?' });
   });
 
   it('an open student turn (noise right after the click) does not block the opening', async () => {
@@ -92,22 +91,29 @@ describe('opening reply', () => {
   });
 });
 
-describe('phase instructions in the system prompt', () => {
-  it('contains only the current phase block, taken from the session row', async () => {
+describe('phase instructions (append-only phase block, stable system prompt)', () => {
+  const phaseMsgs = (llm: FakeLlm, i: number) =>
+    llm.calls[i]!.messages.filter(m => m.role === 'system' && pack.phases.some(p => String(m.content).includes(p.instructions))).map(m => String(m.content));
+  const noInstructions = (s: string) => pack.phases.every(p => !s.includes(p.instructions));
+
+  it('the current phase block (from the session row) follows the current turn; the system prompt has no phase instructions', async () => {
     const llm = new FakeLlm([]);
     const { agent, transport } = makeAgent(llm);
     agent.onSession(session(S, { phase: p2!.id }));
     agent.onTurn(turn(S, 0, 'ok'));
     await waitFor(() => transport.of('appendTutorTurn').length === 1);
-    const s = sys(llm, 0);
-    expect(s).toContain(p2!.instructions);
-    for (const p of pack.phases) if (p.id !== p2!.id) expect(s).not.toContain(p.instructions);
-    expect(s).not.toMatch(/\{\{\w+\}\}/);
+    const msgs = llm.calls[0]!.messages;
+    expect(noInstructions(String(msgs[0]!.content))).toBe(true);
+    expect(msgs[0]!.content).not.toMatch(/\{\{\w+\}\}/);
+    expect(msgs.at(-2)).toEqual({ role: 'user', content: 'ok' });
+    expect(msgs.at(-1)).toEqual({ role: 'system', content: renderPhaseBlock(pack, p2!.id) });
+    expect(phaseMsgs(llm, 0)).toHaveLength(1);
+    for (const p of pack.phases) if (p.id !== p2!.id) expect(String(msgs.at(-1)!.content)).not.toContain(p.instructions);
   });
 
-  it('a successful set_phase swaps the whole block for the next LLM round of the same reply', async () => {
+  it('a successful set_phase appends the new block after the tool results; earlier messages stay byte-identical', async () => {
     const llm = new FakeLlm([
-      [...tokens('Fractions, nice. '), tool(TOOL_NAMES.setTopic, { category }), tool(TOOL_NAMES.setPhase, { phase: p1!.id, reason: 'found the gap' }), done],
+      [...tokens('Fractions, nice, let us look closer. '), tool(TOOL_NAMES.setTopic, { category }), tool(TOOL_NAMES.setPhase, { phase: p1!.id, reason: 'found the gap' }), done],
       [...tokens('Picture a pizza cut into three slices. How many slices do you get?'), done],
     ]);
     const { agent, transport, logs } = makeAgent(llm);
@@ -115,20 +121,20 @@ describe('phase instructions in the system prompt', () => {
     agent.onTurn(turn(S, 0, 'I do not get fractions.'));
     await waitFor(() => transport.of('appendTutorTurn').length === 1);
     expect(llm.calls).toHaveLength(2);
-    expect(sys(llm, 0)).toContain(p0!.instructions);
-    expect(sys(llm, 0)).not.toContain(p1!.instructions);
-    // Round 2 (the subscription has NOT delivered the new phase yet): new block, old one gone.
-    expect(sys(llm, 1)).toContain(p1!.instructions);
-    expect(sys(llm, 1)).not.toContain(p0!.instructions);
+    const [r1, r2] = [llm.calls[0]!.messages, llm.calls[1]!.messages];
+    // Append-only: round 2 starts with exactly round 1's messages (system prompt unchanged).
+    expect(r2.slice(0, r1.length)).toEqual(r1);
+    expect(r2[0]).toEqual(r1[0]);
+    // Then assistant + 2 tool results + the new phase block (the subscription has NOT delivered the phase yet).
+    expect(r2.slice(r1.length).map(m => m.role)).toEqual(['assistant', 'tool', 'tool', 'system']);
+    expect(r2.at(-1)).toEqual({ role: 'system', content: renderPhaseBlock(pack, p1!.id, true) });
+    expect(String(r2.at(-1)!.content)).not.toContain(p0!.instructions);
     expect(agent.sessions.get(S)!.live!.promptPhases).toEqual([p0!.id, p1!.id]);
-    // The context (which names the phase) is fetched again for the new phase.
-    expect(transport.of('buildContext')).toHaveLength(2);
-    // The rest of the history is kept: tool results are still there.
-    expect(llm.calls[1]!.messages.filter(m => m.role === 'tool')).toHaveLength(2);
+    expect(transport.of('buildContext')).toHaveLength(1);
     expect(logs.some(l => l.includes(`phase -> ${p1!.id}`))).toBe(true);
   });
 
-  it('a rejected set_phase keeps the current block', async () => {
+  it('a rejected set_phase appends nothing', async () => {
     const llm = new FakeLlm([
       [tool(TOOL_NAMES.setPhase, { phase: p1!.id, reason: 'r' })],
       [...tokens('Let us stay here a little longer. What do you see?'), done],
@@ -139,11 +145,11 @@ describe('phase instructions in the system prompt', () => {
     agent.onTurn(turn(S, 0, 'hm'));
     await waitFor(() => transport.of('appendTutorTurn').length === 1);
     expect(llm.calls).toHaveLength(2);
-    expect(sys(llm, 1)).toContain(p0!.instructions);
-    expect(sys(llm, 1)).not.toContain(p1!.instructions);
+    expect(phaseMsgs(llm, 1)).toEqual([renderPhaseBlock(pack, p0!.id)]);
+    expect(llm.calls[1]!.messages.at(-1)!.role).toBe('tool');
   });
 
-  it('the next reply uses the phase from the session row', async () => {
+  it('the next reply only has the current phase block', async () => {
     const llm = new FakeLlm([]);
     const { agent, transport } = makeAgent(llm);
     agent.onSession(session(S, { phase: p0!.id }));
@@ -153,8 +159,20 @@ describe('phase instructions in the system prompt', () => {
     agent.onTurn(turn(S, 1, 'Okay.', 'done', 'tutor'));
     agent.onTurn(turn(S, 2, 'two'));
     await waitFor(() => transport.of('appendTutorTurn').length === 2);
-    expect(sys(llm, 0)).toContain(p0!.instructions);
-    expect(sys(llm, 1)).toContain(p1!.instructions);
-    expect(sys(llm, 1)).not.toContain(p0!.instructions);
+    expect(phaseMsgs(llm, 0)).toEqual([renderPhaseBlock(pack, p0!.id)]);
+    expect(phaseMsgs(llm, 1)).toEqual([renderPhaseBlock(pack, p1!.id)]);
+    expect(llm.calls[1]!.messages[0]).toEqual(llm.calls[0]!.messages[0]);
+  });
+
+  it('the opening also gets the phase block after its instruction', async () => {
+    const llm = new FakeLlm([]);
+    const { agent, transport } = makeAgent(llm);
+    agent.onSession(session(S, { turnState: 'thinking' }));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    const msgs = llm.calls[0]!.messages;
+    expect(msgs.slice(-2)).toEqual([
+      { role: 'user', content: pack.prompts.opening },
+      { role: 'system', content: renderPhaseBlock(pack, pack.initialPhase) },
+    ]);
   });
 });

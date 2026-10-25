@@ -111,3 +111,6 @@ export function turn(sessionId: bigint, idx: number, textValue: string, status =
 export function phrase(sessionId: bigint, phraseId: number, turnIdx: number, status: string, textValue = ''): PhraseRow {
   return { sessionId, phraseId, turnIdx, status, text: textValue };
 }
+
+/** The last user message (the current turn; the phase block system message follows it). */
+export const lastUser = (msgs: ChatMessage[]) => [...msgs].reverse().find(m => m.role === 'user');

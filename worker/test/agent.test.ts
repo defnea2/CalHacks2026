@@ -1,6 +1,6 @@
 // Session map isolation, interruptions and preemptive generation.
 import { describe, expect, it } from 'vitest';
-import { done, FakeLlm, makeAgent, phrase, session, sleep, tokens, turn, waitFor, type Step } from './fakes';
+import { done, FakeLlm, makeAgent, phrase, session, sleep, tokens, turn, waitFor, type Step, lastUser } from './fakes';
 
 const A = 1n;
 const B = 2n;
@@ -16,7 +16,7 @@ describe('session isolation', () => {
   it('a slow reply in one session never blocks another', async () => {
     const g = gate();
     const llm = new FakeLlm((_i, msgs) => {
-      const last = String(msgs.at(-1)!.content);
+      const last = String(lastUser(msgs)!.content);
       return last.startsWith('slow')
         ? [...tokens('This is the slow session speaking right now. '), ...tokens('And '), { type: 'wait', until: g.p }, ...tokens('it continues after the wait.'), done]
         : [...tokens('This is the fast session and it is done.'), done];
@@ -211,7 +211,7 @@ describe('preemptive generation', () => {
     expect(llm.calls).toHaveLength(2);
     expect(llm.calls[0]!.signal.aborted).toBe(true);
     expect(transport.of('beginUtterance')[0]).toMatchObject({ preemptive: false });
-    expect(String(llm.calls[1]!.messages.at(-1)!.content)).toBe('Two thirds');
+    expect(String(lastUser(llm.calls[1]!.messages)!.content)).toBe('Two thirds');
   });
 
   it('off when PREEMPTIVE_LLM is false', async () => {
@@ -236,5 +236,171 @@ describe('preemptive generation', () => {
     await sleep(10);
     expect(transport.names()).toEqual(['buildContext']);
     g.open();
+  });
+});
+
+describe('preemptive start counted from the end of speech', () => {
+  type Ag = ReturnType<typeof makeAgent>['agent'];
+  /** The phrase's final chunk: speech_activity plus the phrase turning `transcribing` (same commit). */
+  function finalChunk(agent: Ag, phraseId = 1, activityFirst = true) {
+    if (activityFirst) {
+      agent.onSpeechActivity(A, phraseId);
+      agent.onPhrase(phrase(A, phraseId, 0, 'transcribing'));
+    } else {
+      agent.onPhrase(phrase(A, phraseId, 0, 'transcribing'));
+      agent.onSpeechActivity(A, phraseId);
+    }
+  }
+
+  function setup(o: { preemptiveSilenceMs: number; phraseSilenceMs?: number }) {
+    const llm = new FakeLlm([]);
+    const m = makeAgent(llm, undefined, { preemptive: true, ...o });
+    m.agent.onSession(session(A));
+    m.agent.onTurn(turn(A, 0, '', 'open'));
+    m.agent.onPhrase(phrase(A, 1, 0, 'streaming'));
+    m.agent.onSpeechActivity(A, 1);
+    return { llm, ...m };
+  }
+
+  for (const activityFirst of [true, false]) {
+    it(`starts as soon as STT is done when the phrase window covers the silence (${activityFirst ? 'activity first' : 'phrase first'})`, async () => {
+      const { llm, agent } = setup({ preemptiveSilenceMs: 200, phraseSilenceMs: 300 });
+      finalChunk(agent, 1, activityFirst);
+      await sleep(5);
+      expect(llm.calls).toHaveLength(0); // still transcribing
+      agent.onPhrase(phrase(A, 1, 0, 'done', 'Is it one half?'));
+      agent.onTurn(turn(A, 0, 'Is it one half?', 'open'));
+      await waitFor(() => llm.calls.length === 1, 60, 'immediate preemptive start');
+    });
+  }
+
+  it('after the final chunk waits only the rest: PREEMPTIVE_SILENCE_MS - VAD_PHRASE_MS', async () => {
+    const { llm, agent } = setup({ preemptiveSilenceMs: 150, phraseSilenceMs: 60 });
+    finalChunk(agent);
+    agent.onPhrase(phrase(A, 1, 0, 'done', 'Two thirds'));
+    agent.onTurn(turn(A, 0, 'Two thirds', 'open'));
+    const t0 = Date.now();
+    await sleep(40);
+    expect(llm.calls).toHaveLength(0);
+    await waitFor(() => llm.calls.length === 1, 500);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(80);
+    expect(Date.now() - t0).toBeLessThan(140);
+  });
+
+  it('non-final speech activity counts as speech now and resets the wait', async () => {
+    const { llm, agent } = setup({ preemptiveSilenceMs: 80, phraseSilenceMs: 300 });
+    finalChunk(agent);
+    agent.onPhrase(phrase(A, 1, 0, 'done', 'Two'));
+    agent.onTurn(turn(A, 0, 'Two', 'open'));
+    await waitFor(() => llm.calls.length === 1, 60);
+    // The student goes on (phrase 2): the early run is aborted; no new one while speaking.
+    agent.onPhrase(phrase(A, 2, 0, 'streaming'));
+    agent.onSpeechActivity(A, 2);
+    expect(llm.calls[0]!.signal.aborted).toBe(true);
+    for (let i = 0; i < 3; i++) {
+      await sleep(40);
+      agent.onSpeechActivity(A, 2);
+    }
+    expect(llm.calls).toHaveLength(1);
+    finalChunk(agent, 2);
+    agent.onPhrase(phrase(A, 2, 0, 'done', 'thirds'));
+    agent.onTurn(turn(A, 0, 'Two thirds', 'open'));
+    await waitFor(() => llm.calls.length === 2, 60);
+    expect(String(lastUser(llm.calls[1]!.messages)!.content)).toBe('Two thirds');
+  });
+
+  it('a non-final chunk alone waits the full PREEMPTIVE_SILENCE_MS', async () => {
+    const { llm, agent } = setup({ preemptiveSilenceMs: 80, phraseSilenceMs: 300 });
+    agent.onPhrase(phrase(A, 1, 0, 'done', 'Hmm')); // e.g. seen after a reconnect
+    agent.onTurn(turn(A, 0, 'Hmm', 'open'));
+    await sleep(40);
+    expect(llm.calls).toHaveLength(0);
+    await waitFor(() => llm.calls.length === 1, 500);
+  });
+
+  it('speaking again after an early start aborts and discards; nothing reached SpacetimeDB', async () => {
+    const { llm, agent, transport } = setup({ preemptiveSilenceMs: 200, phraseSilenceMs: 300 });
+    finalChunk(agent);
+    agent.onPhrase(phrase(A, 1, 0, 'done', 'Is it'));
+    agent.onTurn(turn(A, 0, 'Is it', 'open'));
+    await waitFor(() => llm.calls.length === 1, 60);
+    agent.onSpeechActivity(A, 2);
+    agent.onPhrase(phrase(A, 2, 0, 'streaming'));
+    expect(llm.calls[0]!.signal.aborted).toBe(true);
+    await sleep(20);
+    expect(transport.names()).toEqual(['buildContext']);
+  });
+});
+
+describe('context prefetch', () => {
+  function setup(opts: Record<string, unknown> = {}) {
+    const llm = new FakeLlm([]);
+    const m = makeAgent(llm, undefined, opts);
+    m.agent.onSession(session(A));
+    m.agent.onPhrase(phrase(A, 1, 0, 'done', 'Is it one half?'));
+    return { llm, ...m };
+  }
+  type Ag = ReturnType<typeof setup>['agent'];
+  const contexts = (t: ReturnType<typeof setup>['transport']) => t.of('buildContext').length;
+
+  it('builds the context when the turn is closing and reuses it when it is ready', async () => {
+    const { llm, agent, transport } = setup();
+    agent.onTurn(turn(A, 0, 'Is it one half?', 'closing'));
+    expect(contexts(transport)).toBe(1);
+    agent.onTurn(turn(A, 0, 'Is it one half?', 'ready'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(contexts(transport)).toBe(1);
+    expect(llm.calls[0]!.messages.some(m => String(m.content).includes(transport.context))).toBe(true);
+  });
+
+  it('a preemptive run builds it once for the whole turn', async () => {
+    const { llm, agent, transport } = setup({ preemptive: true, preemptiveSilenceMs: 5 });
+    agent.onTurn(turn(A, 0, 'Is it one half?', 'open'));
+    await waitFor(() => llm.calls.length === 1);
+    agent.onTurn(turn(A, 0, 'Is it one half?', 'closing'));
+    agent.onTurn(turn(A, 0, 'Is it one half?', 'ready'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(contexts(transport)).toBe(1);
+  });
+
+  it('refetches when phase, topic, board or learner changed in between', async () => {
+    const changes: ((a: Ag) => void)[] = [
+      a => a.onSession(session(A, { phase: 'other-phase' })),
+      a => a.onSession(session(A, { category: 'fractions', concept: 'halves' })),
+      a => a.onBoardItem(A),
+      a => a.onLearner(),
+    ];
+    for (const change of changes) {
+      const { agent, transport } = setup();
+      agent.onTurn(turn(A, 0, 'Is it one half?', 'closing'));
+      change(agent);
+      agent.onTurn(turn(A, 0, 'Is it one half?', 'ready'));
+      await waitFor(() => transport.of('appendTutorTurn').length === 1);
+      expect(contexts(transport)).toBe(2);
+    }
+  });
+
+  it('turn state changes alone do not invalidate it', async () => {
+    const { agent, transport } = setup();
+    agent.onTurn(turn(A, 0, 'Is it one half?', 'closing'));
+    agent.onSession(session(A, { turnState: 'thinking' }));
+    agent.onTurn(turn(A, 0, 'Is it one half?', 'ready'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(contexts(transport)).toBe(1);
+  });
+
+  it('a mutating call of a reply invalidates it; an old prefetch expires', async () => {
+    const { agent, transport } = setup({ contextTtlMs: 30 });
+    agent.onTurn(turn(A, 0, 'first', 'closing'));
+    agent.onTurn(turn(A, 0, 'first', 'ready'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(contexts(transport)).toBe(1);
+    // appendTutorTurn ran after the context was built: the next turn fetches again.
+    agent.onTurn(turn(A, 2, 'second', 'closing'));
+    expect(contexts(transport)).toBe(2);
+    await sleep(50); // older than contextTtlMs
+    agent.onTurn(turn(A, 2, 'second', 'ready'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 2);
+    expect(contexts(transport)).toBe(3);
   });
 });

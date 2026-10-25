@@ -108,16 +108,23 @@ export function checkBoardKinds(pack: LessonPack): string[] {
 // Prompts
 // ---------------------------------------------------------------------------
 
-const REQUIRED_PROMPTS = ['system', 'opening', 'context', 'extraction', 'summary'] as const;
+const REQUIRED_PROMPTS = ['system', 'phase', 'phaseChange', 'opening', 'context', 'extraction', 'summary'] as const;
+/** Phase-dependent placeholders: only in the phase blocks, never in the stable system prompt. */
+const PHASE_PLACEHOLDERS = ['phase', 'phaseInstructions'];
 
 export function checkPrompts(pack: LessonPack): string[] {
   const errs: string[] = [];
   const allowed = new Set<string>(ALLOWED_PLACEHOLDERS);
   const values = Object.fromEntries(ALLOWED_PLACEHOLDERS.map(p => [p, `<${p}>`]));
   for (const key of REQUIRED_PROMPTS) if (typeof pack.prompts[key] !== 'string') errs.push(`prompt "${key}" is missing`);
-  // Without it the per-phase instructions would never reach the model.
-  if (typeof pack.prompts.system === 'string' && !templatePlaceholders(pack.prompts.system).includes('phaseInstructions')) {
-    errs.push('prompt "system" must contain {{phaseInstructions}}');
+  // The phase blocks carry the per-phase instructions; the system prompt must stay stable.
+  for (const key of ['phase', 'phaseChange'] as const) {
+    const t = pack.prompts[key];
+    if (typeof t === 'string' && !templatePlaceholders(t).includes('phaseInstructions')) errs.push(`prompt "${key}" must contain {{phaseInstructions}}`);
+  }
+  if (typeof pack.prompts.system === 'string') {
+    for (const ph of templatePlaceholders(pack.prompts.system))
+      if (PHASE_PLACEHOLDERS.includes(ph)) errs.push(`prompt "system" must not contain {{${ph}}} (it must not change with the phase)`);
   }
   for (const [name, template] of Object.entries(pack.prompts)) {
     if (typeof template !== 'string' || !template.trim()) {
