@@ -14,7 +14,8 @@ const canvasPreview = query.has('canvasPreview');
 const settings = loadSettings(window.location.search, import.meta.env as Record<string, string | undefined>);
 installDebug(settings);
 
-if (new URLSearchParams(window.location.search).get('theme') === 'dark' || (window.matchMedia?.('(prefers-color-scheme: dark)').matches && new URLSearchParams(window.location.search).get('theme') !== 'light')) {
+// The team lesson app (?lesson, ?harness) has a light design only.
+if (!query.has('lesson') && !query.has('harness') && (query.get('theme') === 'dark' || (window.matchMedia?.('(prefers-color-scheme: dark)').matches && query.get('theme') !== 'light'))) {
   document.documentElement.classList.add('dark');
 }
 

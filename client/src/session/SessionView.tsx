@@ -107,7 +107,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
   const current = beats[count - 1];
   const notes = useMemo(() => parseNotes(data.lessonState), [data.lessonState]);
   const stage = data.lessonState?.stage || '';
-  const awaiting = !!data.lessonState?.awaitingResponse && session?.turnState !== 'thinking' && session?.turnState !== SPEAKING;
+  const awaiting = !!data.lessonState?.awaitingResponse && session?.turnState !== 'thinking';
   const check = awaiting ? checkOf(notes, data.lessonState?.checkPrompt ?? '') : null;
   const thinking = session?.turnState === 'thinking';
   const active = !!session?.active;
