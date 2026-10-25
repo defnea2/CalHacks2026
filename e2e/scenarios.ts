@@ -17,6 +17,13 @@ export const E2E_DEFAULTS = {
   transcriptThreshold: 0.7,
   /** Barge-in -> local tutor audio stopped. */
   bargeInStopMs: 300,
+  /** The tutor speaks first: background prepended to every fixture so the student starts
+   *  speaking after the opening (LLM + TTS + 4-5 sentences, ~15-18 s). With only ~4 s between the
+   *  opening's end and the student's first word, the soft "Um" of um-pauses was reproducibly lost
+   *  (vad.misfire) and the turn split; with ~10 s it is detected as before. */
+  openingLeadMs: Number(process.env.E2E_OPENING_LEAD_MS || 28_000),
+  /** First sentence of the opening: a few words (warn above). */
+  openingFirstSentenceMaxWords: 10,
 };
 
 export const TASK_TEXT = 'Expand 2/3 so the bottom number is 12.';
@@ -35,7 +42,7 @@ export interface Scenario {
   singleTurn?: boolean;
   /** Open an observer tab for this session and check that it mirrors it. */
   observer?: boolean;
-  /** Max wait for the whole scenario after "start talking". */
+  /** Max wait for the whole scenario after the opening lead-in (openingLeadMs). */
   timeoutMs: number;
 }
 

@@ -10,6 +10,8 @@ export interface SessionRow {
   active: boolean;
   hasImage: boolean;
   currentUtteranceId: bigint;
+  /** Turns appended so far (0 = nothing said yet: the tutor may open). */
+  turnCount: number;
   /** Read for context-prefetch invalidation (topic, learner). */
   category?: string;
   concept?: string;
@@ -44,6 +46,8 @@ export interface SentenceRow {
 /** Calls the worker makes. Reducer promises reject on reducer errors. */
 export interface Transport {
   beginUtterance(a: { sessionId: bigint; utteranceId: bigint; replyToIdx: number; preemptive: boolean }): Promise<void>;
+  /** The tutor's opening utterance (after the client's startConversation; no student turn). */
+  beginOpening(a: { sessionId: bigint; utteranceId: bigint }): Promise<void>;
   addSentence(a: { sessionId: bigint; utteranceId: bigint; idx: number; display: string; speech: string }): Promise<void>;
   appendTutorTurn(a: { sessionId: bigint; utteranceId: bigint; text: string; interrupted: boolean }): Promise<void>;
   recordMetric(a: { sessionId: bigint; turnIdx: number; name: MetricName; atMicros: bigint }): Promise<void>;

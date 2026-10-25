@@ -1,4 +1,5 @@
-// ReplyRun: one tutor reply to one student turn (LiveKit's "speech handle").
+// ReplyRun: one tutor reply to one student turn, or the opening when the tutor speaks first
+// (LiveKit's "speech handle").
 //
 // The LLM loop streams text and tool calls. Everything it produces goes through an ordered
 // outbox: sentences (addSentence) and tool calls (ToolRouter) are applied strictly in the order
@@ -8,7 +9,7 @@
 // while the student may still continue: its output is held in memory until release() (turn
 // became ready with the same transcript) or thrown away by discard(). Nothing reaches
 // SpacetimeDB before release(), not even beginUtterance.
-import { SentenceChunker, normalizeForSpeech, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { SentenceChunker, normalizeForSpeech, TOOL_NAMES, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
 import { buildMessages } from './prompt';
 import type { ToolResult, ToolRouter } from './router';
 import type { Transport, TurnRow } from './transport';
@@ -20,7 +21,12 @@ export interface ReplyDeps {
   transport: Transport;
   llm: LlmProvider;
   router: ToolRouter;
+  /** Stable system prompt (never changes during a session). */
   system: string;
+  /** Phase block for a phase (only its instructions); `changed` = the mid-reply variant. */
+  phaseBlock: (phase: string, changed: boolean) => string;
+  /** The pack's opening instruction (used when the reply is the opening). */
+  openingPrompt?: string;
   maxToolRounds: number;
   recentTurns: number;
   log: (msg: string) => void;
@@ -31,7 +37,12 @@ export interface ReplyDeps {
 
 export interface ReplyParams {
   sessionId: bigint;
+  /** Student turn this reply answers (OPENING_TURN_IDX for the opening; used for metrics). */
   turnIdx: number;
+  /** The tutor speaks first: no student turn, beginOpening instead of beginUtterance. */
+  opening?: boolean;
+  /** The session's current phase (from the subscription), read before every LLM call. */
+  phase: () => string;
   /** Student transcript this reply answers. */
   transcript: string;
   utteranceId: bigint;
@@ -60,6 +71,11 @@ export class ReplyRun {
   history: ChatMessage[] = [];
   imageIncluded = false;
   preemptive = false;
+  readonly opening: boolean;
+  /** Phase whose block was the latest one in the history, per LLM call (tests, logs). */
+  readonly promptPhases: string[] = [];
+  /** Phase set by a successful set_phase in this reply (wins over a lagging subscription). */
+  private phaseSet?: string;
   /** Settles when the run is fully over (LLM done, outbox drained, tutor turn appended). */
   readonly done: Promise<void>;
 
@@ -83,6 +99,7 @@ export class ReplyRun {
     this.turnIdx = p.turnIdx;
     this.transcript = p.transcript;
     this.utteranceId = p.utteranceId;
+    this.opening = !!p.opening;
     this.state = p.held ? 'held' : 'live';
     this.now = deps.now ?? Date.now;
     this.startedAt = this.now();
@@ -130,8 +147,12 @@ export class ReplyRun {
 
   // ------------------------------------------------------------------ internals
 
+  private currentPhase(): string {
+    return this.phaseSet ?? this.p.phase();
+  }
+
   private log(msg: string) {
-    this.deps.log(`[s${this.sessionId} t${this.turnIdx} u${this.utteranceId}] ${msg}`);
+    this.deps.log(`[s${this.sessionId} ${this.opening ? 'opening' : `t${this.turnIdx}`} u${this.utteranceId}] ${msg}`);
   }
 
   private metric(name: MetricName, atMs: number) {
@@ -155,12 +176,14 @@ export class ReplyRun {
   private async begin(): Promise<void> {
     if (this.aborted) return;
     try {
-      await this.deps.transport.beginUtterance({
-        sessionId: this.sessionId,
-        utteranceId: this.utteranceId,
-        replyToIdx: this.turnIdx,
-        preemptive: this.preemptive,
-      });
+      if (this.opening) await this.deps.transport.beginOpening({ sessionId: this.sessionId, utteranceId: this.utteranceId });
+      else
+        await this.deps.transport.beginUtterance({
+          sessionId: this.sessionId,
+          utteranceId: this.utteranceId,
+          replyToIdx: this.turnIdx,
+          preemptive: this.preemptive,
+        });
       this.began = true;
       this.recordFirstToken();
     } catch (e) {
@@ -206,6 +229,10 @@ export class ReplyRun {
         transport: this.deps.transport,
       });
       this.toolResults.push(r);
+      if (r.ok && call.name === TOOL_NAMES.setPhase) {
+        const phase = parsePhaseArg(call.arguments);
+        if (phase) this.phaseSet = phase;
+      }
       return r;
     }, skipped);
   }
@@ -218,16 +245,29 @@ export class ReplyRun {
       ]);
       if (this.aborted) return;
       this.imageIncluded = !!image;
+      let promptPhase = this.currentPhase();
       this.history = buildMessages({
         system: this.deps.system,
+        phaseBlock: this.deps.phaseBlock(promptPhase, false),
         context,
         turns: this.p.turns(),
-        current: { idx: this.turnIdx, text: this.transcript },
+        current: this.opening ? { opening: this.deps.openingPrompt ?? '' } : { idx: this.turnIdx, text: this.transcript },
         recentTurns: this.deps.recentTurns,
         image,
       });
-      let spoken = false;
+      let said = '';
       for (let round = 0; ; round++) {
+        // After a set_phase (in this reply, or seen via the subscription) the new phase's block
+        // is APPENDED (after the tool results) and replaces the earlier one by its wording. The
+        // history is append-only: the system prompt and earlier messages never change, so the
+        // prompt cache and replayed thinking blocks stay valid.
+        const phase = this.currentPhase();
+        if (phase !== promptPhase) {
+          promptPhase = phase;
+          this.history = [...this.history, { role: 'system', content: this.deps.phaseBlock(phase, true) }];
+          this.log(`phase -> ${phase}: phase block appended`);
+        }
+        this.promptPhases.push(phase);
         const chunker = new SentenceChunker();
         let text = '';
         let raw: unknown;
@@ -272,15 +312,17 @@ export class ReplyRun {
         for (const s of chunker.flush()) this.enqueueSentence(s);
         const res = await Promise.all(results);
         if (this.aborted) return;
-        if (text.trim()) spoken = true;
+        if (text.trim()) said = `${said} ${text.trim()}`.trim();
         this.history = [
           ...this.history,
           { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}), ...(raw !== undefined ? { raw } : {}) },
           ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
         ];
         if (!calls.length) break;
-        // Query results must go back to the LLM; action results only if nothing was said yet.
-        const again = res.some(r => r.kind === 'query') || !spoken;
+        // Query results must go back to the LLM. After action tools the LLM continues only if the
+        // reply has no next step yet: it typically says its short first sentence, calls the board
+        // tools, and must then go on until it asks the student something.
+        const again = res.some(r => r.kind === 'query') || !endsWithNextStep(said);
         if (!again) break;
         if (round >= this.deps.maxToolRounds) {
           this.log(`max tool rounds (${this.deps.maxToolRounds}) reached`);
@@ -328,6 +370,20 @@ export class ReplyRun {
       `${interrupted ? `interrupted${why ? ` (${why})` : ''}` : 'done'}${this.preemptive ? ' [preemptive]' : ''}: ` +
         `${said.length}/${this.sent.length} sentences, first token ${ft}${tools ? `, tools: ${tools}` : ''}`
     );
+  }
+}
+
+/** The spoken reply ends with a question for the student (the prompt's "next step"). */
+export function endsWithNextStep(said: string): boolean {
+  return /\?["'”’)\]]*\s*$/.test(said);
+}
+
+function parsePhaseArg(args: string): string | undefined {
+  try {
+    const v = (JSON.parse(args) as { phase?: unknown }).phase;
+    return typeof v === 'string' && v ? v : undefined;
+  } catch {
+    return undefined;
   }
 }
 

@@ -13,7 +13,7 @@ pnpm --filter client build
 | URL | Screen |
 | --- | --- |
 | `/` | Pick a user: learner list, create a test user, start or reopen a session (task text + optional photo, compressed to ≤ 1 MB in the browser) |
-| `?session=<id>` | Session: header (learner, code), phase/topic/turn-state/noise indicators, "Start talking", captions, board, debug panel (per-turn latency + event log). A reload resumes it |
+| `?session=<id>` | Session: header (learner, code), phase/topic/turn-state/noise indicators, "Start talking" (on a session without turns the tutor then speaks first, via `startConversation`), captions, board, debug panel (per-turn latency + event log). A reload resumes it |
 | `?observe=<id>` | Observer: read-only mirror (captions, board, metrics). Plays nothing; reveals follow `reply_sentence.status = played` |
 | `?overview` | Active sessions with learner, phase, turn state; links open the observer |
 | `?miccheck` | Runs microphone + VAD locally, sends nothing. Useful to check VAD assets and timings |

@@ -7,7 +7,7 @@ import { checkAnswer, parseFraction, parseNumber } from '../answers';
 import { evaluateChain, fillBlank, answerToLatex, literalFraction, rat, ratEquals, decimalToRational, BLANK, REL_SPLIT, type Chain, type Rational } from './latexMath';
 
 /** The only placeholders a pack's prompt templates may use (spec "Replaceable lesson pack"). */
-export const ALLOWED_PLACEHOLDERS = ['learner', 'memory', 'task', 'phase', 'phases', 'board', 'tools', 'concepts'] as const;
+export const ALLOWED_PLACEHOLDERS = ['learner', 'memory', 'task', 'phase', 'phases', 'phaseInstructions', 'board', 'tools', 'concepts'] as const;
 
 export const MAX_CATEGORIES = 10;
 
@@ -39,6 +39,7 @@ export function checkPhases(pack: LessonPack): string[] {
   for (const d of dupes(ids)) errs.push(`duplicate phase id "${d}"`);
   for (const p of pack.phases) {
     if (!p.id.trim() || !p.label.trim() || !p.description.trim()) errs.push(`phase "${p.id}": id, label and description must be non-empty`);
+    if (typeof p.instructions !== 'string' || !p.instructions.trim()) errs.push(`phase "${p.id}": instructions must be non-empty`);
     for (const n of p.next) if (!idSet.has(n)) errs.push(`phase "${p.id}": next "${n}" is not a phase`);
   }
   if (!idSet.has(pack.initialPhase)) errs.push(`initialPhase "${pack.initialPhase}" is not a phase`);
@@ -107,10 +108,24 @@ export function checkBoardKinds(pack: LessonPack): string[] {
 // Prompts
 // ---------------------------------------------------------------------------
 
+const REQUIRED_PROMPTS = ['system', 'phase', 'phaseChange', 'opening', 'context', 'extraction', 'summary'] as const;
+/** Phase-dependent placeholders: only in the phase blocks, never in the stable system prompt. */
+const PHASE_PLACEHOLDERS = ['phase', 'phaseInstructions'];
+
 export function checkPrompts(pack: LessonPack): string[] {
   const errs: string[] = [];
   const allowed = new Set<string>(ALLOWED_PLACEHOLDERS);
   const values = Object.fromEntries(ALLOWED_PLACEHOLDERS.map(p => [p, `<${p}>`]));
+  for (const key of REQUIRED_PROMPTS) if (typeof pack.prompts[key] !== 'string') errs.push(`prompt "${key}" is missing`);
+  // The phase blocks carry the per-phase instructions; the system prompt must stay stable.
+  for (const key of ['phase', 'phaseChange'] as const) {
+    const t = pack.prompts[key];
+    if (typeof t === 'string' && !templatePlaceholders(t).includes('phaseInstructions')) errs.push(`prompt "${key}" must contain {{phaseInstructions}}`);
+  }
+  if (typeof pack.prompts.system === 'string') {
+    for (const ph of templatePlaceholders(pack.prompts.system))
+      if (PHASE_PLACEHOLDERS.includes(ph)) errs.push(`prompt "system" must not contain {{${ph}}} (it must not change with the phase)`);
+  }
   for (const [name, template] of Object.entries(pack.prompts)) {
     if (typeof template !== 'string' || !template.trim()) {
       errs.push(`prompt "${name}" is empty`);

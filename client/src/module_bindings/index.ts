@@ -36,6 +36,7 @@ import {
 // Import all reducer arg schemas
 import AddSentenceReducer from "./add_sentence_reducer";
 import AppendTutorTurnReducer from "./append_tutor_turn_reducer";
+import BeginOpeningReducer from "./begin_opening_reducer";
 import BeginUtteranceReducer from "./begin_utterance_reducer";
 import ClearBoardReducer from "./clear_board_reducer";
 import CreateTestUserReducer from "./create_test_user_reducer";
@@ -51,6 +52,7 @@ import ReportNoiseReducer from "./report_noise_reducer";
 import SetPhaseReducer from "./set_phase_reducer";
 import SetTurnStateReducer from "./set_turn_state_reducer";
 import ShowBoardItemReducer from "./show_board_item_reducer";
+import StartConversationReducer from "./start_conversation_reducer";
 import StartSessionReducer from "./start_session_reducer";
 import SubmitGapAnswerReducer from "./submit_gap_answer_reducer";
 import UploadPhotoReducer from "./upload_photo_reducer";
@@ -295,6 +297,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("add_sentence", AddSentenceReducer),
   __reducerSchema("append_tutor_turn", AppendTutorTurnReducer),
+  __reducerSchema("begin_opening", BeginOpeningReducer),
   __reducerSchema("begin_utterance", BeginUtteranceReducer),
   __reducerSchema("clear_board", ClearBoardReducer),
   __reducerSchema("create_test_user", CreateTestUserReducer),
@@ -310,6 +313,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_phase", SetPhaseReducer),
   __reducerSchema("set_turn_state", SetTurnStateReducer),
   __reducerSchema("show_board_item", ShowBoardItemReducer),
+  __reducerSchema("start_conversation", StartConversationReducer),
   __reducerSchema("start_session", StartSessionReducer),
   __reducerSchema("submit_gap_answer", SubmitGapAnswerReducer),
   __reducerSchema("upload_photo", UploadPhotoReducer),
