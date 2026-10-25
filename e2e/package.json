@@ -8,7 +8,8 @@
     "smoke:generation": "tsx smoke-generation.ts",
     "typecheck": "tsc -p .",
     "test:e2e": "tsx run.ts",
-    "stack": "tsx stack.ts"
+    "stack": "tsx stack.ts",
+    "smoke:deployed": "node smoke-deployed.mjs"
   },
   "dependencies": {
     "@tutor/shared": "workspace:*"

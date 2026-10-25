@@ -359,7 +359,7 @@ Every `MEMORY_EVERY_N_TURNS` turns (default 6) the `extractMemory` procedure sen
 
 ## Running on Maincloud (hosted SpacetimeDB)
 
-**Status: the user decides whether and when to move to Maincloud.** Everything in these docs runs on the local server; nothing has been migrated. The steps below are what `scripts/publish.mjs` supports.
+**Status: the user decides whether and when to move to Maincloud.** Everything in these docs runs on the local server; nothing has been migrated. The full runbook (Maincloud + client on Cloudflare Pages, flags, secrets, smoke checks, rollback) is [docs/DEPLOY.md](docs/DEPLOY.md); the short version is below. A non-local `SPACETIME_SERVER` needs `--yes-remote` and a fresh shell `AGENT_SECRET`.
 
 Local stays the default. To use SpacetimeDB's hosted cloud instead (web dashboard included):
 
@@ -367,8 +367,8 @@ Local stays the default. To use SpacetimeDB's hosted cloud instead (web dashboar
 spacetime login                                   # once, opens the browser
 SPACETIME_SERVER=maincloud SPACETIME_DB=<unique-name> \
   STT_BASE_URL=https://<your-host>/stt-proxy.php CARTESIA_STT_MODEL=ink-2 \
-  node scripts/publish.mjs                        # or STT_BASE_URL=https://api.cartesia.ai CARTESIA_STT_MODEL=ink-whisper
-SPACETIME_URI=wss://maincloud.spacetimedb.com SPACETIME_DB=<unique-name> pnpm worker
+  AGENT_SECRET=<fresh secret> node scripts/publish.mjs --yes-remote   # or STT_BASE_URL=https://api.cartesia.ai CARTESIA_STT_MODEL=ink-whisper
+SPACETIME_URI=wss://maincloud.spacetimedb.com SPACETIME_DB=<unique-name> AGENT_SECRET=<same secret> pnpm worker
 pnpm dev      # open http://127.0.0.1:5175/?uri=wss://maincloud.spacetimedb.com&db=<unique-name>
 ```
 

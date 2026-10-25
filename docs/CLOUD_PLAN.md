@@ -1,7 +1,8 @@
 # Cloud plan: Maincloud + a per-turn Cloudflare Worker
 
-**Status: plan only.** Nothing here is implemented, deployed or configured, and no Maincloud or
-Cloudflare account was touched while writing it. Written 2026-10-25 against `main` (SpacetimeDB
+**Status: plan; Part A prepared (scripts, client build, runbook) in `night/maincloud-prep`, see
+[DEPLOY.md](DEPLOY.md).** Nothing is deployed or configured, and no Maincloud or Cloudflare account
+was touched. Written 2026-10-25 against `main` (SpacetimeDB
 2.13, worker = `worker/`, module = `spacetimedb/`). The user decides whether and when to start.
 
 Two parts, in order:
@@ -85,6 +86,20 @@ The module already enforces most of the safety needed for a stateless caller:
 | A8 | **Docs and runbook.** README "Running on Maincloud" moves from "user decides" to the concrete runbook. Latency docs get a Maincloud column. | dev | 30 min | |
 
 **Total for Part A: about 6–8 h of developer time, plus about 30 min for the user (account, decisions).**
+
+**Prepared in `night/maincloud-prep` (2026-10-25, nothing published or deployed).** The runbook with
+the exact commands is [DEPLOY.md](DEPLOY.md).
+
+| # | Prepared | Still open |
+| --- | --- | --- |
+| A1 | Runbook step 1 | **User:** `spacetime login`, owner account, database name |
+| A2 | `publish.mjs` reads `SPACETIME_SERVER` / `SPACETIME_DB`; a non-local server needs `--yes-remote`, `--clear` there also `--yes-delete-remote-data`; `--dry-run` prints target, module env key names and the command | Publish; check F6 (module env honoured on Maincloud) |
+| A3 | Remote publish requires a shell `AGENT_SECRET` different from `.env.local` and a public `STT_BASE_URL`; warns without `INSIGHTS_KEY`; shell `AGENT_SECRET` now overrides `.env.local` (as in the worker) | **User:** keep the cloud secrets |
+| A4 | `stdb-cli.mjs` (seed-demo, simulate) passes `--server $SPACETIME_SERVER` (default `local`), needs `--yes-remote` for a non-local server, `--dry-run` prints every command (reads too) and runs none. `e2e/lib/stack.ts` forces the local server, URI and its own `AGENT_SECRET` | Real seed run |
+| A5 | **Settled:** the TS SDK accepts `wss://` and `https://` (it rewrites `https:` to `wss:`). Build base `./` (any root or sub-path), VAD asset URL made absolute at runtime, JSEP runtime (27 MiB, never loaded, over the Pages 25 MiB limit) left out of `dist/`, `client/public/_headers` (Content-Type, caching, no COOP/COEP since `numThreads = 1`), `client/scripts/check-dist.mjs`. Verified with a static server at `/` and `/dist/` against a local DB: session, STT and a full lesson | **User:** Cloudflare account, project name, domain; `wrangler login`, deploy |
+| A6 | Worker command with `AGENT_TOKEN_FILE` in the runbook | Run and measure (A.3) |
+| A7 | `e2e/smoke-deployed.mjs` (`pnpm --filter e2e smoke:deployed <url>`) as interim end-to-end check | `E2E_SPACETIME_URI` / `E2E_SPACETIME_DB` in the full harness not implemented |
+| A8 | DEPLOY.md; README points to it | Latency docs' Maincloud column after A6 |
 
 ### A.2 Costs (estimate; check after one demo day)
 
