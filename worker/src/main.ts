@@ -60,13 +60,15 @@ log(
 link.start(agent, tutor);
 
 // agent_status heartbeat (replaces /api/teaching/status).
-const heartbeat = setInterval(() => {
+const beat = () => {
   if (!link.transport.conn) return;
   const busy = [...agent.sessions.values()].filter(s => s.live?.open).length;
   link.transport
     .agentHeartbeat({ model: cfg.llmProvider === 'anthropic' ? cfg.anthropicModel : cfg.openrouterModel, provider: cfg.llmProvider, busySessions: busy })
     .catch(e => log(`heartbeat failed: ${e instanceof Error ? e.message : String(e)}`));
-}, cfg.heartbeatMs);
+};
+const heartbeat = setInterval(beat, cfg.heartbeatMs);
+setTimeout(beat, 1000);
 
 const shutdown = () => {
   log('worker: shutting down');

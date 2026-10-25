@@ -18,10 +18,12 @@ import { prepareSentence } from '../../shared/src/markers';
 import type { SentenceStatus } from '../../shared/src/types';
 import { emptyCanvas, type CanvasState, type VisualBeat } from '../../teaching/src/presentation/contracts';
 import type { ModelRequest } from '../../teaching/src/server/planning';
+import { normalizePrompt, recentCheckPrompts } from '../../teaching/src/server/plannerPrompt';
 import type { Evidence, LearnerResponse, TeachingStep } from '../../teaching/src/teaching/contracts';
 import { applyLearnerActivityAction, applyLearnerMathAction } from '../../teaching/src/teaching/interactions';
 import {
   acceptStep,
+  answerResponse,
   buildModelRequest,
   compileMoment,
   finalizeLesson,
@@ -181,6 +183,9 @@ export function beginLesson(ctx: Ctx, args: { sessionId: bigint; utteranceId: bi
   // Same phase policy as validateTeachingStep, checked BEFORE the first moment is spoken.
   const options = request.context.phaseOptionsAfterAssessment;
   const allowed = meta.assessment && options ? options[meta.assessment.judgement] : request.context.allowedPhases;
+  // No repeated questions across steps (the team UI re-asking the same check felt like a loop).
+  if (meta.check && recentCheckPrompts(request).some(p => normalizePrompt(p) === normalizePrompt(meta.check!.prompt)))
+    throw new SenderError(`The check repeats a question the learner was already asked ("${meta.check.prompt}"). Ask a new question with different words or numbers.`);
   if (!allowed.includes(meta.phase)) throw new SenderError(`Phase is not supported by the current learner evidence: ${meta.phase}. Allowed: ${allowed.join(', ') || 'none'}.`);
   ctx.db.lessonPlan.insert({
     utteranceId: args.utteranceId,
@@ -319,7 +324,7 @@ export function onStudentTurnReady(ctx: Ctx, turn: TurnRow, opts: { assessed?: b
   try {
     if (record.step && help) record = respond(record, eventId, { kind: 'help', request: help }, sceneOf(canvasRow(ctx, session.id))).record;
     else if (turn.intent === 'continue') return;
-    else if (record.step && record.status === 'awaiting_response') record = respond(record, eventId, { kind: 'answer', text: truncate(turn.text, 2000) }, sceneOf(canvasRow(ctx, session.id))).record;
+    else if (record.step && record.status === 'awaiting_response') record = respond(record, eventId, answerResponse(record.step.check, truncate(turn.text, 2000)), sceneOf(canvasRow(ctx, session.id))).record;
     else record = recordUtterance(record, eventId, turn.text);
   } catch (e) {
     console.warn(`lesson: turn ${turn.idx} of session ${turn.sessionId} not recorded: ${validatorMessage(e)}`);
