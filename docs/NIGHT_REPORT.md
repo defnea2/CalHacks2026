@@ -12,7 +12,8 @@ Team branches (`integration/abdul-voice`, `test/abdul`, `feature/visual-engine`)
 
 ```bash
 pnpm install
-pnpm dev          # local SpacetimeDB + publish + worker + client (http://127.0.0.1:5175)
+pnpm dev:voice    # local SpacetimeDB + publish (no --clear, seeded users stay) + worker + client (http://127.0.0.1:5175)
+node scripts/seed-demo.mjs   # only after a --clear: re-seed demo users (scripts/demo-seed.json)
 ```
 
 `.env` needs `CARTESIA_API_KEY` and `ANTHROPIC_API_KEY` (OpenRouter is optional now). Speech-to-text works out of the box with Cartesia's batch endpoint (`ink-whisper`). The script and fallbacks are in **`docs/DEMO.md`** (preflight checklist, 2-minute flow, what to do if the network is slow). Screenshots of every screen: `docs/screenshots/`.
@@ -34,6 +35,7 @@ Routes: `/` entry (student or teacher) · `?student` · `?wait=<id>` waiting roo
 | 8 | `night/dashboard-watchdog` | `3ff724a` | Dashboard refresh recovers by itself after a crash (backup job) | `git revert -m 1 3ff724a` |
 | 9 | `night/docs` | `b776f79` | `docs/ARCHITECTURE.md` (diagrams, every table/reducer, why it's SpacetimeDB-idiomatic), `docs/SERVICES.md`, README rewrite, `docs/DEMO.md` | `git revert -m 1 b776f79` |
 | 10 | `night/config-fixes` | `3ec0a70` | STT default = Cartesia batch `ink-whisper` (the local ink-2 proxy can't be reached from procedures); OpenRouter optional; `.env.example` cleaned | `git revert -m 1 3ec0a70` |
+| 12 | `night/demo-seed` | (see git log) | Demo users Ava Chen, Sam Rivera, Priya Patel; teachers Ms. Park, Mr. Alvarez; copy-paste tasks + class setups in `docs/DEMO.md`; `voice-tutor` DB published + seeded | `git revert -m 1 <sha>` |
 | 11 | `night/lesson-2min` | `983c230` | Can's rigid 2-minute arc (default `LESSON_ARC=demo2min`): authored lead-in → visualized explanation → formalization (equation on its sentence) → one task → hand back (one repair if needed). Explanation 8–11 s, formalization 21–32 s, task 33–49 s after the click; worst case ~90 s. Topic prefetch + library index (no added latency), `interruptUtterance` (barge-in in the last sentence), E2E lesson-mode timeouts. Its E2E run 1: 8/8 | `git revert -m 1 983c230` (or set `LESSON_ARC=adaptive`) |
 
 Small direct commits on `night/integration`: night plan / contract docs, `164eda5` (e2e smoke typecheck fix), this report.
