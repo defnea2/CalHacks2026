@@ -112,11 +112,13 @@ describe('interrupt', () => {
     expect(sentences(h, 9n).map(x => x.status)).toEqual(['played', 'dropped', 'dropped']);
     expect(() => call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 9n, idx: 3, display: 'x', speech: 'x' })).toThrow(/not current/);
 
-    // The remaining TTS jobs run late: no HTTP call (no responder -> would throw), no audio.
+    // The remaining TTS jobs run late: the HTTP call may happen (no pre-check), but the
+    // insert transaction sees `dropped` and emits no audio (audio_out and `ready` are written
+    // together, so a sentence that stays `dropped` got none).
     h.withReducerTx(agent, ctx => {
       for (const j of jobs.slice(1)) ctx.db.ttsJob.insert({ ...j, scheduledId: 0n });
     });
-    expect(runTts(h)).toBe(2);
+    expect(runTts(h, ttsOk)).toBe(2);
     expect(sentences(h, 9n).map(x => x.status)).toEqual(['played', 'dropped', 'dropped']);
 
     call(h, agent, mod.appendTutorTurn, { sessionId: s.id, utteranceId: 9n, text: 'S0.', interrupted: true });
