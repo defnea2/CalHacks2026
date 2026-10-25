@@ -35,7 +35,7 @@ export function fmtMs(ms: number | null): string {
 }
 
 /** Query keys that select a screen; everything else (db, uri, debug, voice, VAD knobs) is kept. */
-export const ROUTE_KEYS = ['session', 'observe', 'overview', 'student', 'wait', 'teacher', 'class', 'join', 'miccheck'] as const;
+export const ROUTE_KEYS = ['session', 'observe', 'overview', 'student', 'wait', 'teacher', 'class', 'join', 'miccheck', 'profile', 'as'] as const;
 
 /** URL of a screen: `routeUrl()` = entry page, `routeUrl({ student: '' })` = `?student`, extras appended. */
 export function routeUrl(route: Record<string, string | bigint> = {}): string {

@@ -10,6 +10,7 @@ import { SessionScreen } from './screens/SessionScreen';
 import { ObserverScreen } from './screens/ObserverScreen';
 import { Overview } from './screens/Overview';
 import { MicCheck } from './screens/MicCheck';
+import { StudentProfile } from './insights/StudentProfile';
 import { homeUrl, navigate, routeUrl } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './product.css';
@@ -25,6 +26,7 @@ export type Route =
   | { name: 'session'; id: bigint }
   | { name: 'observe'; id: bigint }
   | { name: 'overview' }
+  | { name: 'profile'; id: bigint; teacherId: bigint }
   | { name: 'miccheck' };
 
 export function parseRoute(search: string): Route {
@@ -37,6 +39,8 @@ export function parseRoute(search: string): Route {
     const v = id(k);
     return v === null ? null : ({ name: k, id: v } as Route);
   };
+  const profile = id('profile');
+  if (profile !== null) return { name: 'profile', id: profile, teacherId: id('as') ?? 0n };
   for (const k of ['session', 'observe', 'class', 'wait'] as const) {
     const r = withId(k);
     if (r) return r;
@@ -53,7 +57,7 @@ export function parseRoute(search: string): Route {
 
 const CONTEXT: Partial<Record<Route['name'], string>> = {
   students: 'Student', student: 'Student', wait: 'Student', session: 'Lesson',
-  teachers: 'Teacher', teacher: 'Teacher', class: 'Class dashboard', observe: 'Observer', overview: 'All sessions',
+  teachers: 'Teacher', teacher: 'Teacher', class: 'Class dashboard', observe: 'Observer', overview: 'All sessions', profile: 'Student profile',
 };
 
 export function App({ settings }: { settings: AppSettings }) {
@@ -114,6 +118,10 @@ export function App({ settings }: { settings: AppSettings }) {
             <SessionScreen key={`s${route.id}`} conn={conn} sessionId={route.id} settings={settings} />
           ) : route.name === 'observe' ? (
             <ObserverScreen key={`o${route.id}`} conn={conn} sessionId={route.id} />
+          ) : route.name === 'profile' ? (
+            <div className="sp-page">
+              <StudentProfile key={`p${route.id}`} conn={conn} learnerId={route.id} teacherId={route.teacherId} />
+            </div>
           ) : route.name === 'overview' ? (
             <Overview conn={conn} />
           ) : route.name === 'students' ? (
