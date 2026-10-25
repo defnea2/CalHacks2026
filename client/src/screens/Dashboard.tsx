@@ -229,7 +229,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
         {summary?.summary ? <p>{summary.summary}</p> : <p className="db-pending">The first summary of the class arrives about half a minute after the start.</p>}
         <div className="db-fresh">
           <span data-testid="summary-updated" data-updated-ms={updatedMs ?? ''}>
-            Updated {agoLabel(now, updatedMs)}
+            {updatedMs === null ? "No summary yet" : `Updated ${agoLabel(now, updatedMs)}`}
             {next ? ` · ${next}` : ''}
           </span>
           {cls.active && (
