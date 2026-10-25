@@ -16,6 +16,7 @@ import * as lesson from './lesson';
 import * as memory from './memory';
 import * as opening from './opening';
 import { base64 } from './providers';
+import * as seed from './seed';
 import * as sessions from './sessions';
 import * as textMode from './text_mode';
 import * as pipeline from './pipeline';
@@ -270,6 +271,15 @@ export const recordMetric = spacetimedb.reducer(
   }
 );
 
+/** Demo seed memory for a real learner (scripts/seed-demo.mjs): JSON {notes: [{kind, category,
+ *  concept?, text, outcome?, confidence?, quote?}], mastery?: [{concept, mastery}], summary?:
+ *  {summary, nextFocus?}, daysAgo?}. Replaces the learner's earlier seeded notes + seed summary;
+ *  live notes are kept. Validated against the pack taxonomy, MEMORY_KINDS and MEMORY_OUTCOMES. */
+export const seedMemory = spacetimedb.reducer({ learnerId: t.u64(), memory: t.string() }, (ctx, { learnerId, memory }) => {
+  requireAgent(ctx);
+  seed.seedMemory(ctx, learnerId, memory);
+});
+
 export const remember = spacetimedb.reducer(
   { sessionId: t.u64(), kind: t.string(), category: t.string(), concept: t.string(), text: t.string(), outcome: t.string() },
   (ctx, args) => {
@@ -388,24 +398,36 @@ export const setPresence = spacetimedb.reducer({ learnerId: t.u64(), status: t.s
   classroom.setPresence(ctx, learnerId, status)
 );
 
+const START_CLASS_ARGS = {
+  teacherId: t.u64(),
+  goals: t.string(),
+  content: t.string(),
+  delivery: t.string(),
+  documentName: t.string(),
+  documentMime: t.string(),
+  documentText: t.string(),
+  documentData: t.byteArray(),
+  simulatedCount: t.u32(),
+};
+
 /** Ends the teacher's previous class session; moves every online student into a new linked
- *  session; simulatedCount > 0 resets and starts simulation users 1..n (text mode). */
-export const startClassSession = spacetimedb.reducer(
-  {
-    teacherId: t.u64(),
-    goals: t.string(),
-    content: t.string(),
-    delivery: t.string(),
-    documentName: t.string(),
-    documentMime: t.string(),
-    documentText: t.string(),
-    documentData: t.byteArray(),
-    simulatedCount: t.u32(),
-  },
-  (ctx, args) => {
-    classroom.startClassSession(ctx, args);
-  }
-);
+ *  session; simulatedCount > 0 resets and starts simulation users 1..n (text mode).
+ *  Same as startClassSessionWith(..., resetSimulated = true); kept for older clients. */
+export const startClassSession = spacetimedb.reducer(START_CLASS_ARGS, (ctx, args) => {
+  classroom.startClassSession(ctx, { ...args, resetSimulated: true });
+});
+
+/** startClassSession with the reset as an option: resetSimulated = false lets simulation users
+ *  1..n keep their memory and history from earlier runs (they join with new linked sessions). */
+export const startClassSessionWith = spacetimedb.reducer({ ...START_CLASS_ARGS, resetSimulated: t.bool() }, (ctx, args) => {
+  classroom.startClassSession(ctx, args);
+});
+
+/** Simulation users 1..count (0 = all 20) back to their seed state (fresh memory), in seed order.
+ *  Refused while one of them is in a running class session. */
+export const resetSimulatedStudents = spacetimedb.reducer({ count: t.u32() }, (ctx, { count }) => {
+  classroom.resetSimulatedStudents(ctx, count);
+});
 
 export const endClassSession = spacetimedb.reducer({ classSessionId: t.u64() }, (ctx, { classSessionId }) =>
   classroom.endClassSession(ctx, classSessionId)

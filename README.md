@@ -66,6 +66,16 @@ pnpm worker                   # terminal 2: LLM worker
 pnpm dev                      # terminal 3: client on http://127.0.0.1:5175
 ```
 
+Demo data and a class from the command line (local server only; `SPACETIME_DB=<name>` for another
+database; details in [docs/DEMO.md](docs/DEMO.md)):
+
+```bash
+node scripts/seed-demo.mjs                   # demo students + teachers (scripts/demo-seed.json) and their
+                                             #   seed memory (agent-only seedMemory, AGENT_SECRET from .env.local)
+node scripts/simulate.mjs --preset A --n 6   # start a simulated class (presets A/B/C), prints ?class=<id>
+node scripts/simulate.mjs --end              # end it; --no-reset keeps sim memories, --reset-only resets them
+```
+
 `pnpm dev` starts only the client. `pnpm stdb:generate` regenerates the client and worker bindings
 after a schema change. `pnpm stt-proxy` runs the local ink-2 proxy (only useful once it is reachable
 by SpacetimeDB, see below). If your machine has a system HTTP proxy, local tools need

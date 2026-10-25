@@ -1,68 +1,36 @@
-// Seeds the demo users (real students + teachers) from scripts/demo-seed.json into a LOCAL database.
+// Seeds the demo users (real students + teachers) and the students' seed memory from
+// scripts/demo-seed.json into a LOCAL database.
 // Idempotent: users are matched by name; existing ones are skipped (and differences reported),
-// nothing is ever changed or deleted. No secrets: plain client reducers via the spacetime CLI.
+// learner rows are never changed or deleted. Memory (`memory` per student) is written with the
+// agent-only reducer seedMemory, which replaces that student's earlier SEEDED notes and seed
+// summary (notes from real sessions are kept). For that the CLI identity registers as agent with
+// AGENT_SECRET from .env.local (read only, never printed).
 //
-// Usage: node scripts/seed-demo.mjs [--dry-run] [--file path/to/seed.json]
+// Usage: node scripts/seed-demo.mjs [--dry-run] [--no-memory] [--file path/to/seed.json]
 //        SPACETIME_DB=voice-tutor (default) selects the database; always --server local.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { spacetimeCommand } from './spacetime.mjs';
 import { ROOT } from './env.mjs';
+import { call as cliCall, db, registerAgent, sql } from './stdb-cli.mjs';
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes('--dry-run');
+const withMemory = !argv.includes('--no-memory');
 const fileAt = argv.indexOf('--file');
 const seedFile = fileAt >= 0 ? path.resolve(argv[fileAt + 1]) : path.join(ROOT, 'scripts', 'demo-seed.json');
-const db = process.env.SPACETIME_DB || 'voice-tutor';
-
-const env = {
-  ...process.env,
-  NO_PROXY: '127.0.0.1,localhost',
-  no_proxy: '127.0.0.1,localhost',
-  PATH: `${os.homedir()}/.local/bin:${process.env.PATH}`,
-};
-const { command, prefix } = spacetimeCommand(env);
-
-function cli(args) {
-  // --no-config + a neutral cwd: never pick up spacetime.json (which could point elsewhere).
-  const r = spawnSync(command, [...prefix, ...args], { cwd: os.tmpdir(), env, encoding: 'utf8' });
-  if (r.error) throw new Error(`could not run spacetime: ${r.error.message}`);
-  if (r.status !== 0) throw new Error(`spacetime ${args[0]} failed: ${(r.stderr || r.stdout).trim()}`);
-  return r.stdout;
-}
-
-/** Parses the `spacetime sql` table output into objects (string cells are JSON-quoted). */
-function sql(query) {
-  const lines = cli(['sql', '--no-config', '--server', 'local', db, query])
-    .split('\n')
-    .filter(l => l.includes('|') || /^-+\+/.test(l));
-  const sep = lines.findIndex(l => /^-+\+/.test(l));
-  if (sep < 1) return [];
-  const header = lines[sep - 1].split('|').map(s => s.trim());
-  return lines.slice(sep + 1).map(line => {
-    const cells = line.split('|').map(s => s.trim());
-    const row = {};
-    header.forEach((h, i) => {
-      const v = cells[i] ?? '';
-      try {
-        row[h] = v.startsWith('"') ? JSON.parse(v) : v;
-      } catch {
-        row[h] = v;
-      }
-    });
-    return row;
-  });
-}
 
 function call(reducer, ...args) {
-  const shown = `${reducer} ${args.join(' ')}`;
-  if (dryRun) return console.log(`  [dry-run] ${shown}`);
-  cli(['call', '--no-config', '--server', 'local', db, reducer, ...args]);
+  if (dryRun) {
+    const shown = args.map(a => (a.length > 60 ? `${a.slice(0, 57)}...` : a)).join(' ');
+    return console.log(`  [dry-run] ${reducer} ${shown}`);
+  }
+  cliCall(reducer, args);
 }
 
 // ---------------------------------------------------------------- validate the data file
+
+const KINDS = ['misconception', 'strategy', 'mnemonic', 'quote', 'understood', 'preference'];
+const OUTCOMES = ['worked', 'didnt', 'unknown'];
 
 const seed = JSON.parse(fs.readFileSync(seedFile, 'utf8'));
 const students = seed.students ?? [];
@@ -74,6 +42,12 @@ for (const s of students) {
   if (!Number.isInteger(s.age) || s.age < 5 || s.age > 18) problems.push(`student "${n}": age must be an integer 5-18`);
   if (!Number.isInteger(s.grade) || s.grade < 0 || s.grade > 13) problems.push(`student "${n}": grade must be an integer 0-13`);
   if (typeof s.style !== 'string' || s.style.length > 200) problems.push(`student "${n}": style must be a string of at most 200 characters`);
+  // Quick local check; the module validates fully (taxonomy, lengths) and rejects the whole seed.
+  for (const [i, note] of (s.memory?.notes ?? []).entries()) {
+    if (!KINDS.includes(note.kind)) problems.push(`student "${n}" notes[${i}]: kind must be one of ${KINDS.join(', ')}`);
+    if (note.outcome && !OUTCOMES.includes(note.outcome)) problems.push(`student "${n}" notes[${i}]: outcome must be one of ${OUTCOMES.join(', ')}`);
+    if (!String(note.text ?? '').trim()) problems.push(`student "${n}" notes[${i}]: text is empty`);
+  }
 }
 for (const t of teachers) {
   const n = String(t.name ?? '').trim();
@@ -117,10 +91,37 @@ try {
     call('create_teacher', JSON.stringify(name));
     if (!dryRun) console.log(`  + teacher "${name}"`);
   }
+
+  // ---- seed memory (agent-only reducer)
+  const withSeedMemory = students.filter(s => s.memory);
+  if (withMemory && withSeedMemory.length) {
+    if (!dryRun) registerAgent();
+    const real = sql('SELECT * FROM learner WHERE is_simulated = false');
+    for (const s of withSeedMemory) {
+      const name = s.name.trim();
+      // The oldest real learner with that name (the one the seed created).
+      const l = real.filter(x => x.name === name).sort((a, b) => Number(a.id) - Number(b.id))[0];
+      if (!l && !dryRun) {
+        console.warn(`  ! no learner "${name}" for its memory`);
+        continue;
+      }
+      const m = s.memory;
+      call('seed_memory', l ? String(l.id) : '<new id>', JSON.stringify(JSON.stringify(m)));
+      if (!dryRun) {
+        const kinds = (m.notes ?? []).map(n => n.kind).join(', ');
+        console.log(`  ~ memory "${name}": ${(m.notes ?? []).length} notes (${kinds}), mastery ${(m.mastery ?? []).map(x => `${x.concept} ${x.mastery}`).join(', ') || '-'}${m.summary ? ', past session summary' : ''}`);
+      }
+    }
+  }
+
   if (!dryRun) {
     const real = sql('SELECT * FROM learner WHERE is_simulated = false');
+    const notes = withMemory ? sql('SELECT * FROM memory_note') : [];
     console.log(`\nreal students in ${db}:`);
-    for (const l of real) console.log(`  ${String(l.id).padStart(3)}  ${l.name}, ${l.age}, grade ${l.grade}, "${l.style}"`);
+    for (const l of real) {
+      const n = notes.filter(x => x.learner_id === l.id).length;
+      console.log(`  ${String(l.id).padStart(3)}  ${l.name}, ${l.age}, grade ${l.grade}, "${l.style}"${withMemory ? `, ${n} memory notes` : ''}`);
+    }
     console.log(`teachers in ${db}:`);
     for (const t of sql('SELECT * FROM teacher')) console.log(`  ${String(t.id).padStart(3)}  ${t.name}`);
   }

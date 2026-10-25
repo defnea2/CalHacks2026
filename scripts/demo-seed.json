@@ -1,26 +1,80 @@
 {
-  "_help": "Demo users for `node scripts/seed-demo.mjs`. Edit names/ages/grades/styles here and re-run the script. Names are the key: a name that already exists is skipped (rows are never changed or deleted); to change an existing user, reset with `SPACETIME_DB=voice-tutor node scripts/publish.mjs --clear` and re-run. Module limits: name 1-40 chars (teacher 1-60), age 5-18, grade 0-13, style max 200 chars. Avoid the 20 simulated students' names (shared/src/classroom/simStudents.ts: Mia Hoffmann, Jonas Becker, ...).",
+  "_help": "Demo users + seed memory for `node scripts/seed-demo.mjs`. Edit names/ages/grades/styles here and re-run the script. Names are the key: a name that already exists is skipped (learner rows are never changed or deleted); to change an existing user, reset with `SPACETIME_DB=voice-tutor node scripts/publish.mjs --clear` and re-run. Module limits: name 1-40 chars (teacher 1-60), age 5-18, grade 0-13, style max 200 chars. Avoid the 20 simulated students' names (shared/src/classroom/simStudents.ts: Mia Hoffmann, Jonas Becker, ...). `memory` is written with the agent-only reducer seedMemory on every run and REPLACES that student's earlier seeded notes and seed summary (notes the tutor wrote in real sessions are kept): kinds misconception | strategy | mnemonic | quote | understood | preference, outcome worked | didnt | unknown, category/concept from shared/src/lesson/pack/taxonomy.ts, `quote` = the child's words (evidence), mastery 0-100 per concept, `summary` = the earlier session the tutor remembers, dated `daysAgo` days back. Notes are listed to the tutor in file order; only notes of the session's topic category (and every preference) are shown.",
   "students": [
     {
       "name": "Ava Chen",
       "age": 9,
       "grade": 4,
       "style": "pictures first, short hints",
-      "demo": "self-learning flow (On my own): fractions"
+      "demo": "self-learning flow (On my own): fractions (task: Expand 2/3 so the bottom number is 12.)",
+      "memory": {
+        "daysAgo": 2,
+        "notes": [
+          { "kind": "misconception", "category": "fractions", "concept": "fractions-expand", "text": "When expanding she multiplied only the bottom number: wrote 2/3 = 2/6.", "outcome": "unknown", "quote": "I just times the bottom by 2" },
+          { "kind": "strategy", "category": "fractions", "concept": "fractions-expand", "text": "Cutting every pizza slice into two smaller pieces showed her why the top number has to grow too.", "outcome": "worked", "quote": "oh, more pieces but it's the same pizza" },
+          { "kind": "mnemonic", "category": "fractions", "concept": "fractions-expand", "text": "Remembers the rule as \"what you do to the bottom, you do to the top\".", "outcome": "worked" },
+          { "kind": "understood", "category": "fractions", "concept": "fractions-unit", "text": "Knows the bottom number says how many equal pieces the whole is cut into.", "outcome": "worked" },
+          { "kind": "preference", "category": "fractions", "concept": "", "text": "Wants a picture first and only one short hint at a time.", "outcome": "worked" }
+        ],
+        "mastery": [
+          { "concept": "fractions-unit", "mastery": 75 },
+          { "concept": "fractions-expand", "mastery": 35 }
+        ],
+        "summary": {
+          "summary": "Ava expanded 2/3 to sixths with a pizza picture. She first multiplied only the bottom (2/6), then fixed it herself after cutting each slice in two (4/6). She is confident about what the bottom number means.",
+          "nextFocus": "Expand 2/3 to twelfths: multiply top and bottom by the same number, picture first."
+        }
+      }
     },
     {
       "name": "Sam Rivera",
       "age": 11,
       "grade": 6,
       "style": "step by step, likes to check with numbers",
-      "demo": "self-learning flow (On my own): decimals"
+      "demo": "self-learning flow (On my own): decimals (task: Which is bigger, 0.3 or 0.25? Explain why.)",
+      "memory": {
+        "daysAgo": 3,
+        "notes": [
+          { "kind": "misconception", "category": "decimals", "concept": "decimals-tenths", "text": "Compares decimals by the digits after the point: chose 0.35 over 0.4 because 35 is more than 4.", "outcome": "unknown", "quote": "35 is bigger than 4 so 0.35 wins" },
+          { "kind": "strategy", "category": "decimals", "concept": "decimals-tenths", "text": "Writing both numbers with the same number of digits (0.40 vs 0.35) let him compare them like whole numbers.", "outcome": "worked", "quote": "oh, 40 hundredths beats 35 hundredths" },
+          { "kind": "strategy", "category": "decimals", "concept": "decimals-tenths", "text": "A shaded hundred grid on its own did not convince him; he wanted to check with numbers.", "outcome": "didnt" },
+          { "kind": "quote", "category": "decimals", "concept": "decimals-tenths", "text": "Said \"so the zero at the end doesn't change anything\" after padding 0.4 to 0.40.", "outcome": "worked" },
+          { "kind": "preference", "category": "decimals", "concept": "", "text": "Likes to check an answer with money or a second example before moving on.", "outcome": "worked" }
+        ],
+        "mastery": [
+          { "concept": "place-value", "mastery": 85 },
+          { "concept": "decimals-tenths", "mastery": 40 }
+        ],
+        "summary": {
+          "summary": "Sam compared 0.4 and 0.35 and first chose 0.35 because 35 > 4. Rewriting 0.4 as 0.40 fixed it, and he checked it with money (40 cents vs 35 cents).",
+          "nextFocus": "Compare 0.3 and 0.25 on his own: pad with a zero first, then explain why 0.30 > 0.25."
+        }
+      }
     },
     {
       "name": "Priya Patel",
       "age": 8,
       "grade": 3,
       "style": "short sentences, lots of encouragement, pictures first",
-      "demo": "wait-for-teacher flow (joins Ms. Park's class)"
+      "demo": "wait-for-teacher flow (joins Ms. Park's class, Class A: adding fractions with the same denominator)",
+      "memory": {
+        "daysAgo": 1,
+        "notes": [
+          { "kind": "misconception", "category": "fractions", "concept": "fractions-add-same", "text": "Added the tops and the bottoms: 1/4 + 1/4 = 2/8.", "outcome": "unknown", "quote": "one and one is two, four and four is eight" },
+          { "kind": "strategy", "category": "fractions", "concept": "fractions-unit", "text": "Colouring pieces of a chocolate bar showed her what 1/4 means.", "outcome": "worked" },
+          { "kind": "understood", "category": "fractions", "concept": "fractions-unit", "text": "Can name 1/2, 1/3 and 1/4 from a picture.", "outcome": "worked" },
+          { "kind": "quote", "category": "fractions", "concept": "fractions-unit", "text": "Said \"the bottom tells how many pieces\".", "outcome": "worked" },
+          { "kind": "preference", "category": "fractions", "concept": "", "text": "Short sentences and a \"well done\" after each step keep her going; long explanations make her stop answering.", "outcome": "worked" }
+        ],
+        "mastery": [
+          { "concept": "fractions-unit", "mastery": 60 },
+          { "concept": "fractions-add-same", "mastery": 20 }
+        ],
+        "summary": {
+          "summary": "Priya named halves and quarters on a chocolate bar and coloured 1/4 correctly. When adding 1/4 + 1/4 she added the bottoms too (2/8); there was no time left to fix it.",
+          "nextFocus": "Adding fractions with the same denominator: show that the piece size (the bottom number) stays the same."
+        }
+      }
     }
   ],
   "teachers": [

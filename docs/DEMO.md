@@ -18,14 +18,26 @@ pnpm dev:voice        # SpacetimeDB (if not running) + publish + bindings + work
 `node scripts/publish.mjs --clear` wipes the database; then re-seed:
 
 ```bash
-node scripts/seed-demo.mjs            # idempotent: creates missing users, skips existing ones
-node scripts/seed-demo.mjs --dry-run  # show what it would do
+node scripts/seed-demo.mjs              # idempotent: creates missing users, skips existing ones, (re)writes seed memory
+node scripts/seed-demo.mjs --dry-run    # show what it would do
+node scripts/seed-demo.mjs --no-memory  # users only
 ```
 
 Change names, ages, grades or styles in **`scripts/demo-seed.json`** and re-run the script. Users are
 matched by name: a new name is added, an existing one is never changed (the script prints the
 difference). To apply changes to an existing user: `node scripts/publish.mjs --clear`, then
 `node scripts/seed-demo.mjs`. `SPACETIME_DB=<name>` seeds another local database.
+
+**Seed memory.** Each student's `memory` in `demo-seed.json` (notes, mastery, one earlier session
+summary + next focus) is written on every run by the agent-only reducer
+`seedMemory(learnerId, memoryJson)`; the script registers the CLI identity as agent with
+`AGENT_SECRET` from `.env.local` (never printed). Re-running **replaces** the seeded notes and the
+seed summary of that student; notes the tutor wrote in real sessions stay, mastery is overwritten
+per listed concept. So after a rehearsal `node scripts/seed-demo.mjs` puts the seeded memory back
+(it does not delete the rehearsal's own notes or sessions; for a fully clean state use
+`publish.mjs --clear` + seed). Seeded rows are marked by a pseudo session id (2^62 + learner id) on
+their evidence and summary; check them as owner with
+`spacetime sql --no-config --server local voice-tutor "SELECT * FROM memory_note"`.
 
 ### Seeded users
 
@@ -37,11 +49,37 @@ difference). To apply changes to an existing user: `node scripts/publish.mjs --c
 | Ms. Park | | | teacher | runs the class |
 | Mr. Alvarez | | | teacher (spare) | second class / backup |
 
-No seed memory notes: the module has no client reducer for them (notes are written only by the
-worker through `remember` during a session, or by memory extraction). The tutor sees the learning
-style from the start; after the first real session it also remembers what happened. The 20
-simulated classroom students (`shared/src/classroom/simStudents.ts`) are created when a class
-starts and have their own seed memory; they never appear in the student picker.
+What the tutor remembers about them from the start (seed memory, `scripts/demo-seed.json`; shown in
+the prompt once the session's topic category is known, preferences always):
+
+| Who | Notes | Mastery | Earlier session → next focus |
+| --- | --- | --- | --- |
+| Ava Chen (2 days ago) | misconception: multiplied only the bottom (2/3 = 2/6) · strategy (worked): cutting each pizza slice in two · mnemonic: "what you do to the bottom, you do to the top" · understood: what the bottom number means · preference: picture first, one short hint at a time | fractions-unit 75, fractions-expand 35 | expanded 2/3 to sixths with pizza, fixed 2/6 → 4/6 herself → **expand 2/3 to twelfths** |
+| Sam Rivera (3 days ago) | misconception: 0.35 > 0.4 "because 35 > 4" · strategy (worked): same number of digits (0.40 vs 0.35) · strategy (didn't): hundred grid alone · quote: "the zero at the end doesn't change anything" · preference: check with money / a second example | place-value 85, decimals-tenths 40 | 0.4 vs 0.35, fixed by padding + money → **compare 0.3 and 0.25 on his own** |
+| Priya Patel (1 day ago) | misconception: 1/4 + 1/4 = 2/8 · strategy (worked): colouring a chocolate bar · understood: names 1/2, 1/3, 1/4 · quote: "the bottom tells how many pieces" · preference: short sentences, "well done" after each step | fractions-unit 60, fractions-add-same 20 | halves/quarters fine, 2/8 not fixed yet → **adding with the same denominator** (Class A) |
+
+So Ava's lesson on `Expand 2/3 so the bottom number is 12.` and Sam's on
+`Which is bigger, 0.3 or 0.25? Explain why.` continue where the "earlier session" stopped, and
+Priya's class lesson (Class A) starts from her 2/8 mistake. The 20 simulated classroom students
+(`shared/src/classroom/simStudents.ts`) have their own seed memory (reset to it when a class starts
+with "Reset simulated students" on, the default); they never appear in the student picker.
+
+### Simulated class from the command line (`scripts/simulate.mjs`)
+
+Starts a class exactly like the class setup screen (the simulated students need the worker):
+
+```bash
+node scripts/simulate.mjs --preset A --n 6     # Class A/B/C below; prints the class id and
+                                               #   dashboard http://127.0.0.1:5175/?class=<id>
+node scripts/simulate.mjs --preset B --no-reset  # keep the simulated students' memory from earlier runs
+node scripts/simulate.mjs --end                # end Ms. Park's running class
+node scripts/simulate.mjs --reset-only [--n 0] # simulated students 1..n (0 = all 20) back to fresh memories
+```
+
+Options: `--teacher "Mr. Alvarez"` (created if missing; default Ms. Park), `--goals/--content/--delivery`
+override the preset, `--reset` (default) / `--no-reset`, `SPACETIME_DB=<name>`. Starting a class ends
+that teacher's previous one and pulls in every online real student. Use it on a rehearsal database,
+not on `voice-tutor` right before the demo (it leaves sessions behind).
 
 ### Copy-paste: student tasks (homework box on "Start my lesson")
 
@@ -107,8 +145,10 @@ opening), so keep it as concrete fractions/decimals like above.
 - [ ] Seeded users present (see "Before the demo"): the student picker shows Ava Chen, Sam Rivera,
       Priya Patel; the teacher picker Ms. Park, Mr. Alvarez. Missing? `node scripts/seed-demo.mjs`.
 - [ ] Warm-up: one short voice turn in a throwaway session (first procedure runs after a publish are
-      slower; Smart Turn loads after the mic starts). Use Sam Rivera for it, so Ava's first lesson in
-      the demo has no earlier session in her memory (the tutor would refer to it).
+      slower; Smart Turn loads after the mic starts). Use a throwaway student (add "Test Kid" in the
+      picker), not Ava/Sam/Priya: a real session gives them a newer summary than the seeded one and
+      the tutor would refer to the warm-up. If it happened anyway: `node scripts/seed-demo.mjs`
+      restores the seeded notes, but the newer real summary stays (only `--clear` + seed removes it).
 - [ ] **Headphones on** (the tutor's voice in the laptop mic can trigger barge-in). Chrome, microphone permission granted for 127.0.0.1:5175.
 - [ ] `?miccheck` shows the meter moving and noise `quiet` or `moderate`.
 - [ ] Two browser windows side by side: student (left), teacher (right). Zoom 90 % if the canvas is cut.
@@ -144,7 +184,8 @@ opening), so keep it as concrete fractions/decimals like above.
 
 1. `/` → **I'm a teacher** → **Ms. Park**.
 2. Class setup: paste **Class A** from "Copy-paste: teacher class instructions" above (goals,
-   content, how to teach); **Simulated students: 6** → **Start class session**.
+   content, how to teach); **Simulated students: 6**, leave **Reset simulated students (fresh
+   memories)** checked (unchecked: they remember the previous run) → **Start class session**.
 3. (Optional) In the left window Priya Patel (or Ava, back on the entry page) clicks **Wait for my teacher** before the start: she is pulled
    into the class automatically.
 4. Dashboard (`?class=<id>`): six simulated students start talking to the real tutor in text mode;

@@ -674,3 +674,70 @@ describe('memory extraction window dedupe (running marker)', () => {
     expect(runExtraction(h)).toBe(1); // no responder: an HTTP call would throw
   });
 });
+
+// ---------------------------------------------------------------- simulated students: optional reset
+
+describe('simulated students reset option', () => {
+  const simByRank = (h: H, rank: number) => simLearners(h).filter(l => l.simRank === rank);
+
+  function startWith(env: Env, teacherId: bigint, simulatedCount: number, resetSimulated: boolean) {
+    call(env.h, env.client, mod.startClassSessionWith, {
+      teacherId, goals: 'g', content: 'Adding fractions', delivery: '', documentName: '', documentMime: '', documentText: '',
+      documentData: new Uint8Array(), simulatedCount, resetSimulated,
+    });
+    return [...env.h.db.classSession.iter()].filter(c => c.teacherId === teacherId && c.active)[0]!;
+  }
+
+  it('resetSimulated = false keeps memory, history and learner ids; true (and the old reducer) resets', () => {
+    const env = setup();
+    const { h } = env;
+    const t = teacher(env);
+    const c1 = startWith(env, t.id, 2, true);
+    const first = simLearners(h);
+    expect(first.map(l => l.simRank)).toEqual([1, 2]);
+    const s1 = linked(h, c1.id).find(s => s.learnerId === first[0]!.id)!;
+    call(h, env.agent, mod.remember, { sessionId: s1.id, kind: 'quote', category: 'fractions', concept: '', text: 'learned in run 1', outcome: 'worked' });
+    call(h, env.client, mod.endClassSession, { classSessionId: c1.id });
+
+    const c2 = startWith(env, t.id, 3, false);
+    const second = simLearners(h);
+    expect(second.map(l => l.simRank)).toEqual([1, 2, 3]);
+    expect(second[0]!.id).toBe(first[0]!.id);
+    expect(second[1]!.id).toBe(first[1]!.id);
+    expect([...h.db.memoryNote.learnerId.filter(first[0]!.id)].map(n => n.text)).toContain('learned in run 1');
+    expect(h.db.session.id.find(s1.id)).toBeTruthy(); // the earlier session stays as history
+    const l2 = linked(h, c2.id);
+    expect(l2).toHaveLength(3);
+    expect(l2.every(s => !s.voice)).toBe(true);
+
+    call(h, env.client, mod.endClassSession, { classSessionId: c2.id });
+    startClass(env, t.id, { simulatedCount: 2 }); // old reducer: always resets
+    const rank1 = simByRank(h, 1)[0]!;
+    expect(rank1.id).not.toBe(first[0]!.id);
+    expect([...h.db.memoryNote.learnerId.filter(rank1.id)].map(n => n.text)).toEqual(SIM_STUDENTS[0]!.memory.map(n => n.text));
+    expect(h.db.session.id.find(s1.id) ?? undefined).toBeUndefined();
+  });
+
+  it('resetSimulatedStudents(count) resets 1..count in seed order (0 = all), refused while in a running class', () => {
+    const env = setup();
+    const { h } = env;
+    call(h, env.client, mod.resetSimulatedStudents, { count: 3 });
+    expect(simLearners(h).map(l => [l.simRank, l.name])).toEqual(SIM_STUDENTS.slice(0, 3).map(s => [s.rank, s.name]));
+    const t = teacher(env);
+    const c = startWith(env, t.id, 2, false);
+    expect(simByRank(h, 1)).toHaveLength(1);
+    expect(() => call(h, env.client, mod.resetSimulatedStudents, { count: 0 })).toThrow(/running class session/);
+    call(h, env.client, mod.endClassSession, { classSessionId: c.id });
+    const before = simByRank(h, 1)[0]!.id;
+    call(h, env.client, mod.resetSimulatedStudents, { count: 0 });
+    expect(simLearners(h)).toHaveLength(SIM_STUDENTS.length);
+    expect(simByRank(h, 1)[0]!.id).not.toBe(before);
+    for (const rank of [1, 2]) {
+      const l = simByRank(h, rank)[0]!;
+      expect([...h.db.session.learnerId.filter(l.id)]).toHaveLength(0);
+      expect([...h.db.memoryNote.learnerId.filter(l.id)].map(n => n.text)).toEqual(SIM_STUDENTS[rank - 1]!.memory.map(n => n.text));
+      expect([...h.db.conceptState.learnerId.filter(l.id)]).toHaveLength(0);
+    }
+    expect(() => call(h, env.client, mod.resetSimulatedStudents, { count: 21 })).toThrow(/at most 20/);
+  });
+});
