@@ -169,6 +169,23 @@ describe('lesson mode', () => {
   });
 });
 
+describe('opening in lesson mode', () => {
+  it('stays the authored script (no LLM, no lesson); the first student turn starts the lesson', async () => {
+    const { agent, transport, llm } = lessonAgent([[text(miniLessonText()), done]], { verifiedSpeech: true });
+    agent.onSession(session(A, { voice: false, turnState: 'thinking' }));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('beginOpening')).toHaveLength(1);
+    expect(transport.of('beginLesson')).toHaveLength(0);
+    expect(llm.calls).toHaveLength(0);
+    expect(transport.of('addSentence').length).toBeGreaterThan(0);
+    agent.onSession(session(A, { voice: false, turnCount: 2 }));
+    agent.onTurn(turn(A, 0, '', 'done', 'tutor'));
+    agent.onTurn(turn(A, 1, 'why is 2/4 one half?'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 2);
+    expect(transport.of('beginLesson')).toHaveLength(1);
+  });
+});
+
 describe('stall watchdog', () => {
   it('a ready turn whose reply never began is answered again once', async () => {
     const llm = new FakeLlm([[text('x'), done]]);

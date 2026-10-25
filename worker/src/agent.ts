@@ -437,7 +437,10 @@ export class SessionAgent {
 
   private newRun(turn: { idx: number; text: string }, held: boolean, opening = false): Run {
     const a = this.agent;
-    if ((a.deps.opts.replyMode ?? 'lesson') === 'lesson') {
+    // The opening stays the authored script (no LLM, ~0.5 s to audio; measured 2.8 s as a generated
+    // lesson, and the learner usually answers it); lessons start with the first student turn.
+    const authoredOpening = opening && a.deps.opts.verifiedSpeech !== false && !!a.deps.pack.prompts.openingScript;
+    if ((a.deps.opts.replyMode ?? 'lesson') === 'lesson' && !authoredOpening) {
       return new LessonRun(
         { transport: this.transport(), llm: a.deps.lessonLlm ?? a.deps.llm, log: a.log, now: a.now, deadlines: a.deps.opts.lessonDeadlines },
         {
