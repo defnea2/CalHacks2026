@@ -7,6 +7,9 @@ export type EnvName =
   | 'CARTESIA_API_KEY'
   | 'OPENROUTER_API_KEY'
   | 'OPENROUTER_EXTRACTION_MODEL'
+  | 'ANTHROPIC_API_KEY'
+  | 'ANTHROPIC_EXTRACTION_MODEL'
+  | 'MEMORY_PROVIDER'
   | 'AGENT_SECRET'
   | 'STT_BASE_URL'
   | 'CARTESIA_STT_MODEL'
@@ -50,5 +53,13 @@ export const settings = {
   cartesiaKey: (ctx: { env: unknown }) => readEnv(ctx, 'CARTESIA_API_KEY') ?? '',
   openrouterKey: (ctx: { env: unknown }) => readEnv(ctx, 'OPENROUTER_API_KEY') ?? '',
   extractionModel: (ctx: { env: unknown }) => readEnv(ctx, 'OPENROUTER_EXTRACTION_MODEL') ?? '',
+  anthropicKey: (ctx: { env: unknown }) => readEnv(ctx, 'ANTHROPIC_API_KEY') ?? '',
+  anthropicModel: (ctx: { env: unknown }) => readEnv(ctx, 'ANTHROPIC_EXTRACTION_MODEL') ?? MODULE_DEFAULTS.ANTHROPIC_EXTRACTION_MODEL,
+  /** `anthropic` | `openrouter`; default anthropic when ANTHROPIC_API_KEY is set. */
+  memoryProvider: (ctx: { env: unknown }): 'anthropic' | 'openrouter' => {
+    const v = readEnv(ctx, 'MEMORY_PROVIDER')?.toLowerCase();
+    if (v === 'anthropic' || v === 'openrouter') return v;
+    return readEnv(ctx, 'ANTHROPIC_API_KEY') ? 'anthropic' : 'openrouter';
+  },
   agentSecret: (ctx: { env: unknown }) => readEnv(ctx, 'AGENT_SECRET') ?? '',
 };

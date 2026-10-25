@@ -495,6 +495,12 @@ const spacetimedb = schema(
       CARTESIA_VOICE_ID: t.option(t.string()),
       TTS_SAMPLE_RATE: t.option(t.string()),
       MEMORY_EVERY_N_TURNS: t.option(t.string()),
+      /** Memory extraction / summaries via the Anthropic Messages API (Claude Haiku 5.5). */
+      ANTHROPIC_API_KEY: t.option(t.string()),
+      /** Default claude-haiku-5-5. */
+      ANTHROPIC_EXTRACTION_MODEL: t.option(t.string()),
+      /** anthropic | openrouter (default: anthropic when ANTHROPIC_API_KEY is set). */
+      MEMORY_PROVIDER: t.option(t.string()),
     },
   }
 );

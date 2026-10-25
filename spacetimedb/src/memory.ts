@@ -8,6 +8,7 @@ import { MEMORY_KINDS, MEMORY_OUTCOMES, type TurnStatus } from '../../shared/src
 import { type Ctx, type NoteRow, type PCtx, type TurnRow, dueIn, getSession, sessionTurns, truncate } from './ctx';
 import { settings } from './env';
 import { chatJson, ProviderError } from './providers';
+import { AnthropicError, callAnthropicJson } from './anthropic';
 
 const T_OPEN: TurnStatus = 'open';
 const T_CLOSING: TurnStatus = 'closing';
@@ -76,6 +77,24 @@ export function scheduleSessionEnd(ctx: Ctx, sessionId: bigint): void {
   }
   ctx.db.summaryJob.insert({ scheduledId: 0n, scheduledAt: dueIn(ctx), sessionId, learnerId: session.learnerId, attempt: 0 });
 }
+
+// ---------------------------------------------------------------- provider switch
+
+/** Background JSON call on the configured provider (MEMORY_PROVIDER). Throws ProviderError
+ *  (AnthropicError for the anthropic path). */
+function memoryJson(
+  ctx: PCtx,
+  opts: { system: string; user: string; schemaName: string; schema: Record<string, unknown>; effort: 'low' | 'medium'; maxTokens: number; openrouterMaxTokens?: number }
+): unknown {
+  if (settings.memoryProvider(ctx) === 'openrouter') {
+    return chatJson(ctx, { system: opts.system, user: opts.user, schemaName: opts.schemaName, schema: opts.schema, maxTokens: opts.openrouterMaxTokens });
+  }
+  const r = callAnthropicJson(ctx, { system: opts.system, user: opts.user, schema: opts.schema, effort: opts.effort, maxTokens: opts.maxTokens });
+  console.log(`${opts.schemaName}: ${r.model} in=${r.usage.inputTokens} out=${r.usage.outputTokens}`);
+  return r.value;
+}
+
+const isRefusal = (e: unknown) => e instanceof AnthropicError && e.kind === 'refusal';
 
 // ---------------------------------------------------------------- extraction
 
@@ -284,14 +303,26 @@ export function extractMemory(ctx: PCtx, job: ExtractionJobRow): void {
       formatTurns(input.turns, job.fromIdx),
     ].join('\n');
     try {
-      raw = chatJson(ctx, { system, user, schemaName: 'memory_extraction', schema: extractionSchema() });
+      raw = memoryJson(ctx, {
+        system,
+        user,
+        schemaName: 'memory_extraction',
+        schema: extractionSchema(),
+        effort: MODULE_DEFAULTS.EXTRACTION_EFFORT,
+        maxTokens: MODULE_DEFAULTS.EXTRACTION_MAX_TOKENS,
+      });
     } catch (e) {
       if (!(e instanceof ProviderError)) throw e;
       console.warn(`extractMemory session ${job.sessionId} [${job.fromIdx},${job.toIdx}) attempt ${job.attempt}: ${e.message}`);
-      ctx.withTx(tx => {
-        if (cursorOf(tx, job.sessionId) === job.fromIdx) scheduleRetry(tx, job);
-      });
-      return;
+      if (isRefusal(e)) {
+        // Retrying gives the same answer: skip the window (cursor advances, nothing written).
+        raw = { items: [], mastery: [] };
+      } else {
+        ctx.withTx(tx => {
+          if (cursorOf(tx, job.sessionId) === job.fromIdx) scheduleRetry(tx, job);
+        });
+        return;
+      }
     }
   }
 
@@ -383,7 +414,15 @@ export function summarizeSession(ctx: PCtx, job: { scheduledId: bigint; schedule
     const topic = [input.session.category, input.session.concept].filter(Boolean).join(' / ') || 'not set';
     const user = `Original task: ${input.session.taskText || '(none)'}\nTopic: ${topic}\nFinal phase: ${input.session.phase}\n\nConversation:\n${formatTurns(spoken, 0)}`;
     try {
-      const raw = chatJson(ctx, { system: pack.prompts.summary, user, schemaName: 'session_summary', schema: SUMMARY_SCHEMA, maxTokens: 400 }) as {
+      const raw = memoryJson(ctx, {
+        system: pack.prompts.summary,
+        user,
+        schemaName: 'session_summary',
+        schema: SUMMARY_SCHEMA,
+        effort: MODULE_DEFAULTS.SUMMARY_EFFORT,
+        maxTokens: MODULE_DEFAULTS.SUMMARY_MAX_TOKENS,
+        openrouterMaxTokens: 400,
+      }) as {
         summary?: unknown;
         nextFocus?: unknown;
       };
@@ -394,6 +433,7 @@ export function summarizeSession(ctx: PCtx, job: { scheduledId: bigint; schedule
     } catch (e) {
       if (!(e instanceof ProviderError)) throw e;
       console.warn(`summarizeSession ${job.sessionId} attempt ${job.attempt}: ${e.message}`);
+      if (isRefusal(e)) return; // no retry; the session simply has no summary
       ctx.withTx(tx => {
         const delays = MODULE_DEFAULTS.EXTRACTION_RETRY_S;
         if (job.attempt < delays.length) {

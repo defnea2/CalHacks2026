@@ -67,6 +67,16 @@ export const MODULE_DEFAULTS = {
   /** Retry delays for extraction after an HTTP error; stop after the last. */
   EXTRACTION_RETRY_S: [10, 30, 90],
   MEMORY_MIN_CONFIDENCE: 0.7,
+  /** Background JSON calls (memory extraction, session summary): Claude Haiku 5.5 via the
+   *  Anthropic Messages API. MEMORY_PROVIDER env picks `anthropic` | `openrouter`; unset means
+   *  anthropic when ANTHROPIC_API_KEY is set, else openrouter. */
+  ANTHROPIC_EXTRACTION_MODEL: 'claude-haiku-5-5',
+  ANTHROPIC_TIMEOUT_MS: 60_000,
+  /** output_config.effort per task (thinking depth; tokens count toward max_tokens). */
+  EXTRACTION_EFFORT: 'medium',
+  EXTRACTION_MAX_TOKENS: 8000,
+  SUMMARY_EFFORT: 'low',
+  SUMMARY_MAX_TOKENS: 4000,
   CARTESIA_TTS_MODEL: 'sonic-3.6',
   CARTESIA_STT_MODEL: 'ink-2',
   /** Local batch-STT endpoint (stt-proxy). */
