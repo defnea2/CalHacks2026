@@ -89,7 +89,7 @@ for (let i = 0; i < tries; i++) {
       if (!roundCalls.some(c => c.name === TOOL_NAMES.setTopic)) break;
       messages.push({ role: 'assistant', content: roundText, toolCalls: roundCalls, ...(raw !== undefined ? { raw } : {}) });
       for (const c of roundCalls) {
-        const content = c.name === TOOL_NAMES.setTopic ? topicResult + (process.env.SMOKE_REMINDER ? `\n\n${markerReminder(TOOL_NAMES.showBoardItem)}` : '') : 'ok';
+        const content = c.name === TOOL_NAMES.setTopic ? topicResult + (!process.env.SMOKE_NO_REMINDER ? `\n\n${markerReminder(TOOL_NAMES.showBoardItem)}` : '') : 'ok';
         messages.push({ role: 'tool', toolCallId: c.id, name: c.name, content });
       }
       text += ' ';
