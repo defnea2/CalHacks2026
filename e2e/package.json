@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "gen-speech": "tsx gen-speech.ts",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "test:e2e": "tsx run.ts",
+    "stack": "tsx stack.ts"
   },
   "dependencies": {
     "@tutor/shared": "workspace:*"
