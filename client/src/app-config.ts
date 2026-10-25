@@ -16,7 +16,7 @@ export interface AppConfig {
 }
 
 export const APP_CONFIG: AppConfig = {
-  pageTitle: 'Math Tutor',
+  pageTitle: 'Fibonacci',
   pageDescription: 'Talk through a math problem with a friendly tutor.',
   startButtonText: 'Start talking',
   stopButtonText: 'Stop',

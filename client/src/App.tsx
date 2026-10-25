@@ -13,6 +13,7 @@ import { MicCheck } from './screens/MicCheck';
 import { StudentProfile } from './insights/StudentProfile';
 import { homeUrl, navigate, routeUrl } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Wordmark, BRAND } from './brand/Logo';
 import './product.css';
 
 export type Route =
@@ -75,6 +76,11 @@ export function App({ settings }: { settings: AppSettings }) {
     window.__tutor.state.connStatus = status;
   }, [route, status]);
 
+  useEffect(() => {
+    const ctx = CONTEXT[route.name];
+    document.title = ctx ? `${BRAND.name} · ${ctx}` : BRAND.name;
+  }, [route.name]);
+
   const lesson = route.name === 'session' || route.name === 'observe';
   const link = (url: string) => ({
     href: url,
@@ -88,8 +94,7 @@ export function App({ settings }: { settings: AppSettings }) {
     <div className={`pr-app ${lesson ? 'studio-app' : ''}`}>
       <header className="pr-header">
         <a className="pr-identity" {...link(homeUrl())}>
-          <span className="pr-monogram" aria-hidden="true">t</span>
-          <strong>Tutor</strong>
+          <Wordmark size={21} className="pr-wordmark" />
           {CONTEXT[route.name] && <small>{CONTEXT[route.name]}</small>}
         </a>
         <nav className="pr-nav">
