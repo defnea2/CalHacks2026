@@ -14,8 +14,9 @@ const canvasPreview = query.has('canvasPreview');
 const settings = loadSettings(window.location.search, import.meta.env as Record<string, string | undefined>);
 installDebug(settings);
 
-// The team lesson app (?lesson, ?harness) has a light design only.
-if (!query.has('lesson') && !query.has('harness') && (query.get('theme') === 'dark' || (window.matchMedia?.('(prefers-color-scheme: dark)').matches && query.get('theme') !== 'light'))) {
+// The team design (lesson app, session screen, entry flow, dashboard) is light only; ?theme=dark
+// still darkens the remaining neutral-token parts (debug panel, mic check).
+if (!query.has('lesson') && !query.has('harness') && query.get('theme') === 'dark') {
   document.documentElement.classList.add('dark');
 }
 

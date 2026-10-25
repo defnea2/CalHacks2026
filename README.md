@@ -13,7 +13,7 @@ pnpm worker                            # LLM worker (keys from .env)
 pnpm dev                               # = pnpm --filter client dev → http://127.0.0.1:5175
 ```
 
-`/` picks a learner and starts a session (talk or type, optional text-only mode); `?lesson` opens the team lesson lab (prepared and sample lessons work offline; a typed question starts a text-mode session in the same session screen); `?observe=<id>` and `?overview` are read-only. `pnpm build` writes static files to `client/dist/` (no `/api/*` endpoints exist anymore).
+`/` is the entry page: students pick or create themselves and either learn by themselves (task + optional photo, talk or type) or wait for their teacher (they join the class session automatically); teachers set goals, teaching instructions, optional material and simulated students, start a class session and follow it on the dashboard (summary, clusters of 2 or 4 students, observe any student live) — see [docs/CLASSROOM.md](docs/CLASSROOM.md) and [client/README.md](client/README.md); `?lesson` opens the team lesson lab (prepared and sample lessons work offline; a typed question starts a text-mode session in the same session screen); `?observe=<id>` and `?overview` are read-only. `pnpm build` writes static files to `client/dist/` (no `/api/*` endpoints exist anymore).
 
 ## Compact math and instant exploration
 
