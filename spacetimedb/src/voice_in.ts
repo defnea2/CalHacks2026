@@ -19,6 +19,7 @@ import {
 } from './ctx';
 import { onTurnAppended } from './memory';
 import { onStudentTurnReady } from './pipeline';
+import { bindPendingImage } from './turn_photo';
 import { concatBytes, ProviderError, transcribe } from './providers';
 
 const T_OPEN: TurnStatus = 'open';
@@ -72,6 +73,7 @@ export function openStudentTurn(ctx: Ctx, session: SessionRow, source = 'voice',
     closedAt: undefined,
     source,
     intent,
+    hasPhoto: false,
   });
 }
 
@@ -179,12 +181,12 @@ function turnText(ctx: Ctx, sessionId: bigint, turnIdx: number): string {
 
 /** Student turn complete: ready for the worker, or dropped if it has no text. */
 export function completeTurn(ctx: Ctx, turn: TurnRow, opts: { assessed?: boolean } = {}): void {
-  const session = ctx.db.session.id.find(turn.sessionId);
   if (!turn.text.trim()) {
     dropTurn(ctx, turn);
     return;
   }
-  ctx.db.turn.id.update({ ...turn, status: T_READY, closedAt: ctx.timestamp });
+  bindPendingImage(ctx, ctx.db.turn.id.update({ ...turn, status: T_READY, closedAt: ctx.timestamp }));
+  const session = ctx.db.session.id.find(turn.sessionId);
   const m = metricsFor(ctx, turn.sessionId, turn.idx);
   ctx.db.turnMetrics.id.update({ ...m, sttDoneAt: ctx.timestamp });
   if (session) {

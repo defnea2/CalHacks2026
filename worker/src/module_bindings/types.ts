@@ -338,6 +338,7 @@ export const Session = __t.object("Session", {
   endedAt: __t.option(__t.timestamp()),
   classSessionId: __t.u64(),
   voice: __t.bool(),
+  pendingPhoto: __t.bool(),
 });
 export type Session = __Infer<typeof Session>;
 
@@ -347,6 +348,12 @@ export const SessionImage = __t.object("SessionImage", {
   data: __t.byteArray(),
 });
 export type SessionImage = __Infer<typeof SessionImage>;
+
+export const SessionOwner = __t.object("SessionOwner", {
+  sessionId: __t.u64(),
+  owner: __t.identity(),
+});
+export type SessionOwner = __Infer<typeof SessionOwner>;
 
 export const SessionSummary = __t.object("SessionSummary", {
   sessionId: __t.u64(),
@@ -495,8 +502,22 @@ export const Turn = __t.object("Turn", {
   closedAt: __t.option(__t.timestamp()),
   source: __t.string(),
   intent: __t.string(),
+  hasPhoto: __t.bool(),
 });
 export type Turn = __Infer<typeof Turn>;
+
+export const TurnImage = __t.object("TurnImage", {
+  id: __t.u64(),
+  sessionId: __t.u64(),
+  learnerId: __t.u64(),
+  mime: __t.string(),
+  data: __t.byteArray(),
+  createdAt: __t.timestamp(),
+  bound: __t.bool(),
+  turnIdx: __t.u32(),
+  usedAt: __t.option(__t.timestamp()),
+});
+export type TurnImage = __Infer<typeof TurnImage>;
 
 export const TurnMetrics = __t.object("TurnMetrics", {
   id: __t.u64(),
