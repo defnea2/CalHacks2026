@@ -97,12 +97,18 @@ export const TOOL_NAMES = {
   showBoardItem: 'show_board_item',
   clearBoard: 'clear_board',
   remember: 'remember',
+  visualUnavailable: 'visual_unavailable',
 } as const;
 
 export function buildToolSpecs(pack: LessonPack): ToolSpec[] {
   const categories = pack.taxonomy.map(c => c.key);
   const concepts = pack.taxonomy.flatMap(c => c.concepts.map(k => k.key));
   return [
+    {
+      name: TOOL_NAMES.visualUnavailable,
+      description: 'Use when the requested demonstration is outside the canvas teaching capabilities. Clears the unrelated picture and speaks an honest limitation automatically. Never substitute an unrelated diagram or claim unsupported mathematics.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+    },
     {
       name: TOOL_NAMES.setTopic,
       description:

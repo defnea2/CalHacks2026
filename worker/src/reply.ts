@@ -8,7 +8,8 @@
 // while the student may still continue: its output is held in memory until release() (turn
 // became ready with the same transcript) or thrown away by discard(). Nothing reaches
 // SpacetimeDB before release(), not even beginUtterance.
-import { SentenceChunker, normalizeForSpeech, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { SentenceChunker, normalizeForSpeech, TOOL_NAMES, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { VISUAL_UNAVAILABLE } from './tools/visual_unavailable';
 import { buildMessages } from './prompt';
 import type { ToolResult, ToolRouter } from './router';
 import type { Transport, TurnRow } from './transport';
@@ -73,6 +74,7 @@ export class ReplyRun {
   private firstTokenAt = 0;
   private firstTokenRecorded = false;
   private narratedCanvas = false;
+  private rejectedVisual = false;
   private readonly startedAt: number;
   private readonly now: () => number;
 
@@ -182,7 +184,7 @@ export class ReplyRun {
     void this.enqueue(async () => {
       // A paired canvas owns its spoken explanation. Ignore free text that the
       // model emitted after that tool instead of speaking the explanation twice.
-      if (!this.narratedCanvas) await this.publishSentence(display);
+      if (!this.narratedCanvas && !this.rejectedVisual) await this.publishSentence(display);
     }, undefined);
   }
 
@@ -222,6 +224,7 @@ export class ReplyRun {
         narrate: this.narratedCanvas ? undefined : lines => this.narrateCanvas(lines),
       });
       this.toolResults.push(r);
+      if (call.name === TOOL_NAMES.showBoardItem && !r.ok) this.rejectedVisual = true;
       return r;
     }, skipped);
   }
@@ -256,6 +259,7 @@ export class ReplyRun {
         // Last allowed round: offer no tools, so the model has to speak (it otherwise tends to
         // chain tool-only rounds and the student hears nothing).
         const last = round >= toolRoundLimit && round > 0;
+        if (last && this.rejectedVisual) break;
         const tools = last ? [] : this.deps.router.specs();
         // A round that fails before any event arrived is retried (flaky network): nothing from it
         // reached SpacetimeDB yet. Once output has started, a failure ends the reply as before.
@@ -318,6 +322,11 @@ export class ReplyRun {
       }
       this.llmActive = false;
       await this.chain;
+      // A failed demonstration never falls through to unverified model prose.
+      if (!this.aborted && this.rejectedVisual && !this.narratedCanvas) {
+        await this.deps.transport.clearBoard({ sessionId: this.sessionId });
+        await this.narrateCanvas([VISUAL_UNAVAILABLE]);
+      }
       if (!this.aborted) await this.close(false);
     } catch (e) {
       this.llmActive = false;

@@ -22,7 +22,52 @@
           "narration": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 240
+            "maxLength": 1200
+          },
+          "teaching": {
+            "type": "object",
+            "properties": {
+              "concept": {
+                "type": "string",
+                "enum": [
+                  "equal_groups",
+                  "distributivity",
+                  "fraction_amount",
+                  "fraction_comparison",
+                  "fraction_equivalence",
+                  "number_order",
+                  "number_distance",
+                  "area",
+                  "area_conservation"
+                ]
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "observe",
+                  "calculate",
+                  "compare",
+                  "change",
+                  "conserve",
+                  "question"
+                ]
+              },
+              "targets": {
+                "default": [],
+                "maxItems": 2,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                }
+              }
+            },
+            "required": [
+              "concept",
+              "action"
+            ],
+            "additionalProperties": false
           },
           "visual": {
             "oneOf": [

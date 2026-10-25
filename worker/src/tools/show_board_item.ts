@@ -17,7 +17,10 @@ export const showBoardItem: ToolModule = {
   kind: 'query',
   async handler(args, ctx) {
     // pack-literal-ok: semantic validator for the renderer's compact command protocol.
-    const canvas = str(args.kind) === 'math_canvas' ? validateVoiceCanvasContent(args.content) : undefined; // pack-literal-ok
+    // Library tasks remain authored content; new generated demonstrations have one verified path.
+    if (str(args.kind) !== 'math_canvas' && !str(args.taskKey)) // pack-literal-ok
+      throw new Error('Use math_canvas with structured teaching for generated demonstrations, or an existing library taskKey.');
+    const canvas = str(args.kind) === 'math_canvas' ? validateVoiceCanvasContent(args.content, { requireGrounding: true }) : undefined; // pack-literal-ok
     const lines = canvas?.moments.map(m => m.narration);
     const narrated = lines?.every((line): line is string => typeof line === 'string');
     if (narrated && !ctx.narrate) throw new Error('Narration is unavailable or a canvas was already narrated in this reply.');
@@ -26,7 +29,7 @@ export const showBoardItem: ToolModule = {
       utteranceId: ctx.utteranceId,
       sentenceIdx: ctx.nextSentenceIdx,
       kind: str(args.kind),
-      content: json(args.content),
+      content: json(canvas ?? args.content),
       taskKey: str(args.taskKey),
       expectedAnswer: json(args.expectedAnswer),
     });

@@ -40,16 +40,15 @@ describe('ToolRouter', () => {
     expect(tr.of('setPhase')).toEqual([{ sessionId: 7n, phase: phaseId, reason: 'ready' }]);
   });
 
-  it('show_board_item: content as JSON string, tagged with utterance and next sentence', async () => {
+  it('permits authored library tasks but rejects a generated prose bypass', async () => {
     const tr = t();
-    const content = { text: 'Hello' };
-    const ans = { form: 'number', value: '3' };
-    await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, { kind: kindName, content, expectedAnswer: ans }), ctx(tr));
-    expect(tr.of('showBoardItem')).toEqual([
-      { sessionId: 7n, utteranceId: 99n, sentenceIdx: 3, kind: kindName, content: JSON.stringify(content), taskKey: '', expectedAnswer: JSON.stringify(ans) },
-    ]);
-    await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, { kind: kindName, taskKey: 'k1' }), ctx(tr));
-    expect(tr.of('showBoardItem')[1]).toMatchObject({ content: '', taskKey: 'k1', expectedAnswer: '' });
+    const router = new ToolRouter(createToolDefs(pack), 100);
+    const bad = await router.run(call(TOOL_NAMES.showBoardItem, { kind: kindName, content: { text: 'Wrong math' } }), ctx(tr));
+    expect(bad.ok).toBe(false);
+    expect(tr.of('showBoardItem')).toEqual([]);
+    const good = await router.run(call(TOOL_NAMES.showBoardItem, { taskKey: 'k1' }), ctx(tr));
+    expect(good.ok).toBe(true);
+    expect(tr.of('showBoardItem')[0]).toMatchObject({ content: '', taskKey: 'k1', sentenceIdx: 3 });
   });
 
   it('query tools return the procedure result', async () => {
