@@ -75,6 +75,7 @@ import UploadPhotoReducer from "./upload_photo_reducer";
 import * as BuildContextProcedure from "./build_context_procedure";
 import * as BuildLessonRequestProcedure from "./build_lesson_request_procedure";
 import * as GetSessionImageProcedure from "./get_session_image_procedure";
+import * as LearnerInsightsProcedure from "./learner_insights_procedure";
 import * as PrefetchTopicProcedure from "./prefetch_topic_procedure";
 import * as RefreshDashboardProcedure from "./refresh_dashboard_procedure";
 import * as SetTopicProcedure from "./set_topic_procedure";
@@ -547,6 +548,7 @@ const proceduresSchema = __procedures(
   __procedureSchema("build_context", BuildContextProcedure.params, BuildContextProcedure.returnType),
   __procedureSchema("build_lesson_request", BuildLessonRequestProcedure.params, BuildLessonRequestProcedure.returnType),
   __procedureSchema("get_session_image", GetSessionImageProcedure.params, GetSessionImageProcedure.returnType),
+  __procedureSchema("learner_insights", LearnerInsightsProcedure.params, LearnerInsightsProcedure.returnType),
   __procedureSchema("prefetch_topic", PrefetchTopicProcedure.params, PrefetchTopicProcedure.returnType),
   __procedureSchema("refresh_dashboard", RefreshDashboardProcedure.params, RefreshDashboardProcedure.returnType),
   __procedureSchema("set_topic", SetTopicProcedure.params, SetTopicProcedure.returnType),
