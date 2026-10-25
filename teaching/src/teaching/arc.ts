@@ -80,7 +80,7 @@ export function upcomingStage(arc: LessonArc, allowed: readonly TeachingPhase[])
 export function stageBrief(stage: ArcStage) {
   return {
     stage: stage.id, phases: stage.phases, moments: stage.minMoments === stage.maxMoments ? stage.minMoments : `${stage.minMoments}-${stage.maxMoments}`,
-    maxWords: stage.maxWords, formalizeAtMoment: stage.formalizeAt >= 0 ? stage.formalizeAt + 1 : null,
+    maxWords: stage.maxWords, wordsPerMoment: Math.round(stage.maxWords / stage.maxMoments), formalizeAtMoment: stage.formalizeAt >= 0 ? stage.formalizeAt + 1 : null,
     check: stage.check ? stage.checkKinds.join(" or ") || "any" : "none",
   };
 }
@@ -110,7 +110,7 @@ export function arcStepRules(arc: LessonArc, phase: TeachingPhase): { minimum: n
 export function arcPrompt(arc: LessonArc): string {
   const stages = arc.stages.map((s, i) => {
     const b = stageBrief(s);
-    return `${i + 1}. ${s.id} [phase ${s.phases.join(" or ")}; ${b.moments} moments; at most ${s.maxWords} spoken words in total${b.formalizeAtMoment ? `; moment ${b.formalizeAtMoment} is the formalization (code shows the equation there)` : ""}; check: ${b.check}]: ${s.guide}`;
+    return `${i + 1}. ${s.id} [phase ${s.phases.join(" or ")}; ${b.moments} moments; at most ${s.maxWords} spoken words in total, about ${b.wordsPerMoment} per moment: count them${b.formalizeAtMoment ? `; moment ${b.formalizeAtMoment} is the formalization (code shows the equation there)` : ""}; check: ${b.check}]: ${s.guide}`;
   });
   return `LESSON ARC "${arc.id}" (${arc.label}). It OVERRIDES the moment counts, word counts and phase advice above; the data field arcStage names the stage to plan now.
 ${arc.guide}
