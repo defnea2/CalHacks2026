@@ -13,7 +13,7 @@ pnpm worker                            # LLM worker (keys from .env)
 pnpm dev                               # = pnpm --filter client dev → http://127.0.0.1:5175
 ```
 
-`/` picks a learner and starts a session (talk or type, optional text-only mode); `?lesson` opens the team lesson lab (prepared and sample lessons work offline; live lessons run over SpacetimeDB); `?observe=<id>` and `?overview` are read-only. `pnpm build` writes static files to `client/dist/` (no `/api/*` endpoints exist anymore).
+`/` picks a learner and starts a session (talk or type, optional text-only mode); `?lesson` opens the team lesson lab (prepared and sample lessons work offline; a typed question starts a text-mode session in the same session screen); `?observe=<id>` and `?overview` are read-only. `pnpm build` writes static files to `client/dist/` (no `/api/*` endpoints exist anymore).
 
 ## Compact math and instant exploration
 
