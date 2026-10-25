@@ -12,12 +12,13 @@
     "@ricky0123/vad-web": "^0.0.31",
     "@tutor/shared": "workspace:*",
     "katex": "^0.19.1",
+    "mafs": "0.21.0",
+    "motion": "14.6.0",
     "onnxruntime-web": "^1.30.0",
+    "qrcode-generator": "1.4.4",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "spacetimedb": "2.13.*",
-    "mafs": "0.21.0",
-    "motion": "14.6.0",
     "zod": "4.6.7"
   },
   "devDependencies": {

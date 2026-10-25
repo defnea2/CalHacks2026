@@ -19,13 +19,13 @@ describe('turn photos', () => {
   it('only the session owner may attach or remove; mime, size and ended sessions are checked', () => {
     const e = env();
     const stranger = auth('stranger');
-    expect(() => call(e.h, stranger, mod.attachImage, { sessionId: e.s.id, mime: JPEG, data: bytes(10) })).toThrow(/not your session/);
+    expect(() => call(e.h, stranger, mod.attachImage, { sessionId: e.s.id, mime: JPEG, data: bytes(10) })).toThrow(/another device/);
     expect(() => call(e.h, e.client, mod.attachImage, { sessionId: e.s.id, mime: 'text/html', data: bytes(10) })).toThrow(/jpeg/);
     expect(() => call(e.h, e.client, mod.attachImage, { sessionId: e.s.id, mime: JPEG, data: bytes(0) })).toThrow(/empty/);
     expect(() => call(e.h, e.client, mod.attachImage, { sessionId: e.s.id, mime: JPEG, data: bytes(MODULE_DEFAULTS.PHOTO_MAX_BYTES + 1) })).toThrow(/too large/);
     call(e.h, e.client, mod.attachImage, { sessionId: e.s.id, mime: JPEG, data: bytes(10) });
     expect(session(e.h, e.s.id).pendingPhoto).toBe(true);
-    expect(() => call(e.h, stranger, mod.removePendingImage, { sessionId: e.s.id })).toThrow(/not your session/);
+    expect(() => call(e.h, stranger, mod.removePendingImage, { sessionId: e.s.id })).toThrow(/another device/);
     call(e.h, e.client, mod.removePendingImage, { sessionId: e.s.id });
     expect(images(e.h, e.s.id)).toHaveLength(0);
     expect(session(e.h, e.s.id).pendingPhoto).toBe(false);
@@ -75,7 +75,7 @@ describe('turn photos', () => {
     expect(turnImage(e, e.agent, bound.idx + 1)).toBe('');
   });
 
-  it('class sessions: the connection holding the learner presence owns the session', () => {
+  it('class sessions: the learner\'s device owns the session, not the teacher', () => {
     const e = setup();
     const learner = makeLearner(e.h, e.client);
     call(e.h, e.client, mod.setPresence, { learnerId: learner.id, status: 'waiting' });
@@ -85,7 +85,7 @@ describe('turn photos', () => {
     call(e.h, teacherConn, mod.startClassSession, { teacherId: teacher.id, goals: 'fractions', content: '', delivery: '', documentName: '', documentMime: '', documentText: '', documentData: new Uint8Array(), simulatedCount: 0 });
     const s = [...e.h.db.session.iter()].find(x => x.learnerId === learner.id && x.active)!;
     expect(s.classSessionId).not.toBe(0n);
-    expect(() => call(e.h, teacherConn, mod.attachImage, { sessionId: s.id, mime: JPEG, data: bytes(5) })).toThrow(/not your session/);
+    expect(() => call(e.h, teacherConn, mod.attachImage, { sessionId: s.id, mime: JPEG, data: bytes(5) })).toThrow(/another device/);
     call(e.h, e.client, mod.attachImage, { sessionId: s.id, mime: JPEG, data: bytes(5) });
     expect(session(e.h, s.id).pendingPhoto).toBe(true);
   });

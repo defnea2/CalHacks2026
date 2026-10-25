@@ -23,9 +23,9 @@ describe('opening utterance', () => {
     expect(m).toHaveLength(1);
     expect(m[0]!).toMatchObject({ turnIdx: OPENING_TURN_IDX, utteranceId: 0n });
     expect(m[0]!.turnEndAt).toBeTruthy();
-    // A second click / a reload / another tab does nothing.
+    // A second click / a reload does nothing; another device may not.
     call(h, client, mod.startConversation, { sessionId: s.id });
-    call(h, auth('other-tab'), mod.startConversation, { sessionId: s.id });
+    expect(() => call(h, auth('other-device'), mod.startConversation, { sessionId: s.id })).toThrow(/another device/);
     expect(metrics(h, s.id)).toHaveLength(1);
     expect(turns(h, s.id)).toHaveLength(0);
   });

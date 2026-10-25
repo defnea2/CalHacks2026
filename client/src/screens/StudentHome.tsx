@@ -1,4 +1,6 @@
-// Student flow: pick or create yourself (?student), then choose how to learn (?student=<id>):
+// Student flow: continue as one of this device's students or add yourself (?student; accounts
+// belong to the device that created them, docs/ARCHITECTURE.md "Identity and authorization"),
+// then choose how to learn (?student=<id>):
 // "Learn by myself" (task text + optional photo → own session) or "Wait for my teacher"
 // (?wait=<id>, joins the class session automatically).
 import { useEffect, useRef, useState } from 'react';
@@ -6,6 +8,8 @@ import type { DbConnection } from '../module_bindings';
 import type { Learner, Session } from '../module_bindings/types';
 import { callReducer, subscribe } from '../stdb/connection';
 import { useRows } from '../stdb/useRows';
+import { useAccounts } from '../stdb/useAccounts';
+import { ClaimLegacy, CodeForm, DeviceCode } from '../components/SignIn';
 import { APP_CONFIG } from '../app-config';
 import { navigate, phaseLabel, routeUrl, sessionUrl } from '../lib/format';
 import { compressPhoto } from '../lib/photo';
@@ -17,13 +21,9 @@ export function Initial({ name }: { name: string }) {
 
 export function StudentHome({ conn }: { conn: DbConnection }) {
   const [error, setError] = useState('');
-  useEffect(() => {
-    const sub = subscribe(conn, ['SELECT * FROM learner'], 'students');
-    sub.ready.catch(e => setError(String(e?.message ?? e)));
-    return () => sub.unsubscribe();
-  }, [conn]);
-  // Simulated classroom students are real rows but belong to the teacher's simulation.
-  const learners = useRows<Learner>(conn.db.learner, l => !l.isSimulated, []).sort((a, b) => Number(a.id - b.id));
+  const acc = useAccounts(conn);
+  // Only the students this device is signed in as (simulated students never are).
+  const learners = acc.learners.filter(l => !l.isSimulated);
 
   const choose = (l: Learner) => {
     eventLog.log('ui.pick_learner', { learnerId: l.id.toString() });
@@ -36,24 +36,26 @@ export function StudentHome({ conn }: { conn: DbConnection }) {
       <section className="pr-intro" style={{ paddingTop: 22 }}>
         <span className="pr-eyebrow">Student</span>
         <h1>Who is learning today?</h1>
-        <p>Pick your name, or add yourself. No password needed.</p>
+        <p>Continue as yourself, add yourself, or sign in with the code from your teacher. No password needed.</p>
       </section>
       {error && <p className="pr-error" data-testid="error">{error}</p>}
       <div className="pr-split">
         <div>
-          <div className="pr-section-label"><h2>Students</h2><span>{learners.length}</span></div>
+          <div className="pr-section-label"><h2>On this device</h2><span>{learners.length}</span></div>
           <div className="pr-people" data-testid="learner-list">
-            {learners.length === 0 && <p className="pr-empty">No students yet. Add yourself on the right.</p>}
+            {acc.ready && learners.length === 0 && <p className="pr-empty">Nobody has signed in on this device yet. Add yourself, or enter the code from your teacher.</p>}
             {learners.map(l => (
               <button key={l.id.toString()} className="pr-person" data-testid="learner-item" data-learner-id={l.id.toString()} data-learner-name={l.name} onClick={() => choose(l)}>
                 <Initial name={l.name} />
                 <span>
-                  <strong>{l.name}</strong>
+                  <strong>Continue as {l.name}</strong>
                   <small>Age {l.age} · Grade {l.grade}</small>
                 </span>
               </button>
             ))}
           </div>
+          <CodeForm conn={conn} kind="learner" />
+          <ClaimLegacy conn={conn} kind="learner" />
         </div>
         <CreateLearnerForm conn={conn} />
       </div>
@@ -161,6 +163,10 @@ export function StudentStart({ conn, learnerId }: { conn: DbConnection; learnerI
         </button>
       </div>
       {mode === 'self' && learner && <StartForm conn={conn} learner={learner} previous={current} active={active} />}
+      <details className="pr-legacy" style={{ marginTop: 28 }} data-testid="student-device">
+        <summary>Use Fibonacci on another device</summary>
+        <DeviceCode conn={conn} kind="learner" accountId={learnerId} />
+      </details>
     </div>
   );
 }

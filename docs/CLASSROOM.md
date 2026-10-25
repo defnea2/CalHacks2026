@@ -80,10 +80,12 @@ procedure learnerInsights(learnerId: u64, teacherId: u64, key: string) -> string
 - **Student profile (learnerInsights).** Opened from the teacher dashboard; long-term information
   only (no live state): what the tutor has learned about the student (memory notes with evidence;
   `seeded` marks simulation seed notes), concept mastery with titles, the last 5 session summaries.
-  Gate: the teacher id must exist; if the module env `INSIGHTS_KEY` is set, `key` must match
-  (otherwise `{ok:false, error:'locked'}`; pass `''` when unset). Client call:
-  `JSON.parse(await conn.procedures.learnerInsights({ learnerId, teacherId, key }))`. Privacy
-  trade-off: see `docs/ARCHITECTURE.md` §8.
+  Gate: the caller's device must be signed in as `teacherId` (`not_your_teacher`) and the learner
+  on that teacher's roster: added by the teacher or in one of the teacher's class sessions
+  (`not_your_student`); if the module env `INSIGHTS_KEY` is set, `key` must match as well
+  (`locked`; pass `''` when unset). Client call:
+  `JSON.parse(await conn.procedures.learnerInsights({ learnerId, teacherId, key }))`. See
+  `docs/ARCHITECTURE.md` §13.
 
 ## Simulation
 
@@ -101,8 +103,9 @@ procedure learnerInsights(learnerId: u64, teacherId: u64, key: string) -> string
   opening), the simulated student answers.
 - `resetSimulatedStudents(count)` (button "Reset simulated students" on the class setup, or
   `node scripts/simulate.mjs --reset-only`): the same reset for ranks 1..count (0 = all 20) without
-  starting a class; refused while one of them is in a running class session. Like the other
-  classroom reducers it needs no role (teachers have no accounts).
+  starting a class; refused while one of them is in a running class session. Needs a teacher
+  account on the calling device (the simulation is shared by all teachers); simulated students
+  belong to no device, so no client can drive them directly.
 - **Turn loop.** Whenever a simulated session's `turnState` returns to `listening` (a hook on
   `updateSession`: the text-mode reading delay of the tutor's last sentence ended) and no student
   turn is pending, a `sim_turn_job` is scheduled 2-5 s later. `simStudentTurn` calls Haiku 5.5

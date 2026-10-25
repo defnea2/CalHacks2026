@@ -92,7 +92,9 @@ export interface LearnerInsights {
   generatedMs: number;
 }
 
-export type LearnerInsightsError = 'unknown_teacher' | 'locked' | 'unknown_learner';
+/** not_your_teacher: the caller's device is not signed in as that teacher; not_your_student: the
+ *  learner is not on that teacher's roster (docs/ARCHITECTURE.md "Identity and authorization"). */
+export type LearnerInsightsError = 'unknown_teacher' | 'locked' | 'unknown_learner' | 'not_your_teacher' | 'not_your_student';
 
 export type LearnerInsightsResult = LearnerInsights | { ok: false; error: LearnerInsightsError };
 
