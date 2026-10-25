@@ -69,8 +69,9 @@ export function findSentence(ctx: Ctx, utteranceId: bigint, idx: number): Senten
   return undefined;
 }
 
-export function utteranceSentences(ctx: Ctx, utteranceId: bigint): SentenceRow[] {
-  return [...ctx.db.replySentence.byUtteranceIdx.filter(utteranceId)].sort((a, b) => a.idx - b.idx);
+/** (Prefix scans on multi-column indexes fail in the test datastore, so scan by session.) */
+export function utteranceSentences(ctx: Ctx, sessionId: bigint, utteranceId: bigint): SentenceRow[] {
+  return [...ctx.db.replySentence.sessionId.filter(sessionId)].filter(s => s.utteranceId === utteranceId).sort((a, b) => a.idx - b.idx);
 }
 
 /** turn_metrics row for (sessionId, student turnIdx), created on first use. */

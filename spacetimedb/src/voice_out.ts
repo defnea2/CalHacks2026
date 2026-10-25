@@ -158,7 +158,7 @@ function maybeFinishSpeaking(ctx: Ctx, sessionId: bigint, utteranceId: bigint): 
   const session = ctx.db.session.id.find(sessionId);
   if (!session || session.currentUtteranceId !== utteranceId) return;
   if (!tutorTurnFor(ctx, sessionId, utteranceId)) return;
-  if (utteranceSentences(ctx, utteranceId).some(s => s.status === PENDING || s.status === READY)) return;
+  if (utteranceSentences(ctx, sessionId, utteranceId).some(s => s.status === PENDING || s.status === READY)) return;
   finishUtterance(ctx, session);
 }
 
@@ -172,7 +172,7 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
   const utteranceId = session.currentUtteranceId;
   if (utteranceId === 0n && session.turnState === LISTENING) return; // nothing to interrupt
   if (utteranceId !== 0n) {
-    for (const s of utteranceSentences(ctx, utteranceId)) {
+    for (const s of utteranceSentences(ctx, sessionId, utteranceId)) {
       if (s.status === PENDING || s.status === READY) ctx.db.replySentence.id.update({ ...s, status: DROPPED });
     }
   }
@@ -234,7 +234,7 @@ export function appendTutorTurn(
     if (session.turnState === INTERRUPTED) updateSession(ctx, session, { turnState: LISTENING });
     return;
   }
-  const unplayed = utteranceSentences(ctx, args.utteranceId).some(s => s.status === PENDING || s.status === READY);
+  const unplayed = utteranceSentences(ctx, args.sessionId, args.utteranceId).some(s => s.status === PENDING || s.status === READY);
   if (!text || !unplayed) finishUtterance(ctx, session);
 }
 

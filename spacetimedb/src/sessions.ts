@@ -77,7 +77,7 @@ export function endSession(ctx: Ctx, sessionId: bigint): void {
 function closeSession(ctx: Ctx, session: SessionRow): void {
   closeLiveTurns(ctx, session.id);
   if (session.currentUtteranceId !== 0n) {
-    for (const s of utteranceSentences(ctx, session.currentUtteranceId)) {
+    for (const s of utteranceSentences(ctx, session.id, session.currentUtteranceId)) {
       if (s.status === 'pending' || s.status === 'ready') ctx.db.replySentence.id.update({ ...s, status: DROPPED });
     }
   }
