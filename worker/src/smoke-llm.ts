@@ -8,6 +8,7 @@ import { pack, phaseInstructions, SentenceChunker, normalizeForSpeech, TOOL_NAME
 import { loadConfig } from './env';
 import { OpenRouterProvider } from './llm';
 import { buildMessages, buildSystemPrompt } from './prompt';
+import { endsWithNextStep } from './reply';
 import { createToolDefs } from './tools/index';
 
 const cfg = loadConfig();
@@ -71,7 +72,7 @@ async function reply(label: string, messages: ChatMessage[], startPhase: string)
       }
       messages.push({ role: 'tool', toolCallId: c.id, name: c.name, content });
     }
-    if (!query && text.trim()) break;
+    if (!query && endsWithNextStep(all)) break; // same rule as ReplyRun
   }
   const firstWords = sentences.length ? words(sentences[0]!) : 0;
   const last = sentences.at(-1) ?? '';

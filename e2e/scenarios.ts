@@ -17,7 +17,7 @@ export const E2E_DEFAULTS = {
   bargeInStopMs: 300,
   /** The tutor speaks first: background prepended to every fixture so the student starts
    *  speaking after the opening (LLM + TTS + about three sentences of playback). */
-  openingLeadMs: Number(process.env.E2E_OPENING_LEAD_MS || 16_000),
+  openingLeadMs: Number(process.env.E2E_OPENING_LEAD_MS || 20_000),
   /** First sentence of the opening: a few words (warn above). */
   openingFirstSentenceMaxWords: 10,
 };

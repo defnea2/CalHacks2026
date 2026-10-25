@@ -84,14 +84,31 @@ describe('reply', () => {
         tool(TOOL_NAMES.setPhase, { phase: phaseId, reason: 'found the gap' }),
         ...tokens('Look at the board with me for a second. '),
         tool(TOOL_NAMES.showBoardItem, { kind, content: { text: 'pizza' } }),
-        ...tokens('Each slice is the same size as the others.'),
+        ...tokens('Is each slice the same size as the others?'),
         done,
       ],
     ]);
     const { transport } = await answer(llm);
     expect(transport.names()).toEqual(['buildContext', 'beginUtterance', 'addSentence', 'setPhase', 'addSentence', 'showBoardItem', 'addSentence', 'appendTutorTurn']);
     expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(2);
-    expect(llm.calls).toHaveLength(1); // actions with spoken text: no extra LLM call
+    expect(llm.calls).toHaveLength(1); // actions, and the reply already ends with a next step: no extra LLM call
+  });
+
+  it('short first sentence + action tools without a next step: the LLM continues the same reply', async () => {
+    const llm = new FakeLlm([
+      [...tokens('Okay, let us draw it together. '), tool(TOOL_NAMES.showBoardItem, { kind, content: { text: 'pizza' } }, 'b1'), done],
+      [...tokens('Here is a pizza cut into three slices. How many slices are shaded?'), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(2);
+    expect(llm.calls[1]!.messages.at(-1)).toMatchObject({ role: 'tool', toolCallId: 'b1' });
+    expect(transport.of('addSentence').map(x => x.display)).toEqual([
+      'Okay, let us draw it together.',
+      'Here is a pizza cut into three slices.',
+      'How many slices are shaded?',
+    ]);
+    expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(1);
+    expect(transport.of('appendTutorTurn')[0]!.text).toBe('Okay, let us draw it together. Here is a pizza cut into three slices. How many slices are shaded?');
   });
 
   it('board item before any text points at sentence 0', async () => {

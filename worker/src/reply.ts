@@ -253,7 +253,7 @@ export class ReplyRun {
         image,
       });
       const hasContext = !!context.trim();
-      let spoken = false;
+      let said = '';
       for (let round = 0; ; round++) {
         // The system prompt carries only the current phase's instructions: after a set_phase
         // (in this reply or elsewhere) the whole block is replaced before the next LLM call,
@@ -311,15 +311,17 @@ export class ReplyRun {
         for (const s of chunker.flush()) this.enqueueSentence(s);
         const res = await Promise.all(results);
         if (this.aborted) return;
-        if (text.trim()) spoken = true;
+        if (text.trim()) said = `${said} ${text.trim()}`.trim();
         this.history = [
           ...this.history,
           { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}) },
           ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
         ];
         if (!calls.length) break;
-        // Query results must go back to the LLM; action results only if nothing was said yet.
-        const again = res.some(r => r.kind === 'query') || !spoken;
+        // Query results must go back to the LLM. After action tools the LLM continues only if the
+        // reply has no next step yet: it typically says its short first sentence, calls the board
+        // tools, and must then go on until it asks the student something.
+        const again = res.some(r => r.kind === 'query') || !endsWithNextStep(said);
         if (!again) break;
         if (round >= this.deps.maxToolRounds) {
           this.log(`max tool rounds (${this.deps.maxToolRounds}) reached`);
@@ -368,6 +370,11 @@ export class ReplyRun {
         `${said.length}/${this.sent.length} sentences, first token ${ft}${tools ? `, tools: ${tools}` : ''}`
     );
   }
+}
+
+/** The spoken reply ends with a question for the student (the prompt's "next step"). */
+export function endsWithNextStep(said: string): boolean {
+  return /\?["'”’)\]]*\s*$/.test(said);
 }
 
 function parsePhaseArg(args: string): string | undefined {

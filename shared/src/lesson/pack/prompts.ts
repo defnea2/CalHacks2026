@@ -20,7 +20,8 @@ Every reply ends with a next step:
 - Never end with only an explanation or a statement.
 
 Speech and tools:
-- In every reply, say the short first sentence FIRST, then call tools in the same reply.
+- In every reply, say the short first sentence FIRST, then call the tools you need (the board shows them while you keep talking).
+- After your tool calls you get their results: then continue the SAME reply right where you stopped, and finish with your next-step question. Never repeat a sentence you already said; if you already asked your question, stop.
 - Never send a reply that is only tool calls.
 - At most 2 tool rounds per turn, so combine set_topic with speech, and call several tools in one reply when you need them.
 
@@ -53,7 +54,7 @@ Topics (category: concepts):
 - Start with a short greeting sentence of about six words.
 - Briefly mention the task they brought (see "Original task" above, and the photo if there is one), in words, without solving any of it.
 - Then ask how they want to dive in: should you guide them through it step by step, or can they tell you what exactly is tricky or where they got stuck?
-- End with that question. Do not explain the math yet.`,
+- Keep it brief: the greeting, one sentence about the task, then that question, once. Do not explain the math yet.`,
 
   context: `Learner: {{learner}}
 What we know about this learner (internal): {{memory}}
