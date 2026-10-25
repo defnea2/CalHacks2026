@@ -1,7 +1,7 @@
 // Narrow subscription to one session's rows (spec "Audio rules": never all tables).
 import { useEffect, useMemo, useState } from 'react';
 import type { DbConnection } from '../module_bindings';
-import type { BoardItem, Learner, Phrase, ReplySentence, Session, Turn, TurnMetrics } from '../module_bindings/types';
+import type { Beat, BoardItem, CanvasState, Learner, LessonState, Phrase, ReplySentence, Session, Turn, TurnMetrics } from '../module_bindings/types';
 import { subscribe } from './connection';
 import { useRows } from './useRows';
 
@@ -15,6 +15,10 @@ export interface SessionData {
   sentences: ReplySentence[];
   boardItems: BoardItem[];
   metrics: TurnMetrics[];
+  /** Team lesson rows (docs/CONTRACT-night.md section 1). */
+  beats: Beat[];
+  lessonState: LessonState | undefined;
+  canvasState: CanvasState | undefined;
 }
 
 /** Session-scoped SQL. Column names are the generated snake_case names. */
@@ -28,6 +32,9 @@ export function sessionQueries(sessionId: bigint, withAudio: boolean): string[] 
     `SELECT * FROM board_item WHERE session_id = ${id}`,
     `SELECT * FROM turn_metrics WHERE session_id = ${id}`,
     `SELECT * FROM playback_flush WHERE session_id = ${id}`,
+    `SELECT * FROM beat WHERE session_id = ${id}`,
+    `SELECT * FROM lesson_state WHERE session_id = ${id}`,
+    `SELECT * FROM canvas_state WHERE session_id = ${id}`,
   ];
   if (withAudio) q.push(`SELECT * FROM audio_out WHERE session_id = ${id}`);
   return q;
@@ -89,9 +96,12 @@ export function useSessionData(conn: DbConnection | null, sessionId: bigint, opt
   const sentences = useRows<ReplySentence>(db?.replySentence, mine, [sessionId]);
   const boardItems = useRows<BoardItem>(db?.boardItem, mine, [sessionId]);
   const metrics = useRows<TurnMetrics>(db?.turnMetrics, mine, [sessionId]);
+  const beats = useRows<Beat>(db?.beat, mine, [sessionId]);
+  const lessonStates = useRows<LessonState>(db?.lessonState, mine, [sessionId]);
+  const canvasStates = useRows<CanvasState>(db?.canvasState, mine, [sessionId]);
 
   return useMemo(
-    () => ({ ready, error, session, learner: learners[0], phrases, turns, sentences, boardItems, metrics }),
-    [ready, error, session, learners, phrases, turns, sentences, boardItems, metrics]
+    () => ({ ready, error, session, learner: learners[0], phrases, turns, sentences, boardItems, metrics, beats, lessonState: lessonStates[0], canvasState: canvasStates[0] }),
+    [ready, error, session, learners, phrases, turns, sentences, boardItems, metrics, beats, lessonStates, canvasStates]
   );
 }

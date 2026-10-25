@@ -13,7 +13,7 @@ const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, 
 });
 
 /** Incremental validated beats; no automatic retries after a phrase might have played. */
-export function createStreamingPlanningModel(endpoint = "/api/teaching/plan", fetcher: typeof fetch = fetch): PlanningModel {
+export function createStreamingPlanningModel(endpoint: string, fetcher: typeof fetch = fetch): PlanningModel {
   return async (request, signal, onProgress) => {
     // Server owns the instructions and schema; avoid resending their ~40 KB browser copies.
     const { systemPrompt: _system, responseSchema: _schema, ...wire } = request;
@@ -48,7 +48,7 @@ export function createStreamingPlanningModel(endpoint = "/api/teaching/plan", fe
 
 /** Call a host-owned server endpoint. Provider credentials never enter this module/browser. */
 export function createHttpPlanningModel(
-  endpoint = "/api/teaching/plan",
+  endpoint: string,
   fetcher: typeof fetch = fetch,
 ): PlanningModel {
   return async (request, signal) => {

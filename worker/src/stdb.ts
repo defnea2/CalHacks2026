@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import { DbConnection } from './module_bindings/index';
 import type { Agent } from './agent';
+import type { TutorRequests } from './tutorRequests';
 import type { Transport } from './transport';
 
 export interface StdbOptions {
@@ -26,6 +27,7 @@ export const SUBSCRIPTIONS = [
   'SELECT * FROM learner',
   'SELECT * FROM speech_activity',
   'SELECT * FROM playback_flush',
+  "SELECT * FROM tutor_request WHERE status = 'pending'",
 ];
 
 function readToken(file: string): string | undefined {
@@ -89,6 +91,21 @@ export class StdbTransport implements Transport {
   async getSessionImage(a: { sessionId: bigint }) {
     return this.c().procedures.getSessionImage(a);
   }
+  async buildLessonRequest(a: { sessionId: bigint; requestId: string }) {
+    return this.c().procedures.buildLessonRequest(a);
+  }
+  async beginLesson(a: Parameters<Transport['beginLesson']>[0]) {
+    return this.c().reducers.beginLesson(a);
+  }
+  async addBeat(a: Parameters<Transport['addBeat']>[0]) {
+    return this.c().reducers.addBeat(a);
+  }
+  async agentHeartbeat(a: Parameters<Transport['agentHeartbeat']>[0]) {
+    return this.c().reducers.agentHeartbeat(a);
+  }
+  async submitTutorResult(a: Parameters<Transport['submitTutorResult']>[0]) {
+    return this.c().reducers.submitTutorResult(a);
+  }
 }
 
 /** Connects, wires subscriptions into the agent, reconnects forever with backoff. */
@@ -99,13 +116,15 @@ export class StdbLink {
   private timer?: ReturnType<typeof setTimeout>;
   private readonly log: (msg: string) => void;
   private agent?: Agent;
+  private tutor?: TutorRequests;
 
   constructor(private readonly o: StdbOptions) {
     this.log = o.log ?? (m => console.log(m));
   }
 
-  start(agent: Agent): void {
+  start(agent: Agent, tutor?: TutorRequests): void {
     this.agent = agent;
+    this.tutor = tutor;
     this.connect();
   }
 
@@ -177,6 +196,7 @@ export class StdbLink {
     db.boardItem.onDelete((_c, r) => agent.onBoardItem(r.sessionId));
     db.learner.onUpdate(() => agent.onLearner());
     db.playbackFlush.onInsert((_c, r) => agent.onPlaybackFlush(r.sessionId, r.utteranceId));
+    db.tutorRequest.onInsert((_c, r) => this.tutor?.onRequest(r));
     conn
       .subscriptionBuilder()
       .onApplied(() => this.log(`[stdb] subscribed (${[...agent.sessions.values()].filter(s => s.row).length} active sessions)`))

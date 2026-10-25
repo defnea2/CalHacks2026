@@ -1,9 +1,9 @@
 import { lazy, Suspense, useState } from "react";
-import { LessonWorkspace } from "../teaching/ui/LessonWorkspace";
+import { LessonWorkspace, type LessonPlanning } from "../teaching/ui/LessonWorkspace";
 const MathWorkbench = lazy(() => import("../presentation/math/MathWorkbench").then(m => ({ default: m.MathWorkbench })));
 const GuidedWorkbench = lazy(() => import("../presentation/GuidedWorkbench").then(m => ({ default: m.GuidedWorkbench })));
 const VisualSandbox = lazy(() => import("../visuals/VisualSandbox").then(m => ({ default: m.VisualSandbox })));
-export default function App() {
+export default function App({ planning }: { planning?: LessonPlanning } = {}) {
   const [tools, setTools] = useState(false);
   const [mode, setMode] = useState<"math" | "guided" | "components">("math");
   return <main className="product-shell">
@@ -11,7 +11,7 @@ export default function App() {
       <div className="product-identity"><span className="product-monogram" aria-hidden="true">t</span><strong>Tutor</strong></div>
       <button aria-pressed={tools} onClick={() => setTools(!tools)}>{tools ? "Back to my lesson" : "Development tools"}</button>
     </header>
-    <div hidden={tools}><LessonWorkspace /></div>
+    <div hidden={tools}><LessonWorkspace planning={planning} /></div>
     {tools && <section className="product-tools" aria-label="Development tools">
       <nav className="workbench-mode" aria-label="Workbench mode">
         <button aria-pressed={mode === "math"} onClick={() => setMode("math")}>Live math canvas</button>

@@ -66,7 +66,7 @@ export function setSessionVoice(ctx: Ctx, sessionId: bigint, voice: boolean): vo
   if (session.voice !== voice) updateSession(ctx, session, { voice });
 }
 
-export function submitTextTurn(ctx: Ctx, args: { sessionId: bigint; text: string; intent: string }, source: string = SOURCE_TEXT): void {
+export function submitTextTurn(ctx: Ctx, args: { sessionId: bigint; text: string; intent: string }, source: string = SOURCE_TEXT, opts: { assessed?: boolean } = {}): void {
   if (!TURN_INTENTS.includes(args.intent as TurnIntent)) throw new SenderError(`unknown intent ${args.intent}; use one of ${TURN_INTENTS.filter(Boolean).join(', ')} or ''`);
   let text = args.text.replace(/\s+/g, ' ').trim();
   if (text.length > MODULE_DEFAULTS.TEXT_TURN_MAX_CHARS) throw new SenderError(`text too long (max ${MODULE_DEFAULTS.TEXT_TURN_MAX_CHARS} characters)`);
@@ -98,7 +98,7 @@ export function submitTextTurn(ctx: Ctx, args: { sessionId: bigint; text: string
   else turn = openTyped(ctx, session, text, source, args.intent);
   const m = metricsFor(ctx, session.id, turn.idx);
   ctx.db.turnMetrics.id.update({ ...m, turnEndAt: ctx.timestamp });
-  completeTurn(ctx, ctx.db.turn.id.find(turn.id)!);
+  completeTurn(ctx, ctx.db.turn.id.find(turn.id)!, opts);
 }
 
 function openTyped(ctx: Ctx, session: SessionRow, text: string, source: string, intent: string) {

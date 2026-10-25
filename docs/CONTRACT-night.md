@@ -47,3 +47,20 @@ Schema location: put new tables in your own file (`spacetimedb/src/schema_<area>
 ## 3. Unchanged boundaries
 - STT/TTS stay module procedures (STT via `STT_BASE_URL`), LLM streaming stays in the worker, the client builds static.
 - Live DB `voice-tutor` is the lead's. Agents publish to their own DB names.
+
+## 4. Client consumption of section 1 (owner: `night/client-static`)
+
+How the static client reads the section 1 rows as implemented on `night/pipeline` (`spacetimedb/src/pipeline.ts`); code in `client/src/session/SessionView.tsx`, `client/src/lesson/beatPlayer.ts`, `src/teaching/spacetimeModel.ts`.
+
+| Item | Client use |
+| --- | --- |
+| `beat.visual` | Team `VisualBeat` without narration (`{id, cues:[{id, atMs, commands}]}`; `{commands}` / bare command arrays are tolerated). Beats of a session are applied in `(utteranceId, idx)` order, contiguous only (a gap waits), to the team `VisualDirector`. |
+| `beat.sentenceIdx` | First `reply_sentence` of the beat's narration (a narration may span several sentences). Voice: the beat shows when that sentence starts playing (session tab) / is `played` (observer); all beats once the utterance is over. Text: local playback (auto-advance by reading time, Pause / Next / Skip / Replay); captions of the latest utterance stop before the first beat not yet shown. |
+| `canvas_state.scene` | Fallback only: when a beat cannot be applied locally the canvas resyncs to it. |
+| `lesson_state.stage` / `awaitingResponse` / `checkPrompt` | Planner status; the check UI shows while `awaitingResponse` (and the session is not thinking). |
+| `lesson_state.notes` | `phase` → stage label; `check` (public, no answer key) → choice buttons (`kind: 'choice'`, `options`), "Check my picture" (`math_value`/`placement`/`order`), otherwise the text input. The PlanningModel adapter reports a reply once `notes.stepId` changes to a new step with `beatCount` = the utterance's beats (the module accepts at the final beat). |
+| `submitInteraction` | `math_action` / `activity_action` (payload = the team action from the local `VisualDirector`; only while a check is open), `choice` (`{optionId}`), `submit` (`{}`). The module submits the learner turn for choice/submit. |
+| `submitTextTurn(text, intent)` | Typed input (`''`) and the lesson buttons: `another_way`, `smaller_step`, `continue`, `demonstrate` (empty text). |
+| `setSessionVoice(sessionId, false)` | Start form "Type instead of talking" (`?voice=0`) and the team lab's live lessons. |
+| `agent_status` | Row `id = 0`; online when `lastSeen` is younger than 30 s; label shows `model`. Replaces `/api/teaching/status`. |
+| `tutor_request` / `tutor_result` | Not used by the client yet: the slant lesson keeps its labeled offline reply (`requestTutor('shear_feedback', …)` is the seam). |

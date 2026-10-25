@@ -1,6 +1,7 @@
 // Module entry. Reducer/procedure SIGNATURES are the contract (Stream 0, lead-owned):
 // client and worker bindings are generated from them. Bodies delegate to the files next to
 // this one; only registered reducers/procedures are named exports here.
+import './polyfills';
 import { t, SenderError } from 'spacetimedb/server';
 import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob } from './schema';
 import { dashboardJob, simTurnJob } from './schema_classroom';
@@ -16,6 +17,7 @@ import * as opening from './opening';
 import { base64 } from './providers';
 import * as sessions from './sessions';
 import * as textMode from './text_mode';
+import * as pipeline from './pipeline';
 import * as voiceIn from './voice_in';
 import * as voiceOut from './voice_out';
 
@@ -122,7 +124,52 @@ export const setSessionVoice = spacetimedb.reducer({ sessionId: t.u64(), voice: 
   textMode.setSessionVoice(ctx, sessionId, voice)
 );
 
+/** Canvas manipulation (math_action: MathAction, activity_action: LearnerAction), picture submission
+ *  (submit) or choice ({optionId}) from the team UI. Validated against canvas_state and the lesson
+ *  state; recorded in learner_event (accepted or not). submit/choice record evidence and start the
+ *  next teaching step (a student turn the worker answers). */
+export const submitInteraction = spacetimedb.reducer(
+  { sessionId: t.u64(), kind: t.string(), payload: t.string() },
+  (ctx, args) =>
+    pipeline.submitInteraction(ctx, args, (tx, sessionId, text) =>
+      textMode.submitTextTurn(tx, { sessionId, text, intent: '' }, undefined, { assessed: true })
+    )
+);
+
+/** Replaces /api/teaching/shear-feedback: kind 'shear_feedback', payload = the slant lesson state JSON. */
+export const requestTutor = spacetimedb.reducer({ sessionId: t.u64(), kind: t.string(), payload: t.string() }, (ctx, args) =>
+  pipeline.requestTutor(ctx, args)
+);
+
 // ---------------------------------------------------------------- agent-only reducers
+
+/** Team lesson planner: the streamed meta (planned first), validated before anything is spoken. */
+export const beginLesson = spacetimedb.reducer(
+  { sessionId: t.u64(), utteranceId: t.u64(), meta: t.string() },
+  (ctx, args) => {
+    requireAgent(ctx);
+    pipeline.beginLesson(ctx, args);
+  }
+);
+
+/** One complete moment: visual = compact command JSON or {visual, interactive?, showEquation?, final?}.
+ *  Compiled + validated against canvas_state; beat + reply_sentence(s) (+ tts_job in voice mode). */
+export const addBeat = spacetimedb.reducer(
+  { sessionId: t.u64(), utteranceId: t.u64(), idx: t.u32(), visual: t.string(), narration: t.string() },
+  (ctx, args) => {
+    requireAgent(ctx);
+    pipeline.addBeat(ctx, args);
+  }
+);
+
+/** Worker heartbeat -> agent_status (replaces /api/teaching/status). */
+export const agentHeartbeat = spacetimedb.reducer({ model: t.string(), provider: t.string(), busySessions: t.u32() }, (ctx, args) =>
+  pipeline.agentHeartbeat(ctx, args)
+);
+
+export const submitTutorResult = spacetimedb.reducer({ requestId: t.u64(), ok: t.bool(), result: t.string() }, (ctx, args) =>
+  pipeline.submitTutorResult(ctx, args)
+);
 
 /** Worker presents AGENT_SECRET once; its identity is stored in `role` as agent. */
 export const registerAgent = spacetimedb.reducer({ secret: t.string() }, (ctx, { secret }) => {
@@ -235,6 +282,13 @@ export const buildContext = spacetimedb.procedure({ sessionId: t.u64() }, t.stri
   ctx.withTx(tx => {
     requireAgent(tx);
     return lesson.buildContext(tx, sessionId);
+  }));
+
+/** Agent only. Team planner request (JSON {ok, request: ModelRequest} or {ok:false, error}) for the session's current lesson state. */
+export const buildLessonRequest = spacetimedb.procedure({ sessionId: t.u64(), requestId: t.string() }, t.string(), (ctx, { sessionId, requestId }) =>
+  ctx.withTx(tx => {
+    requireAgent(tx);
+    return pipeline.buildLessonRequest(tx, sessionId, requestId);
   }));
 
 /** Agent only. set_topic tool: validates + stores topic, returns JSON {ok, error?, material, notes}. */

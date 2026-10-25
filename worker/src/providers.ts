@@ -4,6 +4,13 @@ import { AnthropicProvider } from './anthropic';
 import type { WorkerConfig } from './env';
 import { OpenRouterProvider } from './llm';
 
+/** Lesson-mode LLM: same provider, thinking off (team: adaptive thinking added ~8 s), own effort. */
+export function createLessonLlm(cfg: WorkerConfig): LlmProvider {
+  if (cfg.llmProvider === 'anthropic')
+    return new AnthropicProvider({ apiKey: cfg.anthropicApiKey, model: cfg.anthropicModel, effort: cfg.lessonEffort, thinking: 'disabled', maxTokens: 4000 });
+  return createLlm(cfg).llm;
+}
+
 export function createLlm(cfg: WorkerConfig): { llm: LlmProvider; info: string } {
   if (cfg.llmProvider === 'anthropic') {
     return {

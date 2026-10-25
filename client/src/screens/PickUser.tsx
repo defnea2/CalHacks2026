@@ -152,6 +152,8 @@ function StartForm({
 }) {
   const [task, setTask] = useState(APP_CONFIG.defaultTaskText);
   const [photo, setPhoto] = useState<File | null>(null);
+  /** Text mode (session.voice = false): no microphone, no tutor audio; the lesson plays as text. */
+  const [typing, setTyping] = useState(() => new URLSearchParams(window.location.search).get('voice') === '0');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [waitingSince, setWaitingSince] = useState<number | null>(null);
@@ -165,6 +167,11 @@ function StartForm({
     if (waitingSince === null || !fresh || handled.current) return;
     handled.current = true;
     void (async () => {
+      if (typing) {
+        const args = { sessionId: fresh.id, voice: false };
+        const r = await callReducer('setSessionVoice', args, () => conn.reducers.setSessionVoice(args));
+        if (!r.ok) eventLog.log('ui.text_mode_failed', { error: r.error });
+      }
       if (photo) {
         try {
           const c = await compressPhoto(photo, APP_CONFIG.photoMaxBytes, APP_CONFIG.photoMaxSide);
@@ -177,7 +184,7 @@ function StartForm({
       }
       navigate(sessionUrl('session', fresh.id));
     })();
-  }, [fresh, waitingSince, photo, conn]);
+  }, [fresh, waitingSince, photo, typing, conn]);
 
   const start = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,6 +217,10 @@ function StartForm({
           Photo of the task (optional)
           <input data-testid="photo-input" type="file" accept="image/*" onChange={e => setPhoto(e.target.files?.[0] ?? null)} className="text-sm" />
         </Label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input data-testid="text-mode" type="checkbox" checked={typing} onChange={e => setTyping(e.target.checked)} />
+          Type instead of talking (no sound)
+        </label>
         {previous && waitingSince === null ? <p className="text-xs text-muted-foreground">This ends the active session {previous.code || previous.id.toString()}.</p> : null}
         <ErrorNote>{error}</ErrorNote>
         <Button data-testid="start-session" disabled={busy}>

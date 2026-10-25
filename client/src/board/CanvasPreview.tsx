@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Board, type BoardItemView } from './Board';
 import { utteranceProgress } from './reveal';
-import type { VoiceCanvasContent } from '../../../src/presentation/voice/contracts';
+import type { VoiceCanvasContent } from '@tutor/visual/presentation/voice/contracts';
 
 const examples: { title: string; speech: string[]; content: VoiceCanvasContent }[] = [
   { title: 'Slant, cut, slide', speech: [
