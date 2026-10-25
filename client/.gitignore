@@ -1,0 +1,2 @@
+# copied from node_modules at dev/build time (copyVadAssets plugin in vite.config.ts)
+public/vad/

@@ -9,15 +9,22 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@ricky0123/vad-web": "^0.0.31",
     "@tutor/shared": "workspace:*",
-    "spacetimedb": "2.13.*",
+    "katex": "^0.19.1",
+    "onnxruntime-web": "^1.30.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "spacetimedb": "2.13.*"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/katex": "^0.16.8",
+    "@types/node": "^24.9.1",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^5.0.2",
+    "tailwindcss": "^4.3.3",
     "typescript": "~5.6.2",
     "vite": "^7.1.5",
     "vitest": "^3.2.4"
