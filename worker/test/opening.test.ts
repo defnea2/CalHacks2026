@@ -150,7 +150,7 @@ describe('phase instructions (append-only phase block, stable system prompt)', (
     expect(r2.slice(r1.length).map(m => m.role)).toEqual(['assistant', 'tool', 'tool', 'system']);
     expect(r2.at(-1)).toEqual({ role: 'system', content: renderPhaseBlock(pack, p1!.id, true) });
     expect(String(r2.at(-1)!.content)).not.toContain(p0!.instructions);
-    expect(agent.sessions.get(S)!.live!.promptPhases).toEqual([p0!.id, p1!.id]);
+    expect((agent.sessions.get(S)!.live as import("../src/reply").ReplyRun).promptPhases).toEqual([p0!.id, p1!.id]);
     expect(transport.of('buildContext')).toHaveLength(1);
     expect(logs.some(l => l.includes(`phase -> ${p1!.id}`))).toBe(true);
   });

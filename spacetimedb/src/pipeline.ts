@@ -165,7 +165,10 @@ function requireCurrent(session: SessionRow, utteranceId: bigint): void {
 export function beginLesson(ctx: Ctx, args: { sessionId: bigint; utteranceId: bigint; meta: string }): void {
   const session = getActiveSession(ctx, args.sessionId);
   requireCurrent(session, args.utteranceId);
-  if (ctx.db.lessonPlan.utteranceId.find(args.utteranceId)) throw new SenderError(`utterance ${args.utteranceId} already has a lesson`);
+  const existing = ctx.db.lessonPlan.utteranceId.find(args.utteranceId);
+  // A repair round re-plans the same utterance: allowed while nothing of the first plan was spoken.
+  if (existing && (existing.final || existing.beats !== '[]')) throw new SenderError(`utterance ${args.utteranceId} already has a lesson`);
+  if (existing) ctx.db.lessonPlan.utteranceId.delete(args.utteranceId);
   const record = plannable(loadRecord(ctx, session));
   const canvas = canvasRow(ctx, session.id);
   const request = buildModelRequest(withProfile(ctx, session, record), sceneOf(canvas), String(args.utteranceId));
@@ -190,6 +193,12 @@ export function beginLesson(ctx: Ctx, args: { sessionId: bigint; utteranceId: bi
     final: false,
   });
   saveRecord(ctx, session.id, record);
+}
+
+/** True if the utterance spoke lesson beats (its tutor turn is then recorded from the played sentences). */
+export function hasLessonBeats(ctx: Ctx, sessionId: bigint, utteranceId: bigint): boolean {
+  for (const b of ctx.db.beat.sessionId.filter(sessionId)) if (b.utteranceId === utteranceId) return true;
+  return false;
 }
 
 /** Splits a narration into grammatical sentences (first audio sooner; the beat reveals at the first). */

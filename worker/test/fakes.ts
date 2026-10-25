@@ -54,6 +54,12 @@ export class FakeTransport implements Transport {
   buildContext = async (a: object) => (await this.rec('buildContext', a), this.context);
   setTopic = async (a: object) => (await this.rec('setTopic', a), this.topicResult);
   getSessionImage = async (a: object) => (await this.rec('getSessionImage', a), this.image);
+  lessonRequest: unknown = null;
+  buildLessonRequest = async (a: object) => (await this.rec('buildLessonRequest', a), JSON.stringify(this.lessonRequest ? { ok: true, request: this.lessonRequest } : { ok: false, error: 'no lesson request' }));
+  beginLesson = (a: object) => this.rec('beginLesson', a);
+  addBeat = (a: object) => this.rec('addBeat', a);
+  agentHeartbeat = (a: object) => this.rec('agentHeartbeat', a);
+  submitTutorResult = (a: object) => this.rec('submitTutorResult', a);
 }
 
 export type Step = LlmEvent | { type: 'wait'; ms?: number; until?: Promise<unknown> };
@@ -93,7 +99,7 @@ export class FakeLlm implements LlmProvider {
   }
 }
 
-export const OPTS: AgentOptions = { preemptive: false, preemptiveSilenceMs: 30, maxToolRounds: 2, recentTurns: 12, toolTimeoutMs: 200, verifiedSpeech: false };
+export const OPTS: AgentOptions = { preemptive: false, preemptiveSilenceMs: 30, maxToolRounds: 2, recentTurns: 12, toolTimeoutMs: 200, verifiedSpeech: false, replyMode: 'tools', stallRetryMs: 0 };
 
 export function makeAgent(llm: LlmProvider, transport = new FakeTransport(), opts: Partial<AgentOptions> = {}, logs: string[] = []) {
   const agent = new Agent({ transport, llm, pack, opts: { ...OPTS, ...opts }, log: m => logs.push(m) });

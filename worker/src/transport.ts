@@ -74,4 +74,11 @@ export interface Transport {
   buildContext(a: { sessionId: bigint }): Promise<string>;
   setTopic(a: { sessionId: bigint; category: string; concept: string }): Promise<string>;
   getSessionImage(a: { sessionId: bigint }): Promise<string>;
+  // ---- team lesson planner (contract section 1)
+  /** JSON {ok: true, request: ModelRequest} | {ok: false, error}. */
+  buildLessonRequest(a: { sessionId: bigint; requestId: string }): Promise<string>;
+  beginLesson(a: { sessionId: bigint; utteranceId: bigint; meta: string }): Promise<void>;
+  addBeat(a: { sessionId: bigint; utteranceId: bigint; idx: number; visual: string; narration: string }): Promise<void>;
+  agentHeartbeat(a: { model: string; provider: string; busySessions: number }): Promise<void>;
+  submitTutorResult(a: { requestId: bigint; ok: boolean; result: string }): Promise<void>;
 }
