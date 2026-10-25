@@ -51,6 +51,11 @@ the item with the current `utteranceId` and the next `sentenceIdx`. Moment N run
 when sentence `sentenceIdx + sentenceOffset` actually starts. This is sentence
 alignment, not word-level alignment. Keep sentence boundaries simple; punctuation
 and the worker's chunker determine the actual sentence indices.
+On `integration/abdul-voice`, complete short sentences are not merged and long
+sentences are not subdivided, preserving the model's sentence offsets. The board
+tool returns to the model with the required narration count. Its semantic
+validator is shared with the client; invalid commands get one bounded repair
+round before they can reach the board.
 
 - One to four moments; strictly increasing offsets, starting at zero.
 - Start every item with a complete array, bars, geometry or number-line picture.
@@ -115,6 +120,9 @@ sequence semantics (valid splits, bars, ranges, ordered offsets). Tests cover
 sentence synchronization, duplicate and late events, interruption, dropped audio,
 suspended audio clocks, local edits, clear-board and schema parity.
 
-Live STT → model → Cartesia playback still requires a credentialed smoke test on
-the voice teammate's environment. The local preview and automated tests exercise
-the integration without contacting providers.
+The `integration/abdul-voice` branch has a real-provider, synthetic two-turn smoke
+test (`pnpm --filter e2e smoke:pipeline`). It validates generated audio and visual
+cue coverage with simulated playback acknowledgments; actual microphone, speaker
+and interruption behavior still require device testing. See
+[Abdul integration verification](ABDUL_VOICE_INTEGRATION.md#verification) for
+observed timings and scope. The local preview remains usable without providers.

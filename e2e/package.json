@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "gen-speech": "tsx gen-speech.ts",
+    "smoke:pipeline": "tsx smoke-pipeline.ts",
     "typecheck": "tsc -p .",
     "test:e2e": "tsx run.ts",
     "stack": "tsx stack.ts"

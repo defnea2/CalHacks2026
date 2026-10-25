@@ -38,7 +38,7 @@ OpenRouter for memory extraction, database `abdul-voice`, and Cartesia's direct
 batch STT endpoint (`ink-whisper`). This avoids requiring a public STT proxy to
 start. The newer `ink-2` proxy option is documented in `VOICE_RUNTIME.md`.
 No credentials are committed or printed. Provider model names are configurable;
-API availability must be verified with the configured account.
+The configured account was verified against all three providers during local live testing.
 
 After filling the keys, restart the text dev server if it was already running.
 Start the voice backend (while retaining the independently running client):
@@ -84,8 +84,41 @@ including client-local canvas manipulation (not yet sent as model evidence).
 
 ## Verification
 
-Root tests, all voice workspace tests, type checks, frontend builds, database
-module build and binding regeneration are required for this integration. Live
-provider verification depends on the keys being populated; empty placeholders
-are not a live test. The browser preview exercises the same adapter without API
-keys, a database, or microphone access.
+Live testing on 2026-10-24 used synthetic learner speech through Cartesia STT,
+Anthropic tutoring, Cartesia reply audio and OpenRouter session summaries.
+The final two-turn area lesson produced valid slant → cut → reassembled canvas
+commands, with a real synthesized sentence for every visual cue. First reply
+audio reached the SDK 3.645 s and 3.950 s after `endTurn`; transcription took
+1.826 s and 1.728 s. Earlier runs varied up to 13.349 s to first audio. These are
+individual observations, not a latency guarantee; VAD silence and device playback
+are excluded.
+
+Run the same provider test with the backend already running:
+
+```sh
+pnpm --filter e2e smoke:pipeline
+# Optional: one or more custom synthetic learner turns as quoted arguments.
+pnpm --filter e2e smoke:pipeline "Show me why two quarters equal one half."
+```
+
+This creates clearly named synthetic sessions in the local database, uses real
+provider calls, checks audio events and validates the generated pictures through
+the production canvas interpreter. Playback acknowledgments are simulated so a
+second turn can proceed. It does not capture a microphone, play sound, measure
+VAD, or verify audible synchronization. Ended synthetic sessions remain available
+for diagnosis. OpenRouter summaries were also observed in the database.
+
+Live testing fixed three integration failures: replies ending immediately after
+a board tool, short sentences being merged and shifting visual cues, and invalid
+update-only continuations reaching the client. Generation now uses the complete
+command schema and the same semantic preflight as playback; a rejected command
+gets one bounded repair opportunity. A prediction question should only schedule
+its starting picture, not steps intended for a future turn.
+
+Verification after these changes: 240 root tests, 54 worker tests, 111 shared
+tests and 38 client tests pass; root/worker/E2E type checks and the voice-client
+production build pass. The existing large-bundle advisory remains. The browser
+preview was manually exercised through slant, cut and the slide animation.
+Real microphone capture, acoustic interruption and audible synchronization still
+need the user's device test. Model wording can still include unnecessary setup
+language; the prompts discourage it, but it is not deterministically filtered.
