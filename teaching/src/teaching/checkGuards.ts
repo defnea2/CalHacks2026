@@ -30,6 +30,13 @@ export function homeworkRepeat(check: TeachingCheck | null | undefined, original
   if (!check || !originalQuestion) return null;
   const homework = numbersIn(originalQuestion);
   if (homework.length < 2) return null;
+  // Every fraction the check names (two or more) is a fraction of the homework: "What is one quarter
+  // plus two quarters?" for "Why is 1/4 + 2/4 not 3/8?".
+  const fractions = (t: string) => numberItems(t).flatMap(x => (x.kind === "frac" ? [`${x.num}/${x.den}`] : []));
+  const own = fractions(originalQuestion);
+  const asked = fractions(check.prompt);
+  if (asked.length >= 2 && asked.every(f => own.includes(f)))
+    return `The check uses the same fractions as the learner's homework ("${originalQuestion}"), so it is the homework in other words. Ask a similar task with different numbers; the homework is handed back at the end.`;
   const counts = new Map<string, number>();
   for (const n of numbersIn(`${check.prompt} ${answerText(check)}`)) counts.set(key(n), (counts.get(key(n)) ?? 0) + 1);
   for (const n of homework) {

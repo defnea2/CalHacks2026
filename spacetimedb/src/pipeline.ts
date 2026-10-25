@@ -303,8 +303,8 @@ export function addBeat(ctx: Ctx, args: { sessionId: bigint; utteranceId: bigint
     // The arc owns the shape: the formalization slot shows the equation, the moment cap holds.
     const moment = { ...input.moment, ...arcMoment(request.context.session.arc, meta.phase, args.idx, final, input.moment) };
     compiled = compileMoment(meta, moment, args.idx, final, sceneOf(canvas));
-    // Under an arc the task's answer may never be drawn before the learner answers it.
-    const visible = request.context.session.arc ? visibleAnswer(meta.check, compiled.planned) : null;
+    // Under an arc the first moment may not draw the task's answer (before speech: the worker repairs it; later moments are not truncated).
+    const visible = request.context.session.arc && args.idx === 0 ? visibleAnswer(meta.check, compiled.planned) : null;
     if (visible) throw new SenderError(visible);
     // Keyframes on point: the equation reveal moves to the sentence that reads it out.
     compiled = { ...compiled, beat: splitKeyframes(compiled.beat, narrationSentences(compiled.beat.narration)) };

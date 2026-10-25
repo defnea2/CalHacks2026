@@ -91,11 +91,10 @@ describe('demo2min arc', () => {
     say(e, "I don't know");
     expect(JSON.parse(lesson(e).evidence).at(-1)).toMatchObject({ outcome: 'unclear' });
     expect(request(e).request.context.allowedPhases).toEqual(['repair']);
-    // The repair task's answer may not be on the picture (2 of 4 drawn: "one half is how many quarters?").
+    // The repair task's answer may not be on the first picture (2 of 4 drawn: "one half is how many quarters?").
     call(e.h, e.agent, mod.beginUtterance, { sessionId: e.s.id, utteranceId: 150n, replyToIdx: turns(e.h, e.s.id).filter(t => t.role === 'student').at(-1)!.idx, preemptive: false });
     call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 150n, meta: JSON.stringify({ ...demoRepairMeta, check: { kind: 'number', prompt: 'One half is how many quarters?', rule: { operation: 'value', value: 2 } } }) });
-    addBeat(e, 150n, 0, demoRepairMoments[0]!, false);
-    expect(() => addBeat(e, 150n, 1, demoRepairMoments[1]!, false)).toThrow(/already on the picture/);
+    expect(() => addBeat(e, 150n, 0, { visual: { kind: 'bars', bars: [{ id: 'pizza', label: 'Pizza', parts: 4, shaded: 2 }] }, narration: 'Two of four slices.' }, false)).toThrow(/already on the picture/);
     call(e.h, e.agent, mod.appendTutorTurn, { sessionId: e.s.id, utteranceId: 150n, text: 'lesson', interrupted: true });
     step(e, 200n, demoRepairMeta, demoRepairMoments);
     say(e, 'five');

@@ -124,8 +124,9 @@ export class LessonStreamParser {
           const m = { ...parsed, visual: sanitizeVisual(parsed.visual) };
           // Compile against the canvas planned so far. Only the final moment may be interactive, and it is never released early.
           const r = compactBeat(this.meta!, m, this.moments.length, false, this.planned);
-          // Under an arc the task's answer may not be drawn before the learner answers (module: addBeat).
-          const visible = this.request.context.session.arc ? visibleAnswer(this.meta!.check, r.planned) : null;
+          // Under an arc the task's answer may not be drawn in the first moment (nothing spoken yet: the repair round fixes it).
+          // Later moments are not truncated for it: a cut lesson (recap + fillers) was worse in the rehearsal runs.
+          const visible = this.request.context.session.arc && this.moments.length === 0 ? visibleAnswer(this.meta!.check, r.planned) : null;
           if (visible) throw new Error(visible);
           this.moments.push(m); this.beats.push(r.beat); this.planned = r.planned;
           this.stage = "separator";

@@ -38,6 +38,7 @@ describe("homework guard (same numbers, not substring)", () => {
     expect(homeworkRepeat(choice("Which fraction is the same amount as two thirds?", ["4/6", "8/12", "3/4"], 1), hw)).toMatch(/same numbers as the learner's homework/);
     expect(homeworkRepeat(number("Two thirds is how many twelfths?", 8), hw)).toMatch(/homework/);
     expect(homeworkRepeat(number("Why is one quarter plus two quarters not three eighths? What is one quarter plus two quarters, in quarters?", 3), "Why is 1/4 + 2/4 not 3/8?")).toMatch(/homework/);
+    expect(homeworkRepeat(choice("What is one quarter plus two quarters?", ["3/4", "3/8"], 0), "Why is 1/4 + 2/4 not 3/8?")).toMatch(/same fractions/);
     expect(homeworkRepeat(choice("Which is bigger, zero point three or zero point two five?", ["0.3", "0.25"], 0), "Which is bigger, 0.3 or 0.25? Explain why.")).toMatch(/homework/);
   });
   it("accepts a similar task with different numbers", () => {
@@ -45,6 +46,7 @@ describe("homework guard (same numbers, not substring)", () => {
     expect(homeworkRepeat(choice("One half is the same amount as how many sixths?", ["2 sixths", "3 sixths", "6 sixths"], 1), hw)).toBeNull();
     expect(homeworkRepeat(choice("Which is bigger, 0.4 or 0.35?", ["0.4", "0.35"], 0), "Which is bigger, 0.3 or 0.25? Explain why.")).toBeNull();
     expect(homeworkRepeat(number("What is 2 + 3?", 5), "Why do fractions work?")).toBeNull();
+    expect(homeworkRepeat(choice("What is one fifth plus two fifths?", ["3/5", "3/10"], 0), "Why is 1/4 + 2/4 not 3/8?")).toBeNull();
   });
 });
 
