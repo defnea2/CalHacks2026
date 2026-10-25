@@ -104,7 +104,7 @@ try {
       continue;
     }
     call('create_test_user', JSON.stringify(name), String(s.age), String(s.grade), JSON.stringify(style));
-    console.log(`  + student "${name}", ${s.age}, grade ${s.grade}, "${style}"`);
+    if (!dryRun) console.log(`  + student "${name}", ${s.age}, grade ${s.grade}, "${style}"`);
   }
   const haveTeachers = sql('SELECT * FROM teacher');
   for (const t of teachers) {
@@ -115,7 +115,7 @@ try {
       continue;
     }
     call('create_teacher', JSON.stringify(name));
-    console.log(`  + teacher "${name}"`);
+    if (!dryRun) console.log(`  + teacher "${name}"`);
   }
   if (!dryRun) {
     const real = sql('SELECT * FROM learner WHERE is_simulated = false');
