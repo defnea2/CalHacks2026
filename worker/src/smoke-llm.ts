@@ -105,11 +105,15 @@ const student =
   "Just guide me. I don't get how 2/3 can be the same as 8/12, it has bigger numbers! Oh wait, is it like a pizza with more but smaller slices?";
 const msgs = buildMessages({
   system,
-  context: `${context}\nSmoke test: the diagnosis is done (the student mixes up "bigger numbers" with "a bigger amount"). In this reply call set_topic and set_phase to ${pack.phases[1]!.id}, right after your first sentence.`,
+  context,
   turns: [{ sessionId: 1n, idx: 0, role: 'tutor', text: o.text, status: 'done', utteranceId: 1n, interrupted: false }],
   current: { idx: 1, text: student },
   recentTurns: 12,
   image: '',
   phaseBlock: renderPhaseBlock(pack, pack.initialPhase),
+});
+msgs.push({
+  role: 'system',
+  content: `Smoke test instruction: the diagnosis is done (the student mixes up "bigger numbers" with "a bigger amount"). Say your short first sentence, then call set_topic and set_phase to ${pack.phases[1]!.id} before saying anything else.`,
 });
 await reply('student reply with set_phase', msgs, pack.initialPhase);
