@@ -76,8 +76,14 @@ read them) can see them; **event** = rows are broadcast to subscribers at commit
 | `session` | public | One tutoring session: `turnState` (listening / thinking / speaking / interrupted), `phase`, topic (`category`, `concept`), `currentUtteranceId`, `voice` (false = text mode), `classSessionId` (0 = ad-hoc), `pendingPhoto` (a turn photo waits for the next turn; no bytes) |
 | `session_image` | private | Task photo (≤ 1 MB, compressed in the browser); read by the worker via `getSessionImage` |
 | `turn_image` | private | Photos taken during the session ("take a picture at any time", ≤ 1 MB JPEG): `bound` false = pending (at most one per session), then `turnIdx` / `usedAt` of the student turn it went out with; read by the worker via `getTurnImage` |
-| `session_owner` | private | Identity that started an ad-hoc session (`startSession`); only it may attach turn photos |
+| `session_owner` | private | Identity that started an ad-hoc session (`startSession`). Deprecated: still written, no longer read (ownership is `account_link`) |
 | `role` | private | Identity → `agent`; written by `registerAgent` with the shared `AGENT_SECRET` |
+| `account_link` | private | Identity → account (`learner` / `teacher` + id) it may act as; `via` created / code / claimed (section 13) |
+| `teacher_student` | private | Teacher roster: students the teacher added or who were in one of the teacher's class sessions |
+| `sign_in_code` | private | One-time sign-in codes, only `sha256(pepper + code)`, `expiresAt` |
+| `code_attempt` | private | Wrong codes per identity (throttle window) |
+| `auth_meta` | private | When authorization was switched on in this database (legacy-claim cutoff) |
+| views `my_learners`, `my_teachers`, `my_students`, `my_roster` | per caller | The caller's own accounts / roster (`ctx.sender`); `claimable_learners` / `claimable_teachers` (anonymous): legacy rows claimable once |
 
 ### Voice input
 
@@ -137,7 +143,7 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 
 | Table | Kind | Purpose |
 | --- | --- | --- |
-| `teacher` | public | Teachers (no accounts) |
+| `teacher` | public | Teachers (owned via `account_link`, section 13) |
 | `presence` | public | Student online state: offline / waiting / in_session, with the connection that set it |
 | `class_session` | public | A class: goals, content, delivery instructions, optional document (Markdown text inline), `simulation`, `simulatedCount`, `active` |
 | `class_document` | private | Image payload of the class document (reaches the worker like a task photo) |
@@ -153,7 +159,7 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 | --- | --- | --- | --- |
 | `stt_job` | procedure `transcribePhrase` | now, on a phrase's final chunk | one retry after 0.3 s, then the phrase is discarded |
 | `tts_job` | procedure `synthesizeSentence` | now, per sentence (voice mode) | a failed call schedules one retry row (`attempt` 1, after 0.2 s, only while the sentence is pending), then the sentence is `dropped` so playback skips it; barge-in deletes pending rows |
-| `text_play_job` | reducer `finishTextSentence` | after the reading time of a text-mode sentence: `max(700 ms, 280 ms × words)`, sentences one after another | scheduler-only (checks `ctx.sender == ctx.identity`) |
+| `text_play_job` | reducer `finishTextSentence` | after the reading time of a text-mode sentence: `max(700 ms, 280 ms × words)`, sentences one after another | |
 | `extraction_job` | procedure `extractMemory` | every `MEMORY_EVERY_N_TURNS` (6) turns, and once at session end | retries after 10 / 30 / 90 s; a run that takes the window also queues a backup row due after the 300 s stale limit (deleted when the run ends), so a crashed run cannot lose the window |
 | `summary_job` | procedure `summarizeSession` | at session end | one per session (not scheduled while one is queued); retries after 10 / 30 / 90 s |
 | `sim_turn_job` | procedure `simStudentTurn` | 2–5 s after the tutor finished speaking to a simulated student | busy re-check every 1.5 s (max 40), failures retried after 5 s twice; stale jobs do nothing |
@@ -211,22 +217,28 @@ the 2.13 test datastore (`spacetimedb/server/test-utils`) cannot decode its empt
 not decode arguments to index scan"). Adding an index is an additive migration: `spacetime publish`
 without `--clear` creates it on a database with data.
 
+Scheduled reducers **and** procedures can be called by any client in 2.13 (verified on the local
+server: a CLI call ran `dashboard_tick`). Every scheduled function therefore starts with
+`auth.requireScheduler(ctx)` (`ctx.sender` must equal the module's own `ctx.identity`), with a test
+per function (`spacetimedb/test/auth.test.ts`).
+
 ## 3. Reducers and procedures
 
-Signatures live in `spacetimedb/src/index.ts`; bodies in the file named per row. "Client" means any
-connected client: by spec there is no authentication (test users only), so client reducers validate
-their arguments and the session state, not the caller. "Agent" reducers call `requireAgent`, which
-checks the caller's identity in the private `role` table.
+Signatures live in `spacetimedb/src/index.ts`; bodies in the file named per row. Every client
+reducer checks the caller first (section 13, `auth.ts`): student reducers only for a learner linked
+to the caller and that learner's sessions ("client (own session)"), teacher reducers only for a
+teacher linked to the caller and its class sessions. "Agent" reducers call `requireAgent`, which
+checks the caller's identity in the private `role` table; the agent also passes every client check.
 
 | Reducer / procedure | Caller | File | What |
 | --- | --- | --- | --- |
 | `init`, `onConnect` | lifecycle | `library.ts`, `classroom.ts`, `retention.ts` | Load the content library and the 20 sim profiles when they changed (pack hash and profile rows computed once per module instance; a connect does one `library_meta` and 20 `sim_profile` lookups), ensure the `retention_job` row, backfill `student_cluster.members` |
 | `onDisconnect` | lifecycle | `classroom.ts` | That connection's real learners → `offline` |
-| `createTestUser` | client | `sessions.ts` | New learner |
-| `startSession(learnerId, taskText)` | client | `sessions.ts` | Ends the learner's active session, starts a new one |
+| `createTestUser` | client | `sessions.ts` | New learner, owned by the calling device (agent: unowned) |
+| `startSession(learnerId, taskText)` | client (own learner) | `sessions.ts` | Ends the learner's active session, starts a new one |
 | `uploadPhoto` | client | `sessions.ts` | Task photo (jpeg/png/webp/gif, ≤ 1 MB) |
-| `attachImage(sessionId, mime, data)` | client (session owner) | `turn_photo.ts` | Photo taken during the session (jpeg/png/webp/gif, ≤ 1 MB); replaces a still-pending one, sets `session.pendingPhoto`. Completing the learner's next student turn (`completeTurn`) binds it to that turn (`turn.hasPhoto`). Owner = the identity that started the session, or for class sessions the connection holding the learner's `presence` |
-| `removePendingImage(sessionId)` | client (session owner) | `turn_photo.ts` | Drops the pending photo |
+| `attachImage(sessionId, mime, data)` | client (own session) | `turn_photo.ts` | Photo taken during the session (jpeg/png/webp/gif, ≤ 1 MB); replaces a still-pending one, sets `session.pendingPhoto`. Completing the learner's next student turn (`completeTurn`) binds it to that turn (`turn.hasPhoto`). Only the session's learner's devices (`requireSessionLearner`) |
+| `removePendingImage(sessionId)` | client (own session) | `turn_photo.ts` | Drops the pending photo |
 | `endSession` | client | `sessions.ts` | Closes turns, drops unplayed sentences and deletes their pending `tts_job`s, schedules final memory extraction + summary |
 | `startConversation` | client (module for sims) | `opening.ts` | Session screen opens (voice auto-starts): tutor speaks first (turnState thinking) |
 | `pushAudio(sessionId, phraseId, seq, pcm, final)` | client | `voice_in.ts` | Buffers a 160 ms chunk; `final` closes the phrase and inserts an `stt_job` due now; emits `speech_activity` |
@@ -464,13 +476,11 @@ Known limits: word budgets are prompted (the model often exceeds them: explain 1
   sent as `''`, also for the seed summary, which has task text / topic `''`); concept
   mastery with concept + category titles; the last 5 session summaries with task text and topic.
   u64 ids are strings, times are Unix ms. Errors: `locked` (module env `INSIGHTS_KEY` is set and
-  the key does not match; checked first), `unknown_teacher`, `unknown_learner`.
-- **Privacy trade-off.** The gate is an existing teacher id plus the optional `INSIGHTS_KEY`.
-  There is no authentication (test users only), so without `INSIGHTS_KEY` anyone who knows a
-  teacher id (small autoincrement numbers) can read any learner's profile. Acceptable for the test
-  users of this build; the real fix is teacher identities (teacher row bound to `ctx.sender`) and a
-  per-sender view or procedure check that only returns learners of that teacher's classes. Set
-  `INSIGHTS_KEY` (publish passes `INSIGHTS_*`) for any shared deployment.
+  the key does not match; checked first), `unknown_teacher`, `not_your_teacher` (the caller is not
+  signed in as that teacher), `unknown_learner`, `not_your_student` (not on that teacher's roster).
+- **Gate.** The caller must be signed in as the teacher (`account_link`) and the learner must be
+  on that teacher's roster (`teacher_student`: added by the teacher, or was in one of the teacher's
+  class sessions). `INSIGHTS_KEY` is an optional extra on top (section 13).
 
 ## 9. Classroom
 
@@ -582,9 +592,10 @@ Procedures are the module's only way out: STT, TTS and all non-streaming LLM cal
   memory windows schedule the next attempt instead of looping inside the procedure.
 - **Procedures for side effects, reducers stay pure and fast.** Reducers make no network calls; every
   outbound call is a procedure that commits its result in its own transaction.
-- **One identity model, for the worker.** The worker authenticates as `agent` via a shared secret
-  once (`registerAgent`); agent-only reducers check `role`. Client reducers do not check
-  `ctx.sender` (test users, no accounts by spec), except the turn-photo owner check.
+- **One identity model.** Every caller is a SpacetimeDB identity: browsers keep theirs (stored
+  token) and own accounts through `account_link`; the worker authenticates as `agent` via a shared
+  secret once (`registerAgent`); scheduled functions run as the module itself. Every reducer checks
+  `ctx.sender` against these (section 13).
 - **Measured overhead is small.** Reducer round trip ~8 ms, commit → subscriber ~7 ms, ~100 ms of
   total system overhead per voice turn ([latency-internal.md](latency-internal.md)).
 
@@ -601,3 +612,80 @@ Procedures are the module's only way out: STT, TTS and all non-streaming LLM cal
 | `shared/` | `@tutor/shared`: types, config defaults, sentence chunker, speech normalizer, lesson pack, classroom seed data + cluster rules |
 | `e2e/` | End-to-end runs: generated child speech → fake microphone in headless Chrome; latency tooling |
 | `scripts/` | `dev.mjs` (whole stack), `publish.mjs` (module + env), `spacetime.mjs` (CLI wrapper) |
+
+## 13. Identity and authorization
+
+Passwordless, and nothing outside the client and SpacetimeDB.
+
+**Device identity.** The client stores its SpacetimeDB token in `localStorage` (per server URI +
+database, `client/src/lib/token.ts`) and connects `withToken`, so a reload keeps the identity. A
+rejected token (e.g. a reset local server) is dropped and the tab connects as a new device.
+`?tabIdentity=1` gives one tab its own identity (sessionStorage) for testing several students in
+one browser; storage errors (private mode) fall back to a fresh identity per load.
+
+**Accounts.** A learner or teacher row is owned by the identities in `account_link`: the device that
+created it (`createTestUser`, `createTeacher`) plus every device that redeemed a sign-in code. One
+device may own several accounts ("Continue as Ava" lists them: views `my_learners`, `my_teachers`).
+Accounts the agent creates (operator scripts) belong to no device until a code is redeemed.
+
+**Sign-in codes** (`issueSignInCode` procedure, `linkDevice` procedure). Six characters from a
+31-letter alphabet without look-alikes, one-time, stored only as `sha256("fibonacci-sign-in:" +
+AGENT_SECRET + code)` (pure TS SHA-256, `spacetimedb/src/sha256.ts`; the runtime has no
+synchronous WebCrypto digest). Who may issue:
+
+| Issued by | For | Valid |
+| --- | --- | --- |
+| a device signed in to the account ("Sign in on another device") | that teacher or student | 10 min |
+| a teacher, for a student on its roster ("Add student" → "Code for their device", QR with a `?code=` link) | the student | 24 h |
+| the agent (`scripts/seed-demo.mjs`, `scripts/sign-in-code.mjs`) | any non-simulated account | 7 days |
+
+At most 3 live codes per account. `linkDevice` is a procedure so a wrong code can be counted in its
+own committed transaction (a failing reducer would roll the counter back): 8 wrong codes per
+identity per 10 minutes, then refused for the rest of the window. Identities are free to mint, so
+this mainly slows a single client; with ≈ 8.9·10⁸ codes and few live ones, guessing stays impractical
+within a code's lifetime. `forgetAccount` signs a device out, refused for the last device of a
+teacher (or of a student with no teacher who could issue a new code).
+
+**Rules** (`spacetimedb/src/auth.ts`, applied at the top of every client reducer/procedure in `index.ts`):
+
+| Caller wants | Check |
+| --- | --- |
+| student reducers (`startSession`, `setPresence`, `pushAudio`, `endTurn`, `submitTextTurn`, `endSession`, `uploadPhoto`, `attachImage`, `markPlayed`, `interrupt*`, `startConversation`, `reportNoise`, `setSessionVoice`, `submitInteraction`, `submitGapAnswer`, `requestTutor`, `removePendingImage`) | `requireLearner` / `requireSessionLearner`: the learner is linked to the caller. Simulated learners: never (module code only) |
+| `startClassSession*`, `addStudent` | `requireTeacher(teacherId)` |
+| `endClassSession`, `setImpersonation`, `refreshDashboard` | `requireClassTeacher(classSessionId)`: the class's teacher is linked to the caller |
+| `resetSimulatedStudents` | any teacher account on the device (the simulation is shared) |
+| `learnerInsights` | caller linked to `teacherId` **and** learner on that teacher's roster (+ `INSIGHTS_KEY` when set) |
+| scheduled reducers/procedures | `requireScheduler` (sender = module identity) |
+| agent reducers/procedures | `requireAgent`; the agent passes every check above |
+
+The roster (`teacher_student`) is written by `addStudent` and by a session-update hook whenever a
+session is linked to a class session (and backfilled once from existing class sessions).
+`setPresence` for someone else's learner was the old way to take over a student's class session;
+it now fails like every other student reducer. Limitation: classes have no membership list yet
+(every waiting student joins the newest running class, section 9), so joining a teacher's class is
+what puts a student on that teacher's roster; a class code a student enters in the waiting room
+would be the next step.
+
+**Pre-existing rows.** `auth_meta.enabledAt` is set on the first `init`/connect with this module.
+Learners and teachers created before it that have no link are *claimable once*: the first device that
+claims one (`claimAccount`; client: "Accounts from before sign-in") owns it. Rows created later
+without a link (agent-created) are not claimable: they need a code. A database published with
+`--clear` has no legacy rows.
+
+**Why not SpacetimeAuth (yet).** 2.13 exposes `ctx.senderAuth.jwt` (issuer, subject, claims) and
+accepts OIDC tokens, and SpacetimeAuth (SpacetimeDB's hosted OIDC provider: magic link, social
+login) would give teachers email sign-in. It needs a SpacetimeAuth project (client id, redirect URIs)
+configured in the SpacetimeDB web dashboard, an OIDC redirect flow in the client and a decision about
+which issuers the module trusts; none of that can be set up or tested locally tonight, and children
+have no email anyway. The device + code model works the same locally and on Maincloud. Upgrade path:
+accept a `senderAuth.jwt` from the SpacetimeAuth issuer in `issueSignInCode` / a new `linkOidc`
+(email = teacher account key) and keep codes for children.
+
+**Read access.** The views above are per caller (`ViewCtx.sender`, supported by 2.13 and the test
+harness). The lesson tables themselves (`session`, `turn`, `reply_sentence`, `board_item`,
+`class_summary`, `student_cluster`, `learner`, ...) are still public: the worker subscribes to them,
+the observer and dashboard follow them live, and moving them behind per-sender views needs a
+measured look at view re-evaluation cost on the hot `session`/`turn` rows. Until then the client
+gates the screens (`AccountGate`: "This student belongs to another device") and any client could
+still read transcripts with a raw SQL subscription. Next step: per-sender views for `turn` /
+`reply_sentence` (own sessions, the teacher's class sessions; agent sees all) and a private `learner`.

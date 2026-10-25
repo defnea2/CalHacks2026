@@ -13,8 +13,9 @@
 //
 // --reset (default, like the UI checkbox) resets simulated students 1..n to their seed memories
 // before the class starts; --no-reset keeps their memory and history from earlier runs.
-// Presets are the copy-paste classes of docs/DEMO.md.
-import { assertTarget, call, db, dryRun, sql, target } from './stdb-cli.mjs';
+// Presets are the copy-paste classes of docs/DEMO.md. The CLI registers as agent (AGENT_SECRET):
+// teacher reducers are otherwise only for the device signed in as that teacher.
+import { assertTarget, call, db, dryRun, registerAgent, sql, target } from './stdb-cli.mjs';
 
 const PRESETS = {
   A: {
@@ -77,6 +78,8 @@ function findTeacher(create) {
 
 try {
   assertTarget('simulate');
+  // Teacher reducers check the caller (auth.ts): the operator CLI acts as agent (AGENT_SECRET).
+  registerAgent();
   if (flag('--reset-only')) {
     const count = n ?? 0;
     call('reset_simulated_students', [String(count)]);

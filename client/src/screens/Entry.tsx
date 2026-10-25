@@ -1,8 +1,37 @@
-// Entry page: choose a role. No accounts: students and teachers are picked or created freely.
+// Entry page: continue as an account of this device, choose a role (create an account there), or
+// sign in with a code. Passwordless: accounts belong to devices (docs/ARCHITECTURE.md "Identity and
+// authorization").
+import type { DbConnection } from '../module_bindings';
 import { navigate, routeUrl } from '../lib/format';
 import { LogoMark, Wordmark } from '../brand/Logo';
+import { useAccounts } from '../stdb/useAccounts';
+import { CodeForm } from '../components/SignIn';
 
-export function Entry() {
+function ContinueAs({ conn }: { conn: DbConnection }) {
+  const acc = useAccounts(conn);
+  const people = [
+    ...acc.learners.filter(l => !l.isSimulated).map(l => ({ key: `l${l.id}`, name: l.name, role: 'Student', url: routeUrl({ student: l.id }) })),
+    ...acc.teachers.map(t => ({ key: `t${t.id}`, name: t.name, role: 'Teacher', url: routeUrl({ teacher: t.id }) })),
+  ];
+  return (
+    <div className="pr-split" style={{ marginTop: 28 }} data-testid="entry-accounts">
+      <div>
+        <div className="pr-section-label"><h2>On this device</h2><span>{people.length}</span></div>
+        <div className="pr-people">
+          {acc.ready && people.length === 0 && <p className="pr-empty">Nobody has signed in on this device yet. Pick a role above, or use a code.</p>}
+          {people.map(p => (
+            <button key={p.key} className="pr-person" data-testid="continue-as" data-name={p.name} onClick={() => navigate(p.url)}>
+              <span><strong>Continue as {p.name}</strong><small>{p.role}</small></span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <CodeForm conn={conn} />
+    </div>
+  );
+}
+
+export function Entry({ conn }: { conn?: DbConnection | null }) {
   const go = (k: 'student' | 'teacher') => (e: React.MouseEvent) => {
     e.preventDefault();
     navigate(routeUrl({ [k]: '' }));
@@ -34,6 +63,7 @@ export function Entry() {
           <span className="pr-option-link"><span>Set up a class</span><span aria-hidden="true">→</span></span>
         </a>
       </div>
+      {conn && <ContinueAs conn={conn} />}
     </div>
   );
 }

@@ -36,18 +36,21 @@ import {
 // Import all reducer arg schemas
 import AddBeatReducer from "./add_beat_reducer";
 import AddSentenceReducer from "./add_sentence_reducer";
+import AddStudentReducer from "./add_student_reducer";
 import AgentHeartbeatReducer from "./agent_heartbeat_reducer";
 import AppendTutorTurnReducer from "./append_tutor_turn_reducer";
 import AttachImageReducer from "./attach_image_reducer";
 import BeginLessonReducer from "./begin_lesson_reducer";
 import BeginOpeningReducer from "./begin_opening_reducer";
 import BeginUtteranceReducer from "./begin_utterance_reducer";
+import ClaimAccountReducer from "./claim_account_reducer";
 import ClearBoardReducer from "./clear_board_reducer";
 import CreateTeacherReducer from "./create_teacher_reducer";
 import CreateTestUserReducer from "./create_test_user_reducer";
 import EndClassSessionReducer from "./end_class_session_reducer";
 import EndSessionReducer from "./end_session_reducer";
 import EndTurnReducer from "./end_turn_reducer";
+import ForgetAccountReducer from "./forget_account_reducer";
 import InterruptReducer from "./interrupt_reducer";
 import InterruptUtteranceReducer from "./interrupt_utterance_reducer";
 import MarkPlayedReducer from "./mark_played_reducer";
@@ -81,7 +84,9 @@ import * as BuildContextProcedure from "./build_context_procedure";
 import * as BuildLessonRequestProcedure from "./build_lesson_request_procedure";
 import * as GetSessionImageProcedure from "./get_session_image_procedure";
 import * as GetTurnImageProcedure from "./get_turn_image_procedure";
+import * as IssueSignInCodeProcedure from "./issue_sign_in_code_procedure";
 import * as LearnerInsightsProcedure from "./learner_insights_procedure";
+import * as LinkDeviceProcedure from "./link_device_procedure";
 import * as PrefetchTopicProcedure from "./prefetch_topic_procedure";
 import * as RefreshDashboardProcedure from "./refresh_dashboard_procedure";
 import * as SetTopicProcedure from "./set_topic_procedure";
@@ -93,6 +98,8 @@ import BeatRow from "./beat_table";
 import BoardItemRow from "./board_item_table";
 import CanvasStateRow from "./canvas_state_table";
 import CategoryRow from "./category_table";
+import ClaimableLearnersRow from "./claimable_learners_table";
+import ClaimableTeachersRow from "./claimable_teachers_table";
 import ClassSessionRow from "./class_session_table";
 import ClassSummaryRow from "./class_summary_table";
 import ConceptRow from "./concept_table";
@@ -101,6 +108,10 @@ import ExplanationRow from "./explanation_table";
 import LearnerRow from "./learner_table";
 import LearnerEventRow from "./learner_event_table";
 import LessonStateRow from "./lesson_state_table";
+import MyLearnersRow from "./my_learners_table";
+import MyRosterRow from "./my_roster_table";
+import MyStudentsRow from "./my_students_table";
+import MyTeachersRow from "./my_teachers_table";
 import PhraseRow from "./phrase_table";
 import PlaybackFlushRow from "./playback_flush_table";
 import PresenceRow from "./presence_table";
@@ -525,24 +536,69 @@ const tablesSchema = __schema({
       { name: 'tutor_result_request_id_key', constraint: 'unique', columns: ['requestId'] },
     ],
   }, TutorResultRow),
+  claimableLearners: __table({
+    name: 'claimable_learners',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ClaimableLearnersRow),
+  claimableTeachers: __table({
+    name: 'claimable_teachers',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ClaimableTeachersRow),
+  myLearners: __table({
+    name: 'my_learners',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyLearnersRow),
+  myRoster: __table({
+    name: 'my_roster',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyRosterRow),
+  myStudents: __table({
+    name: 'my_students',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyStudentsRow),
+  myTeachers: __table({
+    name: 'my_teachers',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyTeachersRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("add_beat", AddBeatReducer),
   __reducerSchema("add_sentence", AddSentenceReducer),
+  __reducerSchema("add_student", AddStudentReducer),
   __reducerSchema("agent_heartbeat", AgentHeartbeatReducer),
   __reducerSchema("append_tutor_turn", AppendTutorTurnReducer),
   __reducerSchema("attach_image", AttachImageReducer),
   __reducerSchema("begin_lesson", BeginLessonReducer),
   __reducerSchema("begin_opening", BeginOpeningReducer),
   __reducerSchema("begin_utterance", BeginUtteranceReducer),
+  __reducerSchema("claim_account", ClaimAccountReducer),
   __reducerSchema("clear_board", ClearBoardReducer),
   __reducerSchema("create_teacher", CreateTeacherReducer),
   __reducerSchema("create_test_user", CreateTestUserReducer),
   __reducerSchema("end_class_session", EndClassSessionReducer),
   __reducerSchema("end_session", EndSessionReducer),
   __reducerSchema("end_turn", EndTurnReducer),
+  __reducerSchema("forget_account", ForgetAccountReducer),
   __reducerSchema("interrupt", InterruptReducer),
   __reducerSchema("interrupt_utterance", InterruptUtteranceReducer),
   __reducerSchema("mark_played", MarkPlayedReducer),
@@ -578,7 +634,9 @@ const proceduresSchema = __procedures(
   __procedureSchema("build_lesson_request", BuildLessonRequestProcedure.params, BuildLessonRequestProcedure.returnType),
   __procedureSchema("get_session_image", GetSessionImageProcedure.params, GetSessionImageProcedure.returnType),
   __procedureSchema("get_turn_image", GetTurnImageProcedure.params, GetTurnImageProcedure.returnType),
+  __procedureSchema("issue_sign_in_code", IssueSignInCodeProcedure.params, IssueSignInCodeProcedure.returnType),
   __procedureSchema("learner_insights", LearnerInsightsProcedure.params, LearnerInsightsProcedure.returnType),
+  __procedureSchema("link_device", LinkDeviceProcedure.params, LinkDeviceProcedure.returnType),
   __procedureSchema("prefetch_topic", PrefetchTopicProcedure.params, PrefetchTopicProcedure.returnType),
   __procedureSchema("refresh_dashboard", RefreshDashboardProcedure.params, RefreshDashboardProcedure.returnType),
   __procedureSchema("set_topic", SetTopicProcedure.params, SetTopicProcedure.returnType),

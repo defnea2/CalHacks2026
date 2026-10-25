@@ -41,6 +41,37 @@ Student profile). The 20 simulated students get the same kind of seeded past fro
 `shared/src/classroom/simStudents.ts` on every reset; check them as owner with
 `spacetime sql --no-config --server local voice-tutor "SELECT * FROM memory_note"`.
 
+### Signing in the demo device (passwordless, ARCHITECTURE.md §13)
+
+Accounts belong to devices. The seed creates the demo users as the agent, so they belong to **no**
+device, and prints a one-time sign-in code per user (valid 7 days):
+
+```
+sign-in codes (one-time, valid 7 days; enter under "I have a code" on the demo device):
+  teacher  Ms. Park       P8D-FZW
+  student  Ava Chen       5C4-JYD
+  ...
+```
+
+On the demo laptop's browser (the one used on stage), once per user: open the app, enter the code
+under **"I have a code"** (entry page, student page or teacher page; lowercase and spaces are fine).
+The account then shows as **"Continue as Ava"** / **"Continue as Ms. Park"** on that browser, also
+after reloads and restarts (the token is in `localStorage`). Do this before the demo, in the same
+browser profile you present from. Lost a sign-in (other browser, cleared site data)? Print a fresh
+code: `node scripts/sign-in-code.mjs --teacher "Ms. Park"` or `--student "Ava Chen"` (re-running
+`seed-demo.mjs` prints fresh codes for everyone; older ones stay valid, at most 3 per account).
+
+- Several students on one laptop: one browser profile can be signed in as Ava, Sam and Priya at the
+  same time (one device, several accounts). For separate tabs as separate *devices*, open
+  `?tabIdentity=1` in that tab.
+- The second device (a phone or tablet as the "child's device"): on the teacher page, "My students"
+  → "Code for their device" shows a code and a QR code; scanning it opens the app with the code
+  filled in. "Add student" there creates a new student on the teacher's roster.
+- `node scripts/simulate.mjs` acts as the agent (`AGENT_SECRET`), so it can start a class for
+  Ms. Park; the dashboard then opens on the device signed in as Ms. Park.
+- A database from before sign-in existed keeps its old users claimable once ("Accounts from before
+  sign-in" on the student / teacher page); a `--clear` + seed has none.
+
 ### Seeded users
 
 | Who | Age | Grade | Learning style | Demo role |

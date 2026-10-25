@@ -33,6 +33,10 @@ export function errorText(error: string): string {
       return 'Student profiles are locked. Ask the organiser for the profile key and enter it on this device.';
     case 'unknown_learner':
       return 'This student is not in the system any more.';
+    case 'not_your_teacher':
+      return 'This device is not signed in as this teacher. Sign in with a code from your other device.';
+    case 'not_your_student':
+      return 'Only teachers of this student can see the profile (students you added or who were in your class).';
     case 'bad_response':
       return 'The profile came back in an unexpected form. Try Refresh.';
     default:

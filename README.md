@@ -115,10 +115,11 @@ inventory: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §2–3, §10–11.
 
 ### Responsibility & privacy
 
-- **Test users only.** No accounts, no real children's data, not compliance-reviewed. Demo users are fictional (`scripts/demo-seed.json`).
+- **Test users only.** No real children's data, not compliance-reviewed. Demo users are fictional (`scripts/demo-seed.json`).
+- **Passwordless identities** ([ARCHITECTURE.md §13](docs/ARCHITECTURE.md#13-identity-and-authorization)). Each browser keeps its SpacetimeDB token, so a device has a stable identity; students and teachers belong to the device that created them. Another device signs in with a one-time code (6 characters, hashed, 10 min / 24 h for a teacher's student code), no passwords or email. Every client reducer checks the caller: a device can only act as its own students and teachers, only a class's teacher can end, refresh or observe it, and a student profile is only readable by a teacher of that student. Scheduled functions are scheduler-only.
 - **Raw mic audio** (`audio_in`, private) is deleted as soon as its phrase is transcribed (`spacetimedb/src/voice_in.ts:237`) and when the session ends (`spacetimedb/src/sessions.ts:91`). Tutor audio is never stored (event table).
 - **Photos expire:** task photo (`session_image`), turn photos (`turn_image`) and a class's image document (`class_document`), all private and max 1 MB, are deleted `RETENTION_IMAGE_MIN` minutes (default 30) after their session / class ended, by the scheduled `retention_job` sweep (`spacetimedb/src/retention.ts`; `off` keeps them). Optional `RETENTION_DAYS` (default off) also deletes the lesson planner JSON (`lesson_record`, `lesson_plan`, `beat`) of sessions ended that many days ago.
-- **Kept until the database is cleared** (no automatic expiry): transcripts (`phrase`, `turn`, `reply_sentence`: public tables, readable by any connected client because there is no auth), memory notes, evidence quotes and mastery estimates (private; they reach the model only through agent-only procedures, and a **teacher** only through the teacher-gated `learnerInsights` procedure behind the dashboard's "Profile" panel — never a student screen; without auth anyone who knows a teacher id can call it, optionally locked with `INSIGHTS_KEY`, acceptable for test users only). Simulated students' sessions are deleted when they are reset.
+- **Kept until the database is cleared** (no automatic expiry): transcripts (`phrase`, `turn`, `reply_sentence`: still public tables; the screens are gated per device, but a client running its own SQL subscription can read them; per-sender views are the next step), memory notes, evidence quotes and mastery estimates (private; they reach the model only through agent-only procedures, and a **teacher** only through the `learnerInsights` procedure behind the dashboard's "Profile" panel — never a student screen; only a device signed in as a teacher of that student gets it, `INSIGHTS_KEY` is an optional extra lock). Simulated students' sessions are deleted when they are reset.
 - **Sent to third parties:** audio and tutor text to Cartesia; transcripts, the task, the photo and memory notes to Anthropic.
 - **Keys** live only in the module env and the worker's `.env`, never in tables or in the browser. The local `.spacetime-data/` holds the module env in plain bytes and is git-ignored.
 
@@ -131,7 +132,7 @@ inventory: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §2–3, §10–11.
 - STT defaults to `ink-whisper`; `ink-2` needs the proxy on a public host.
 - Word budgets, tone, staying on topic and not asking for personal data are prompted, not enforced; explanations often run over budget (107–150 words). The spoken math in the narration is not formally checked.
 - The "not your own homework" check is a substring match. The dashboard can put a student in a group without evidence.
-- No auth: any client can subscribe to public tables (transcripts, dashboard). The dashboard for 8+ students takes 7–10 s per refresh.
+- Reducers and procedures check the caller, but lesson tables (transcripts, dashboard) are still public tables any client can subscribe to with raw SQL. Losing every device of a teacher (cleared browser storage) needs an operator code (`node scripts/sign-in-code.mjs`). The dashboard for 8+ students takes 7–10 s per refresh.
 
 ### What's real vs simulated
 

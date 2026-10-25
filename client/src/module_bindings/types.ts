@@ -10,6 +10,16 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AccountLink = __t.object("AccountLink", {
+  id: __t.u64(),
+  identity: __t.identity(),
+  kind: __t.string(),
+  accountId: __t.u64(),
+  via: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AccountLink = __Infer<typeof AccountLink>;
+
 export const AgentStatus = __t.object("AgentStatus", {
   id: __t.u32(),
   model: __t.string(),
@@ -39,6 +49,12 @@ export const AudioOut = __t.object("AudioOut", {
   wordEndsMs: __t.array(__t.u32()),
 });
 export type AudioOut = __Infer<typeof AudioOut>;
+
+export const AuthMeta = __t.object("AuthMeta", {
+  id: __t.u32(),
+  enabledAt: __t.timestamp(),
+});
+export type AuthMeta = __Infer<typeof AuthMeta>;
 
 export const Beat = __t.object("Beat", {
   id: __t.u64(),
@@ -93,6 +109,12 @@ export const Category = __t.object("Category", {
 });
 export type Category = __Infer<typeof Category>;
 
+export const ClaimableLearners = __t.object("ClaimableLearners", {});
+export type ClaimableLearners = __Infer<typeof ClaimableLearners>;
+
+export const ClaimableTeachers = __t.object("ClaimableTeachers", {});
+export type ClaimableTeachers = __Infer<typeof ClaimableTeachers>;
+
 export const ClassDocument = __t.object("ClassDocument", {
   classSessionId: __t.u64(),
   data: __t.byteArray(),
@@ -123,6 +145,13 @@ export const ClassSummary = __t.object("ClassSummary", {
   version: __t.u32(),
 });
 export type ClassSummary = __Infer<typeof ClassSummary>;
+
+export const CodeAttempt = __t.object("CodeAttempt", {
+  identity: __t.identity(),
+  windowStartMicros: __t.u64(),
+  failures: __t.u32(),
+});
+export type CodeAttempt = __Infer<typeof CodeAttempt>;
 
 export const Concept = __t.object("Concept", {
   key: __t.string(),
@@ -264,6 +293,18 @@ export const MemoryNote = __t.object("MemoryNote", {
 });
 export type MemoryNote = __Infer<typeof MemoryNote>;
 
+export const MyLearners = __t.object("MyLearners", {});
+export type MyLearners = __Infer<typeof MyLearners>;
+
+export const MyRoster = __t.object("MyRoster", {});
+export type MyRoster = __Infer<typeof MyRoster>;
+
+export const MyStudents = __t.object("MyStudents", {});
+export type MyStudents = __Infer<typeof MyStudents>;
+
+export const MyTeachers = __t.object("MyTeachers", {});
+export type MyTeachers = __Infer<typeof MyTeachers>;
+
 export const NoteEvidence = __t.object("NoteEvidence", {
   id: __t.u64(),
   noteId: __t.u64(),
@@ -391,6 +432,17 @@ export const SessionSummary = __t.object("SessionSummary", {
 });
 export type SessionSummary = __Infer<typeof SessionSummary>;
 
+export const SignInCode = __t.object("SignInCode", {
+  id: __t.u64(),
+  codeHash: __t.string(),
+  kind: __t.string(),
+  accountId: __t.u64(),
+  issuedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+});
+export type SignInCode = __Infer<typeof SignInCode>;
+
 export const SimProfile = __t.object("SimProfile", {
   rank: __t.u32(),
   name: __t.string(),
@@ -487,6 +539,14 @@ export const Teacher = __t.object("Teacher", {
   createdAt: __t.timestamp(),
 });
 export type Teacher = __Infer<typeof Teacher>;
+
+export const TeacherStudent = __t.object("TeacherStudent", {
+  id: __t.u64(),
+  teacherId: __t.u64(),
+  learnerId: __t.u64(),
+  createdAt: __t.timestamp(),
+});
+export type TeacherStudent = __Infer<typeof TeacherStudent>;
 
 export const TextPlayJob = __t.object("TextPlayJob", {
   scheduledId: __t.u64(),

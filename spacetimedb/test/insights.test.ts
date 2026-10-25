@@ -6,7 +6,8 @@ import { pack } from '../../shared/src/lesson/index';
 import { SIM_STUDENTS } from '../../shared/src/classroom/simStudents';
 import type { LearnerInsights, LearnerInsightsResult } from '../../shared/src/insights';
 import { resetSimUser } from '../src/classroom';
-import { call, chatResponse, makeLearner, makeSession, mod, proc, runExtraction, runSummary, runTts, session, setup, studentSays, ttsSse, type H } from './helpers';
+import { addToRoster } from '../src/auth';
+import { auth, call, chatResponse, makeLearner, makeSession, mod, proc, runExtraction, runSummary, runTts, session, setup, studentSays, ttsSse, type H } from './helpers';
 
 const cat = pack.taxonomy.find(c => c.concepts.length > 1)!;
 const concept = cat.concepts[0]!;
@@ -27,12 +28,20 @@ function teacher(env: Env) {
   return [...env.h.db.teacher.iter()][0]!;
 }
 
-function raw(env: Env, learnerId: bigint, teacherId: bigint, key = ''): string {
-  return (mod.learnerInsights as any)(proc(env.h, env.client), { learnerId, teacherId, key });
+/** Puts the learner on the teacher's roster (as "Add student" or a class session would). */
+function enroll(env: Env, learnerId: bigint, teacherId: bigint): void {
+  if (!env.h.db.teacher.id.find(teacherId) || !env.h.db.learner.id.find(learnerId)) return;
+  env.h.withReducerTx(TestAuth.internal(), ctx => addToRoster(ctx as never, teacherId, learnerId));
 }
-function read(env: Env, learnerId: bigint, teacherId: bigint, key = ''): LearnerInsightsResult {
-  return JSON.parse(raw(env, learnerId, teacherId, key));
+function raw(env: Env, learnerId: bigint, teacherId: bigint, key = '', who = env.client): string {
+  enroll(env, learnerId, teacherId);
+  return (mod.learnerInsights as any)(proc(env.h, who), { learnerId, teacherId, key });
 }
+function read(env: Env, learnerId: bigint, teacherId: bigint, key = '', who = env.client): LearnerInsightsResult {
+  return JSON.parse(raw(env, learnerId, teacherId, key, who));
+}
+const readUnenrolled = (env: Env, learnerId: bigint, teacherId: bigint, who = env.client): LearnerInsightsResult =>
+  JSON.parse((mod.learnerInsights as any)(proc(env.h, who), { learnerId, teacherId, key: '' }));
 function ok(r: LearnerInsightsResult): LearnerInsights {
   if (!r.ok) throw new Error(`expected ok, got ${r.error}`);
   return r;
@@ -54,6 +63,19 @@ describe('learnerInsights gate', () => {
     expect(r.learner).toMatchObject({ id: String(l.id), name: 'Mia', age: 9, grade: 4, isSimulated: false, persona: '', sessionCount: 0 });
     expect(r.notes).toEqual([]);
     expect(r.learner.firstSeenMs).toBe(Number(l.createdAt.microsSinceUnixEpoch / 1000n));
+  });
+
+  it('only the caller\'s own teacher account, and only students on its roster', () => {
+    const env = setup();
+    const l = makeLearner(env.h, env.client);
+    const other = makeLearner(env.h, env.client, 'Noa');
+    const t = teacher(env);
+    expect(readUnenrolled(env, other.id, t.id)).toEqual({ ok: false, error: 'not_your_student' });
+    // Another device knows the teacher id: refused, even for a student of that teacher.
+    expect(read(env, l.id, t.id, '', auth('teacher-b'))).toEqual({ ok: false, error: 'not_your_teacher' });
+    expect(read(env, l.id, t.id).ok).toBe(true);
+    // The agent (operator) may read any profile.
+    expect(readUnenrolled(env, other.id, t.id, env.agent).ok).toBe(true);
   });
 
   it('INSIGHTS_KEY: wrong or missing key is locked, right key is ok', () => {

@@ -99,6 +99,15 @@ body:has(.pr-app) { background: var(--pr-bg); }
 .pr-section-label { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 12px; font-size: 12px; color: var(--pr-muted); }
 .pr-section-label h2 { font-size: 15px; font-weight: 600; color: var(--pr-ink); margin: 0; }
 
+/* ---- sign-in codes (components/SignIn.tsx) ---- */
+.pr-code-card { display: flex; gap: 16px; align-items: center; padding: 12px; border: 1px solid var(--pr-rule); background: var(--pr-soft); flex-wrap: wrap; }
+.pr-code-card svg { flex: none; border: 1px solid var(--pr-rule); }
+.pr-code { display: block; font: 600 28px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.08em; color: var(--pr-accent); }
+.pr-roster-row { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--pr-rule); background: var(--pr-paper); }
+.pr-roster-row > span small { color: var(--pr-muted); font-size: 11px; }
+.pr-legacy summary { cursor: pointer; font-size: 13px; color: var(--pr-muted); }
+.pr-legacy[open] summary { margin-bottom: 10px; }
+
 /* ---- learning mode: inline start form ---- */
 .pr-start { margin-top: 26px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 32px; align-items: start; }
 .pr-continue { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border: 1px solid var(--pr-rule); border-left: 2px solid var(--pr-accent); background: var(--pr-paper); margin-bottom: 22px; font-size: 13px; }

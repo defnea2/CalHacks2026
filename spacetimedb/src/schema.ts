@@ -9,6 +9,7 @@
 import { schema, table, t } from 'spacetimedb/server';
 import { textPlayJob, textPlayback, canvasState, beat, learnerEvent, lessonState, lessonRecord, lessonPlan, agentStatus, tutorRequest, tutorResult } from './schema_pipeline';
 import * as classroom from './schema_classroom';
+import * as auth from './schema_auth';
 
 // ---------------------------------------------------------------- learners & sessions
 
@@ -86,7 +87,8 @@ export const turnImage = table(
   }
 );
 
-/** Identity that started an ad-hoc session (private): only it may attach turn photos. */
+/** Identity that started an ad-hoc session (private).
+ *  Deprecated: still written, no longer read; ownership is account_link (auth.ts). */
 export const sessionOwner = table(
   { name: 'session_owner' },
   {
@@ -560,6 +562,7 @@ const spacetimedb = schema(
     task,
     libraryMeta,
     ...classroom,
+    ...auth,
     textPlayJob,
     textPlayback,
     canvasState,

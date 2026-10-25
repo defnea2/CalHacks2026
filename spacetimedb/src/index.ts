@@ -3,9 +3,11 @@
 // this one; only registered reducers/procedures are named exports here.
 import './polyfills';
 import { t, SenderError } from 'spacetimedb/server';
-import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob, retentionJob } from './schema';
-import { dashboardJob, simTurnJob } from './schema_classroom';
+import spacetimedb, { learner as learnerTable, sttJob, ttsJob, extractionJob, summaryJob, retentionJob } from './schema';
+import { dashboardJob, simTurnJob, teacher as teacherTable } from './schema_classroom';
+import { teacherStudent } from './schema_auth';
 import * as classroom from './classroom';
+import * as auth from './auth';
 import { textPlayJob } from './schema_pipeline';
 import { METRIC_NAMES, TURN_STATES, type MetricName } from '../../shared/src/types';
 import { AGENT_ROLE, getActiveSession, getSession, metricsFor, requireAgent, ts } from './ctx';
@@ -32,6 +34,7 @@ export default spacetimedb;
 export const init = spacetimedb.init(ctx => {
   ensureLibrary(ctx);
   classroom.ensureSimProfiles(ctx);
+  auth.ensureAuthMeta(ctx);
   ensureRetentionJob(ctx);
   classroom.backfillClusterMembers(ctx);
 });
@@ -40,6 +43,7 @@ export const init = spacetimedb.init(ctx => {
 export const onConnect = spacetimedb.clientConnected(ctx => {
   ensureLibrary(ctx);
   classroom.ensureSimProfiles(ctx);
+  auth.ensureAuthMeta(ctx);
   ensureRetentionJob(ctx);
   classroom.backfillClusterMembers(ctx);
 });
@@ -49,69 +53,103 @@ export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
 });
 
 // ---------------------------------------------------------------- client reducers
+// Authorization (auth.ts): every client reducer checks the caller first. Student reducers:
+// the learner/session must belong to a learner linked to the caller; the agent passes.
 
+/** A student adds themselves: the calling device owns the new learner. */
 export const createTestUser = spacetimedb.reducer(
   { name: t.string(), age: t.u32(), grade: t.u32(), style: t.string() },
   (ctx, args) => {
-    sessions.createTestUser(ctx, args);
+    auth.onAccountCreated(ctx, auth.LEARNER, sessions.createTestUser(ctx, args).id);
   }
 );
 
-/** Ends the learner's previous active session, then starts a new one. */
+/** Ends the learner's previous active session, then starts a new one. Own learner only. */
 export const startSession = spacetimedb.reducer(
   { learnerId: t.u64(), taskText: t.string() },
   (ctx, args) => {
+    auth.requireLearner(ctx, args.learnerId);
     turnPhoto.recordOwner(ctx, sessions.startSession(ctx, args).id);
   }
 );
 
 export const uploadPhoto = spacetimedb.reducer(
   { sessionId: t.u64(), mime: t.string(), data: t.byteArray() },
-  (ctx, args) => sessions.uploadPhoto(ctx, args)
+  (ctx, args) => {
+    auth.requireSessionLearner(ctx, args.sessionId);
+    sessions.uploadPhoto(ctx, args);
+  }
 );
 
 /** Photo taken during the session (jpeg/png/webp/gif, <= 1 MB); goes with the learner's next
  *  closed turn. Replaces a still-pending one. Only the session's learner (turn_photo.ts). */
 export const attachImage = spacetimedb.reducer(
   { sessionId: t.u64(), mime: t.string(), data: t.byteArray() },
-  (ctx, args) => turnPhoto.attachImage(ctx, args)
+  (ctx, args) => {
+    auth.requireSessionLearner(ctx, args.sessionId);
+    turnPhoto.attachImage(ctx, args);
+  }
 );
 
-export const removePendingImage = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => turnPhoto.removePendingImage(ctx, sessionId));
+export const removePendingImage = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => {
+  auth.requireSessionLearner(ctx, sessionId);
+  turnPhoto.removePendingImage(ctx, sessionId);
+});
 
-export const endSession = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => sessions.endSession(ctx, sessionId));
+export const endSession = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => {
+  auth.requireSessionLearner(ctx, sessionId);
+  sessions.endSession(ctx, sessionId);
+});
 
 /** One ~150 ms chunk of 16 kHz PCM16, buffered in audio_in. `final` closes the phrase:
  *  raises pendingPhrases on the open student turn and inserts an stt_job due now.
  *  Repeated (sessionId, phraseId, seq) ignored. Emits speech_activity. */
 export const pushAudio = spacetimedb.reducer(
   { sessionId: t.u64(), phraseId: t.u32(), seq: t.u32(), pcm: t.byteArray(), final: t.bool() },
-  (ctx, args) => voiceIn.pushAudio(ctx, args)
+  (ctx, args) => {
+    auth.requireSessionLearner(ctx, args.sessionId);
+    voiceIn.pushAudio(ctx, args);
+  }
 );
 
 /** VAD_TURN_MS of silence after the last phrase. Turn becomes ready when pendingPhrases hits 0. */
-export const endTurn = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => voiceIn.endTurn(ctx, sessionId));
+export const endTurn = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => {
+  auth.requireSessionLearner(ctx, sessionId);
+  voiceIn.endTurn(ctx, sessionId);
+});
 
 /** "Start talking" clicked: on a session without turns, asks the worker to speak first
  *  (turnState = thinking, opening turn_metrics row). No-op once the conversation started. */
-export const startConversation = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) =>
-  opening.startConversation(ctx, sessionId)
-);
+export const startConversation = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => {
+  auth.requireSessionLearner(ctx, sessionId);
+  opening.startConversation(ctx, sessionId);
+});
 
 /** Barge-in: turnState = interrupted, unplayed sentences dropped, playback_flush emitted. */
-export const interrupt = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => voiceOut.interrupt(ctx, sessionId));
+export const interrupt = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => {
+  auth.requireSessionLearner(ctx, sessionId);
+  voiceOut.interrupt(ctx, sessionId);
+});
 /** Barge-in on the utterance the client was playing (also its last sentence, after the session moved on). */
-export const interruptUtterance = spacetimedb.reducer({ sessionId: t.u64(), utteranceId: t.u64() }, (ctx, { sessionId, utteranceId }) => voiceOut.interruptUtterance(ctx, sessionId, utteranceId));
+export const interruptUtterance = spacetimedb.reducer({ sessionId: t.u64(), utteranceId: t.u64() }, (ctx, { sessionId, utteranceId }) => {
+  auth.requireSessionLearner(ctx, sessionId);
+  voiceOut.interruptUtterance(ctx, sessionId, utteranceId);
+});
 
 /** Client started playing a sentence (drives firstPlaybackAt and "unplayed" for interrupts). */
 export const markPlayed = spacetimedb.reducer(
   { sessionId: t.u64(), utteranceId: t.u64(), idx: t.u32() },
-  (ctx, args) => voiceOut.markPlayed(ctx, args)
+  (ctx, args) => {
+    auth.requireSessionLearner(ctx, args.sessionId);
+    voiceOut.markPlayed(ctx, args);
+  }
 );
 
 export const submitGapAnswer = spacetimedb.reducer(
   { boardItemId: t.u64(), answer: t.string() },
   (ctx, args) => {
+    const item = ctx.db.boardItem.id.find(args.boardItemId);
+    if (item) auth.requireSessionLearner(ctx, item.sessionId);
     lesson.submitGapAnswer(ctx, args);
   }
 );
@@ -120,6 +158,7 @@ export const submitGapAnswer = spacetimedb.reducer(
 export const reportNoise = spacetimedb.reducer(
   { sessionId: t.u64(), noiseDb: t.f64() },
   (ctx, { sessionId, noiseDb }) => {
+    auth.requireSessionLearner(ctx, sessionId);
     const session = getActiveSession(ctx, sessionId);
     if (!Number.isFinite(noiseDb)) throw new SenderError('noiseDb must be a number');
     // Sent right after endTurn: it belongs to the latest student turn, which may already be ready.
@@ -135,13 +174,17 @@ export const reportNoise = spacetimedb.reducer(
  *  Interrupts a running tutor reply like barge-in. */
 export const submitTextTurn = spacetimedb.reducer(
   { sessionId: t.u64(), text: t.string(), intent: t.string() },
-  (ctx, args) => textMode.submitTextTurn(ctx, args)
+  (ctx, args) => {
+    auth.requireSessionLearner(ctx, args.sessionId);
+    textMode.submitTextTurn(ctx, args);
+  }
 );
 
 /** voice = false: text mode (no STT/TTS; sentences count as played after a reading delay). */
-export const setSessionVoice = spacetimedb.reducer({ sessionId: t.u64(), voice: t.bool() }, (ctx, { sessionId, voice }) =>
-  textMode.setSessionVoice(ctx, sessionId, voice)
-);
+export const setSessionVoice = spacetimedb.reducer({ sessionId: t.u64(), voice: t.bool() }, (ctx, { sessionId, voice }) => {
+  auth.requireSessionLearner(ctx, sessionId);
+  textMode.setSessionVoice(ctx, sessionId, voice);
+});
 
 /** Canvas manipulation (math_action: MathAction, activity_action: LearnerAction), picture submission
  *  (submit) or choice ({optionId}) from the team UI. Validated against canvas_state and the lesson
@@ -149,18 +192,21 @@ export const setSessionVoice = spacetimedb.reducer({ sessionId: t.u64(), voice: 
  *  next teaching step (a student turn the worker answers). */
 export const submitInteraction = spacetimedb.reducer(
   { sessionId: t.u64(), kind: t.string(), payload: t.string() },
-  (ctx, args) =>
+  (ctx, args) => {
+    auth.requireSessionLearner(ctx, args.sessionId);
     pipeline.submitInteraction(ctx, args, (tx, sessionId, text) =>
       textMode.submitTextTurn(tx, { sessionId, text, intent: '' }, undefined, { assessed: true })
-    )
+    );
+  }
 );
 
 /** UNUSED: no screen calls it and the worker no longer subscribes to tutor_request (the slant
  *  lesson's tutor feedback, which replaced /api/teaching/shear-feedback, has no UI caller). Kept so
  *  published clients and the module tests keep their contract; kind 'shear_feedback'. */
-export const requestTutor = spacetimedb.reducer({ sessionId: t.u64(), kind: t.string(), payload: t.string() }, (ctx, args) =>
-  pipeline.requestTutor(ctx, args)
-);
+export const requestTutor = spacetimedb.reducer({ sessionId: t.u64(), kind: t.string(), payload: t.string() }, (ctx, args) => {
+  auth.requireSessionLearner(ctx, args.sessionId);
+  pipeline.requestTutor(ctx, args);
+});
 
 // ---------------------------------------------------------------- agent-only reducers
 
@@ -365,6 +411,9 @@ export const getTurnImage = spacetimedb.procedure({ sessionId: t.u64(), turnIdx:
   return img ? `data:${img.mime};base64,${base64(img.data)}` : '';
 });
 
+// Scheduled reducers/procedures are client-callable in 2.13: each one starts with
+// auth.requireScheduler (sender = module identity).
+
 /** Joins the phrase's audio_in chunks by seq, POSTs them to STT_BASE_URL/stt (Cartesia batch
  *  interface, served by stt-proxy -> ink-2), appends text to the turn, lowers pendingPhrases,
  *  deletes the audio. Empty transcript or too-short phrase -> discarded. */
@@ -373,6 +422,7 @@ export const transcribePhrase = spacetimedb.procedure(
   { job: sttJob.rowType },
   t.unit(),
   (ctx, { job }) => {
+    auth.requireScheduler(ctx);
     voiceIn.transcribePhrase(ctx, job);
     return {};
   }
@@ -383,6 +433,7 @@ export const synthesizeSentence = spacetimedb.procedure(
   { job: ttsJob.rowType },
   t.unit(),
   (ctx, { job }) => {
+    auth.requireScheduler(ctx);
     voiceOut.synthesizeSentence(ctx, job);
     return {};
   }
@@ -390,17 +441,14 @@ export const synthesizeSentence = spacetimedb.procedure(
 
 /** Scheduled: a text-mode sentence was read (its reading delay passed) -> played. */
 export const finishTextSentence = spacetimedb.reducer({ onSchedule: textPlayJob }, { job: textPlayJob.rowType }, (ctx, { job }) => {
-  // Not redundant: scheduled reducers stay client-callable in 2.13 (a CLI call reaches the body),
-  // so every scheduled reducer checks that the scheduler (the module identity) called it.
-  if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
+  // Not redundant: scheduled reducers stay client-callable in 2.13 (a CLI call reaches the body).
+  auth.requireScheduler(ctx);
   textMode.finishTextSentence(ctx, job);
 });
 
 /** Scheduled every RETENTION_SWEEP_S: photo bytes / old lesson JSON of ended sessions (retention.ts). */
 export const runRetention = spacetimedb.reducer({ onSchedule: retentionJob }, { job: retentionJob.rowType }, ctx => {
-  // Scheduled reducers stay client-callable in 2.13 (verified: a CLI call reaches the body), so
-  // every scheduled reducer checks that the scheduler (the module identity) called it.
-  if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
+  auth.requireScheduler(ctx);
   const r = sweepRetention(ctx);
   if (r.turnImages + r.sessionImages + r.classDocuments + r.lessonSessions > 0) {
     console.log(`retention: ${r.turnImages} turn photos, ${r.sessionImages} task photos, ${r.classDocuments} class documents, lesson JSON of ${r.lessonSessions} sessions`);
@@ -412,6 +460,7 @@ export const extractMemory = spacetimedb.procedure(
   { job: extractionJob.rowType },
   t.unit(),
   (ctx, { job }) => {
+    auth.requireScheduler(ctx);
     memory.extractMemory(ctx, job);
     return {};
   }
@@ -422,6 +471,7 @@ export const summarizeSession = spacetimedb.procedure(
   { job: summaryJob.rowType },
   t.unit(),
   (ctx, { job }) => {
+    auth.requireScheduler(ctx);
     memory.summarizeSession(ctx, job);
     return {};
   }
@@ -429,14 +479,17 @@ export const summarizeSession = spacetimedb.procedure(
 
 // ---------------------------------------------------------------- classroom (docs/CLASSROOM.md)
 
+/** A teacher adds themselves: the calling device owns the new teacher account. */
 export const createTeacher = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
-  classroom.createTeacher(ctx, name);
+  auth.onAccountCreated(ctx, auth.TEACHER, classroom.createTeacher(ctx, name).id);
 });
 
-/** status: offline | waiting | in_session. Remembers the caller's connection (disconnect -> offline). */
-export const setPresence = spacetimedb.reducer({ learnerId: t.u64(), status: t.string() }, (ctx, { learnerId, status }) =>
-  classroom.setPresence(ctx, learnerId, status)
-);
+/** status: offline | waiting | in_session. Own learner only (presence decides who joins a
+ *  class). Remembers the caller's connection (disconnect -> offline). */
+export const setPresence = spacetimedb.reducer({ learnerId: t.u64(), status: t.string() }, (ctx, { learnerId, status }) => {
+  auth.requireLearner(ctx, learnerId);
+  classroom.setPresence(ctx, learnerId, status);
+});
 
 const START_CLASS_ARGS = {
   teacherId: t.u64(),
@@ -454,29 +507,37 @@ const START_CLASS_ARGS = {
  *  session; simulatedCount > 0 resets and starts simulation users 1..n (text mode).
  *  Same as startClassSessionWith(..., resetSimulated = true); kept for older clients. */
 export const startClassSession = spacetimedb.reducer(START_CLASS_ARGS, (ctx, args) => {
+  auth.requireTeacher(ctx, args.teacherId);
   classroom.startClassSession(ctx, { ...args, resetSimulated: true });
 });
 
 /** startClassSession with the reset as an option: resetSimulated = false lets simulation users
  *  1..n keep their memory and history from earlier runs (they join with new linked sessions). */
 export const startClassSessionWith = spacetimedb.reducer({ ...START_CLASS_ARGS, resetSimulated: t.bool() }, (ctx, args) => {
+  auth.requireTeacher(ctx, args.teacherId);
   classroom.startClassSession(ctx, args);
 });
 
 /** Simulation users 1..count (0 = all 20) back to their seed state (fresh memory), in seed order.
- *  Refused while one of them is in a running class session. */
+ *  Refused while one of them is in a running class session. Any teacher account on this device
+ *  (the simulation is shared by all teachers). */
 export const resetSimulatedStudents = spacetimedb.reducer({ count: t.u32() }, (ctx, { count }) => {
+  auth.requireAnyTeacher(ctx);
   classroom.resetSimulatedStudents(ctx, count);
 });
 
-export const endClassSession = spacetimedb.reducer({ classSessionId: t.u64() }, (ctx, { classSessionId }) =>
-  classroom.endClassSession(ctx, classSessionId)
-);
+/** The class session's teacher only. */
+export const endClassSession = spacetimedb.reducer({ classSessionId: t.u64() }, (ctx, { classSessionId }) => {
+  auth.requireClassTeacher(ctx, classSessionId);
+  classroom.endClassSession(ctx, classSessionId);
+});
 
-/** learnerId 0 stops observing; an overdue dashboard refresh then runs at once. */
-export const setImpersonation = spacetimedb.reducer({ classSessionId: t.u64(), learnerId: t.u64() }, (ctx, { classSessionId, learnerId }) =>
-  classroom.setImpersonation(ctx, classSessionId, learnerId)
-);
+/** learnerId 0 stops observing; an overdue dashboard refresh then runs at once. The class
+ *  session's teacher only. */
+export const setImpersonation = spacetimedb.reducer({ classSessionId: t.u64(), learnerId: t.u64() }, (ctx, { classSessionId, learnerId }) => {
+  auth.requireClassTeacher(ctx, classSessionId);
+  classroom.setImpersonation(ctx, classSessionId, learnerId);
+});
 
 /** Typed result of refreshDashboard ('' / false / 0 = not set). */
 const RefreshDashboardResult = t.object('RefreshDashboardResult', {
@@ -495,13 +556,15 @@ const RefreshDashboardResult = t.object('RefreshDashboardResult', {
  *  Error convention (ARCHITECTURE §3): a skip or a provider failure is a result ({ok: false}), not a
  *  SenderError, because the button shows it as a note. */
 export const refreshDashboard = spacetimedb.procedure({ classSessionId: t.u64() }, RefreshDashboardResult, (ctx, { classSessionId }) => {
+  ctx.withTx(tx => auth.requireClassTeacher(tx, classSessionId));
   const r = classroom.refreshDashboard(ctx, classSessionId, false);
   return { ok: r.ok, skipped: r.skipped ?? '', error: r.error ?? '', repaired: r.repaired ?? false, repairs: r.repairs ?? [], clusters: r.clusters ?? 0 };
 });
 
 /** Teacher dashboard student profile (long-term memory, mastery, past sessions). Returns JSON
- *  LearnerInsightsResult (shared/src/insights.ts). Gated by an existing teacher id and, when
- *  the module env INSIGHTS_KEY is set, a matching key; the only read path of the memory tables. */
+ *  LearnerInsightsResult (shared/src/insights.ts). Only for a teacher account of the caller
+ *  whose roster has the learner (auth.ts), plus the module env INSIGHTS_KEY when it is set;
+ *  the only read path of the memory tables. */
 export const learnerInsights = spacetimedb.procedure({ learnerId: t.u64(), teacherId: t.u64(), key: t.string() }, t.string(), (ctx, a) =>
   JSON.stringify(insights.learnerInsights(ctx, a))
 );
@@ -512,6 +575,7 @@ export const dashboardTick = spacetimedb.procedure(
   { job: dashboardJob.rowType },
   t.unit(),
   (ctx, { job }) => {
+    auth.requireScheduler(ctx);
     classroom.refreshDashboard(ctx, job.classSessionId, true);
     return {};
   }
@@ -523,7 +587,61 @@ export const simStudentTurn = spacetimedb.procedure(
   { job: simTurnJob.rowType },
   t.unit(),
   (ctx, { job }) => {
+    auth.requireScheduler(ctx);
     classroom.simStudentTurn(ctx, job);
     return {};
   }
 );
+
+// ---------------------------------------------------------------- accounts & sign-in (auth.ts)
+
+/** Teacher "Add student": a learner on the teacher's roster, owned by no device yet; the
+ *  teacher hands out a sign-in code (issueSignInCode) the child redeems on their device. */
+export const addStudent = spacetimedb.reducer(
+  { teacherId: t.u64(), name: t.string(), age: t.u32(), grade: t.u32(), style: t.string() },
+  (ctx, { teacherId, ...args }) => {
+    auth.requireTeacher(ctx, teacherId);
+    auth.addToRoster(ctx, teacherId, sessions.createTestUser(ctx, args).id);
+  }
+);
+
+/** Legacy accounts (created before authorization was switched on, never linked): the first
+ *  identity that claims one owns it. kind: learner | teacher. */
+export const claimAccount = spacetimedb.reducer({ kind: t.string(), accountId: t.u64() }, (ctx, { kind, accountId }) =>
+  auth.claimAccount(ctx, kind, accountId)
+);
+
+/** "Sign out on this device" (refused for the last device that could get the account back). */
+export const forgetAccount = spacetimedb.reducer({ kind: t.string(), accountId: t.u64() }, (ctx, { kind, accountId }) =>
+  auth.forgetAccount(ctx, kind, accountId)
+);
+
+/** One-time sign-in code for an account. JSON IssueCodeResult (shared/src/auth.ts). Allowed for
+ *  a device linked to the account, a teacher of the student (teacherId; 0 = none) or the agent. */
+export const issueSignInCode = spacetimedb.procedure(
+  { kind: t.string(), accountId: t.u64(), teacherId: t.u64() },
+  t.string(),
+  (ctx, args) => JSON.stringify(ctx.withTx(tx => auth.issueSignInCode(tx, args)))
+);
+
+/** Redeems a sign-in code: links the calling device to its account (student or teacher). JSON
+ *  {ok, kind, accountId, name} | {ok:false, error}. Wrong codes are throttled per identity. */
+export const linkDevice = spacetimedb.procedure({ code: t.string() }, t.string(), (ctx, { code }) => JSON.stringify(auth.linkDevice(ctx, code)));
+
+// ---------------------------------------------------------------- views (per caller)
+
+/** Students this device is signed in as ("Continue as Ava"). */
+export const myLearners = spacetimedb.view({ name: 'my_learners', public: true }, t.array(learnerTable.rowType), ctx => auth.myLearners(ctx.db, ctx.sender));
+
+/** Teacher accounts this device is signed in as. */
+export const myTeachers = spacetimedb.view({ name: 'my_teachers', public: true }, t.array(teacherTable.rowType), ctx => auth.myTeachers(ctx.db, ctx.sender));
+
+/** Real students on the rosters of this device's teachers. */
+export const myStudents = spacetimedb.view({ name: 'my_students', public: true }, t.array(learnerTable.rowType), ctx => auth.myStudents(ctx.db, ctx.sender));
+
+/** Roster rows (teacherId, learnerId) of this device's teachers. */
+export const myRoster = spacetimedb.view({ name: 'my_roster', public: true }, t.array(teacherStudent.rowType), ctx => auth.myRoster(ctx.db, ctx.sender));
+
+/** Legacy accounts anyone may claim once (empty in databases created with authorization). */
+export const claimableLearners = spacetimedb.anonymousView({ name: 'claimable_learners', public: true }, t.array(learnerTable.rowType), ctx => auth.claimableLearners(ctx.db));
+export const claimableTeachers = spacetimedb.anonymousView({ name: 'claimable_teachers', public: true }, t.array(teacherTable.rowType), ctx => auth.claimableTeachers(ctx.db));

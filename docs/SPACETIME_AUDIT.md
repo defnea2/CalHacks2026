@@ -9,8 +9,8 @@ with the honest story for judges.
 
 | # | Severity | Finding | Where | Status |
 | --- | --- | --- | --- | --- |
-| 1 | High | **No `ctx.sender` authorization on client reducers.** Any connected client can call session and teacher reducers for any id (`endSession`, `startClassSession`, `setImpersonation`, ...); `setPresence` lets a second tab take over a learner's presence. Only agent reducers (`requireAgent`) and turn photos (`requireOwner`) check the caller. By spec there are test users only, but it is the biggest gap. | `spacetimedb/src/index.ts`, `classroom.ts`, `sessions.ts` | After hackathon (real identities: `night/identity`) |
-| 2 | High | **A new identity per page load.** The client never passes a token, so a reload gets a new identity, and `requireOwner` then rejects `attachImage` / `removePendingImage` in a reloaded ad-hoc `?session=` tab. | `client/src/stdb/connection.ts`, `spacetimedb/src/turn_photo.ts` | Handed to `night/identity` (owns connection.ts and ownership checks) |
+| 1 | High | **No `ctx.sender` authorization on client reducers.** Any connected client can call session and teacher reducers for any id (`endSession`, `startClassSession`, `setImpersonation`, ...); `setPresence` lets a second tab take over a learner's presence. Only agent reducers (`requireAgent`) and turn photos (`requireOwner`) check the caller. By spec there are test users only, but it is the biggest gap. | `spacetimedb/src/index.ts`, `classroom.ts`, `sessions.ts` | Fixed on `night/identity`: `auth.ts` checks the caller on every client reducer/procedure (ARCHITECTURE §13); scheduled functions scheduler-only |
+| 2 | High | **A new identity per page load.** The client never passes a token, so a reload gets a new identity, and `requireOwner` then rejects `attachImage` / `removePendingImage` in a reloaded ad-hoc `?session=` tab. | `client/src/stdb/connection.ts`, `spacetimedb/src/turn_photo.ts` | Fixed on `night/identity`: the client stores its token (`client/src/lib/token.ts`) |
 | 3 | Medium | **Cancelled TTS kept calling Cartesia.** Barge-in, supersede and `endSession` marked sentences `dropped` but left their `tts_job` rows, so `synthesizeSentence` still made the HTTP call and held a procedure slot (the commit check discarded the audio). | `voice_out.ts` `beginUtterance` / `interrupt`, `sessions.ts` `closeSession` | **Fixed now**: `cancelTtsJobs` (`ctx.ts`) deletes the reply's (or session's) pending jobs |
 | 4 | Medium | **Table-wide worker subscriptions.** The worker subscribes to all of `turn`, `phrase`, `reply_sentence`, `board_item`, `learner`; any row, including one of an ended session, created a `SessionAgent` that was never removed. | `worker/src/stdb.ts` `SUBSCRIPTIONS`, `worker/src/agent.ts` | **Guard fixed now** (rows of ended or not-active sessions are ignored; the agent is dropped when its session ends). **Fixed** (`night/stdb-hardening`): JOIN subscriptions on `session.active` (initial set 1456 → 42 rows on a DB with 36 sessions of history); teacher screens narrowed too |
 | 5 | Medium | **No retention.** Transcripts, metrics, lesson records, summaries are kept until the database is cleared. | all tables | **Partly fixed** (`night/stdb-hardening`): scheduled `retention_job` deletes photo bytes 30 min after the session ended (`RETENTION_IMAGE_MIN`), optional `RETENTION_DAYS` prunes lesson JSON; transcripts, metrics and memory are kept on purpose (ARCHITECTURE §2 Retention) |
@@ -22,7 +22,7 @@ with the honest story for judges.
 | 11 | Low | **`summary_job` has no dedupe and no backup**: two end paths can schedule two summaries; a failed summary is not rescheduled. | `memory.ts` | **Fixed** (`night/stdb-hardening`): one `summary_job` per session; extraction backup job (watchdog) for a crashed run |
 | 12 | Info | **`requestTutor` / `tutor_request` has no UI caller.** The reducer and the worker's `tutorRequests.ts` exist; no screen inserts a request. | `pipeline.ts`, `worker/src/tutorRequests.ts` | Documented; the worker no longer subscribes, reducer marked unused (`night/stdb-hardening`) |
 
-| 13 | High | **Scheduled reducers and procedures are client-callable in 2.13.** Verified with the CLI on a local 2.13 server: `spacetime call <db> dashboard_tick {...}` runs the procedure, and `finish_text_sentence` reaches its body (rejected only by its own `scheduler only` check). The scheduled procedures (`synthesize_sentence`, `transcribe_phrase`, `extract_memory`, `summarize_session`, `sim_student_turn`, `dashboard_tick`) have no such check, so any client can trigger provider calls with arbitrary job rows. | `index.ts` scheduled exports | Open: caller checks belong to `night/identity`. The scheduled reducers (`finishTextSentence`, `runRetention`) check `ctx.sender == ctx.identity` |
+| 13 | High | **Scheduled reducers and procedures are client-callable in 2.13.** Verified with the CLI on a local 2.13 server: `spacetime call <db> dashboard_tick {...}` runs the procedure, and `finish_text_sentence` reaches its body (rejected only by its own `scheduler only` check). The scheduled procedures (`synthesize_sentence`, `transcribe_phrase`, `extract_memory`, `summarize_session`, `sim_student_turn`, `dashboard_tick`) have no such check, so any client can trigger provider calls with arbitrary job rows. | `index.ts` scheduled exports | Fixed on `night/identity`: every scheduled reducer and procedure starts with `auth.requireScheduler` (sender = module identity), one test per function in `spacetimedb/test/auth.test.ts` |
 
 ## Fixed in `night/stdb-hardening`
 
@@ -75,8 +75,8 @@ Not changed: `text_playback.endsAtMicros` / `extraction_cursor.runningSinceMicro
 
 **After the hackathon:**
 
-- Real identities and `ctx.sender` checks on session, teacher and presence reducers, and on the
-  client-callable scheduled procedures (finding 13) (`night/identity`).
+- Per-sender views for transcripts (`turn`, `reply_sentence`), so public tables are no longer
+  readable by raw SQL (identities, reducer checks and scheduler-only guards: done on `night/identity`).
 - Retention of transcripts, metrics and summaries (photos and optional lesson JSON expire already).
 - Enums instead of strings where the SDK allows; typed `learnerInsights` once clients can be
   redeployed together with the module.
@@ -108,9 +108,8 @@ TTS retry rows, extraction watchdog, summary dedupe, cached pack hash, typed `re
 
 **Weakest (say it before being asked):**
 
-1. No `ctx.sender` authorization on client reducers: any client can call session and teacher
-   reducers, and `setPresence` can take over a learner's presence. Test users only, by spec.
-2. Scheduled reducers and procedures are client-callable in 2.13; only the scheduled reducers check
-   the scheduler identity (finding 13).
-3. Transcripts, metrics and memory have no expiry (photos expire after 30 min); JSON in string
+1. Transcripts are public tables. Writes are authorized (passwordless device identities, every
+   client reducer checks `ctx.sender`, every scheduled function is scheduler-only; ARCHITECTURE §13),
+   but a client with a raw SQL subscription can still read transcripts; per-sender views are next.
+2. Transcripts, metrics and memory have no expiry (photos expire after 30 min); JSON in string
    columns, string enums, `learnerInsights` returns a JSON string.

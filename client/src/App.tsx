@@ -13,6 +13,8 @@ import { MicCheck } from './screens/MicCheck';
 import { StudentProfile } from './insights/StudentProfile';
 import { homeUrl, navigate, routeUrl } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { AccountGate } from './components/AccountGate';
+import { AccountsReady, useAccountSubscription } from './stdb/useAccounts';
 import { Wordmark, BRAND } from './brand/Logo';
 import './product.css';
 
@@ -63,7 +65,8 @@ const CONTEXT: Partial<Record<Route['name'], string>> = {
 
 export function App({ settings }: { settings: AppSettings }) {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.search));
-  const { conn, status, error } = useConnection(settings);
+  const { conn, status, error, identity } = useConnection(settings);
+  const accountsReady = useAccountSubscription(conn);
 
   useEffect(() => {
     const on = () => setRoute(parseRoute(window.location.search));
@@ -100,7 +103,7 @@ export function App({ settings }: { settings: AppSettings }) {
         <nav className="pr-nav">
           <a href="?lesson" data-testid="nav-lesson">Lesson lab</a>
           <a data-testid="nav-overview" {...link(routeUrl({ overview: '' }))}>Sessions</a>
-          <span data-testid="conn-status" data-status={status} className="pr-conn" title={`${settings.spacetimeUri} / ${settings.spacetimeDb}`}>
+          <span data-testid="conn-status" data-status={status} data-identity={identity} className="pr-conn" title={`${settings.spacetimeUri} / ${settings.spacetimeDb}${identity ? ` · device ${identity.slice(0, 8)}` : ''}`}>
             <i />
             {status}
           </span>
@@ -112,37 +115,51 @@ export function App({ settings }: { settings: AppSettings }) {
             Cannot reach SpacetimeDB at {settings.spacetimeUri} / {settings.spacetimeDb}: {error}
           </p>
         ) : null}
+        <AccountsReady.Provider value={accountsReady}>
         <ErrorBoundary key={`${route.name}${'id' in route ? route.id : ''}`}>
           {route.name === 'miccheck' ? (
             <MicCheck settings={settings} />
           ) : route.name === 'entry' ? (
-            <Entry />
+            <Entry conn={conn} />
           ) : !conn ? (
             <p className="pr-note" style={{ padding: '64px 0', textAlign: 'center' }}>Connecting…</p>
           ) : route.name === 'session' ? (
-            <SessionScreen key={`s${route.id}`} conn={conn} sessionId={route.id} settings={settings} />
+            <AccountGate conn={conn} target={{ kind: 'session', id: route.id }}>
+              <SessionScreen key={`s${route.id}`} conn={conn} sessionId={route.id} settings={settings} />
+            </AccountGate>
           ) : route.name === 'observe' ? (
             <ObserverScreen key={`o${route.id}`} conn={conn} sessionId={route.id} />
           ) : route.name === 'profile' ? (
-            <div className="sp-page">
-              <StudentProfile key={`p${route.id}`} conn={conn} learnerId={route.id} teacherId={route.teacherId} />
-            </div>
+            <AccountGate conn={conn} target={{ kind: 'teacher', id: route.teacherId }}>
+              <div className="sp-page">
+                <StudentProfile key={`p${route.id}`} conn={conn} learnerId={route.id} teacherId={route.teacherId} />
+              </div>
+            </AccountGate>
           ) : route.name === 'overview' ? (
             <Overview conn={conn} />
           ) : route.name === 'students' ? (
             <StudentHome conn={conn} />
           ) : route.name === 'student' ? (
-            <StudentStart key={`l${route.id}`} conn={conn} learnerId={route.id} />
+            <AccountGate conn={conn} target={{ kind: 'learner', id: route.id }}>
+              <StudentStart key={`l${route.id}`} conn={conn} learnerId={route.id} />
+            </AccountGate>
           ) : route.name === 'wait' ? (
-            <WaitingRoom key={`w${route.id}`} conn={conn} learnerId={route.id} />
+            <AccountGate conn={conn} target={{ kind: 'learner', id: route.id }}>
+              <WaitingRoom key={`w${route.id}`} conn={conn} learnerId={route.id} />
+            </AccountGate>
           ) : route.name === 'teachers' ? (
             <TeacherHome conn={conn} />
           ) : route.name === 'teacher' ? (
-            <ClassSetup key={`t${route.id}`} conn={conn} teacherId={route.id} />
+            <AccountGate conn={conn} target={{ kind: 'teacher', id: route.id }}>
+              <ClassSetup key={`t${route.id}`} conn={conn} teacherId={route.id} />
+            </AccountGate>
           ) : (
-            <Dashboard key={`c${route.id}`} conn={conn} classSessionId={route.id} />
+            <AccountGate conn={conn} target={{ kind: 'class', id: route.id }}>
+              <Dashboard key={`c${route.id}`} conn={conn} classSessionId={route.id} />
+            </AccountGate>
           )}
         </ErrorBoundary>
+        </AccountsReady.Provider>
       </main>
     </div>
   );
