@@ -16,8 +16,10 @@ export const E2E_DEFAULTS = {
   /** Barge-in -> local tutor audio stopped. */
   bargeInStopMs: 300,
   /** The tutor speaks first: background prepended to every fixture so the student starts
-   *  speaking after the opening (LLM + TTS + about three sentences of playback). */
-  openingLeadMs: Number(process.env.E2E_OPENING_LEAD_MS || 20_000),
+   *  speaking after the opening (LLM + TTS + 4-5 sentences, ~15-18 s). With only ~4 s between the
+   *  opening's end and the student's first word, the soft "Um" of um-pauses was reproducibly lost
+   *  (vad.misfire) and the turn split; with ~10 s it is detected as before. */
+  openingLeadMs: Number(process.env.E2E_OPENING_LEAD_MS || 28_000),
   /** First sentence of the opening: a few words (warn above). */
   openingFirstSentenceMaxWords: 10,
 };
