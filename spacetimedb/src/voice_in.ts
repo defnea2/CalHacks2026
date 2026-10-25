@@ -66,7 +66,7 @@ function openStudentTurn(ctx: Ctx, session: SessionRow): TurnRow {
     utteranceId: 0n,
     interrupted: false,
     createdAt: ctx.timestamp,
-    closedAt: undefined,
+    closedAt: undefined, source: "voice", intent: "",
   });
 }
 

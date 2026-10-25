@@ -51,6 +51,7 @@ export function startSession(ctx: Ctx, args: { learnerId: bigint; taskText: stri
     currentUtteranceId: 0n,
     startedAt: ctx.timestamp,
     endedAt: undefined,
+    voice: true,
   });
   ctx.db.extractionCursor.insert({ sessionId: session.id, nextIdx: 0 });
   return session;

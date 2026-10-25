@@ -34,6 +34,7 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AddBeatReducer from "./add_beat_reducer";
 import AddSentenceReducer from "./add_sentence_reducer";
 import AppendTutorTurnReducer from "./append_tutor_turn_reducer";
 import BeginOpeningReducer from "./begin_opening_reducer";
@@ -54,7 +55,11 @@ import SetTurnStateReducer from "./set_turn_state_reducer";
 import ShowBoardItemReducer from "./show_board_item_reducer";
 import StartConversationReducer from "./start_conversation_reducer";
 import StartSessionReducer from "./start_session_reducer";
+import StubLessonStateReducer from "./stub_lesson_state_reducer";
+import StubSetVoiceReducer from "./stub_set_voice_reducer";
 import SubmitGapAnswerReducer from "./submit_gap_answer_reducer";
+import SubmitInteractionReducer from "./submit_interaction_reducer";
+import SubmitTextTurnReducer from "./submit_text_turn_reducer";
 import UploadPhotoReducer from "./upload_photo_reducer";
 
 // Import all procedure arg schemas
@@ -63,12 +68,17 @@ import * as GetSessionImageProcedure from "./get_session_image_procedure";
 import * as SetTopicProcedure from "./set_topic_procedure";
 
 // Import all table schema definitions
+import AgentStatusRow from "./agent_status_table";
 import AudioOutRow from "./audio_out_table";
+import BeatRow from "./beat_table";
 import BoardItemRow from "./board_item_table";
+import CanvasStateRow from "./canvas_state_table";
 import CategoryRow from "./category_table";
 import ConceptRow from "./concept_table";
 import ExplanationRow from "./explanation_table";
 import LearnerRow from "./learner_table";
+import LearnerEventRow from "./learner_event_table";
+import LessonStateRow from "./lesson_state_table";
 import PhraseRow from "./phrase_table";
 import PlaybackFlushRow from "./playback_flush_table";
 import ReplySentenceRow from "./reply_sentence_table";
@@ -83,6 +93,17 @@ import TurnMetricsRow from "./turn_metrics_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  agentStatus: __table({
+    name: 'agent_status',
+    indexes: [
+      { accessor: 'id', name: 'agent_status_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'agent_status_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, AgentStatusRow),
   audioOut: __table({
     name: 'audio_out',
     indexes: [
@@ -91,6 +112,20 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, AudioOutRow),
+  beat: __table({
+    name: 'beat',
+    indexes: [
+      { accessor: 'id', name: 'beat_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'sessionId', name: 'beat_session_id_idx_btree', algorithm: 'btree', columns: [
+        'sessionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'beat_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, BeatRow),
   boardItem: __table({
     name: 'board_item',
     indexes: [
@@ -105,6 +140,17 @@ const tablesSchema = __schema({
       { name: 'board_item_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, BoardItemRow),
+  canvasState: __table({
+    name: 'canvas_state',
+    indexes: [
+      { accessor: 'sessionId', name: 'canvas_state_session_id_idx_btree', algorithm: 'btree', columns: [
+        'sessionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'canvas_state_session_id_key', constraint: 'unique', columns: ['sessionId'] },
+    ],
+  }, CanvasStateRow),
   category: __table({
     name: 'category',
     indexes: [
@@ -155,6 +201,31 @@ const tablesSchema = __schema({
       { name: 'learner_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, LearnerRow),
+  learnerEvent: __table({
+    name: 'learner_event',
+    indexes: [
+      { accessor: 'id', name: 'learner_event_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'sessionId', name: 'learner_event_session_id_idx_btree', algorithm: 'btree', columns: [
+        'sessionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'learner_event_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, LearnerEventRow),
+  lessonState: __table({
+    name: 'lesson_state',
+    indexes: [
+      { accessor: 'sessionId', name: 'lesson_state_session_id_idx_btree', algorithm: 'btree', columns: [
+        'sessionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'lesson_state_session_id_key', constraint: 'unique', columns: ['sessionId'] },
+    ],
+  }, LessonStateRow),
   phrase: __table({
     name: 'phrase',
     indexes: [
@@ -295,6 +366,7 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("add_beat", AddBeatReducer),
   __reducerSchema("add_sentence", AddSentenceReducer),
   __reducerSchema("append_tutor_turn", AppendTutorTurnReducer),
   __reducerSchema("begin_opening", BeginOpeningReducer),
@@ -315,7 +387,11 @@ const reducersSchema = __reducers(
   __reducerSchema("show_board_item", ShowBoardItemReducer),
   __reducerSchema("start_conversation", StartConversationReducer),
   __reducerSchema("start_session", StartSessionReducer),
+  __reducerSchema("stub_lesson_state", StubLessonStateReducer),
+  __reducerSchema("stub_set_voice", StubSetVoiceReducer),
   __reducerSchema("submit_gap_answer", SubmitGapAnswerReducer),
+  __reducerSchema("submit_interaction", SubmitInteractionReducer),
+  __reducerSchema("submit_text_turn", SubmitTextTurnReducer),
   __reducerSchema("upload_photo", UploadPhotoReducer),
 );
 

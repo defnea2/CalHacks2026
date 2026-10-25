@@ -6,6 +6,7 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AddBeatReducer from "../add_beat_reducer";
 import AddSentenceReducer from "../add_sentence_reducer";
 import AppendTutorTurnReducer from "../append_tutor_turn_reducer";
 import BeginOpeningReducer from "../begin_opening_reducer";
@@ -26,9 +27,14 @@ import SetTurnStateReducer from "../set_turn_state_reducer";
 import ShowBoardItemReducer from "../show_board_item_reducer";
 import StartConversationReducer from "../start_conversation_reducer";
 import StartSessionReducer from "../start_session_reducer";
+import StubLessonStateReducer from "../stub_lesson_state_reducer";
+import StubSetVoiceReducer from "../stub_set_voice_reducer";
 import SubmitGapAnswerReducer from "../submit_gap_answer_reducer";
+import SubmitInteractionReducer from "../submit_interaction_reducer";
+import SubmitTextTurnReducer from "../submit_text_turn_reducer";
 import UploadPhotoReducer from "../upload_photo_reducer";
 
+export type AddBeatParams = __Infer<typeof AddBeatReducer>;
 export type AddSentenceParams = __Infer<typeof AddSentenceReducer>;
 export type AppendTutorTurnParams = __Infer<typeof AppendTutorTurnReducer>;
 export type BeginOpeningParams = __Infer<typeof BeginOpeningReducer>;
@@ -49,6 +55,10 @@ export type SetTurnStateParams = __Infer<typeof SetTurnStateReducer>;
 export type ShowBoardItemParams = __Infer<typeof ShowBoardItemReducer>;
 export type StartConversationParams = __Infer<typeof StartConversationReducer>;
 export type StartSessionParams = __Infer<typeof StartSessionReducer>;
+export type StubLessonStateParams = __Infer<typeof StubLessonStateReducer>;
+export type StubSetVoiceParams = __Infer<typeof StubSetVoiceReducer>;
 export type SubmitGapAnswerParams = __Infer<typeof SubmitGapAnswerReducer>;
+export type SubmitInteractionParams = __Infer<typeof SubmitInteractionReducer>;
+export type SubmitTextTurnParams = __Infer<typeof SubmitTextTurnReducer>;
 export type UploadPhotoParams = __Infer<typeof UploadPhotoReducer>;
 
