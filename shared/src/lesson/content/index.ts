@@ -3,9 +3,27 @@
 import type { ContentLibrary } from '../types';
 import { taxonomy } from '../pack/taxonomy';
 import type { ConceptBundle } from './helpers';
+import { placeValue } from './placeValue';
+import { multiplicationGroups } from './multiplicationGroups';
+import { divisionSharing } from './divisionSharing';
+import { fractionsUnit } from './fractionsUnit';
+import { fractionsCompare } from './fractionsCompare';
 import { fractionsExpand } from './fractionsExpand';
+import { fractionsAddSame } from './fractionsAddSame';
+import { decimalsTenths } from './decimalsTenths';
 
-export const bundles: ConceptBundle[] = [fractionsExpand];
+export type { ConceptBundle } from './helpers';
+
+export const bundles: ConceptBundle[] = [
+  placeValue,
+  multiplicationGroups,
+  divisionSharing,
+  fractionsUnit,
+  fractionsCompare,
+  fractionsExpand,
+  fractionsAddSame,
+  decimalsTenths,
+];
 
 export const library: ContentLibrary = {
   categories: taxonomy.map((c, i) => ({ key: c.key, title: c.title, position: i + 1 })),

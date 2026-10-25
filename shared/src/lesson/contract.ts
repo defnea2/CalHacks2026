@@ -338,7 +338,8 @@ function wrongAlternatives(form: string, value: string): string[] {
  * - checkAnswer accepts answer.value for its own form;
  * - every checkable step equation holds, except a repair task's wrong step, which must be
  *   wrong and become right with its `expected`;
- * - each step's `expected` matches its equation; the last step's `expected` equals the answer;
+ * - each step's `expected` matches its equation; without a blank, the last step's `expected`
+ *   equals the answer;
  * - the answer is derived: a task with one \square is solved by the answer (and not by a
  *   neighbouring value); otherwise the last checkable step must end in the answer.
  */
@@ -378,7 +379,8 @@ export function checkTaskAnswer(t: LibraryTask): string[] {
 
   const last = t.steps[t.steps.length - 1];
   const lastExp = last && stepExpected(last);
-  if (answerExp && lastExp && (lastExp.form === 'relation' ? lastExp.value !== answerExp.value : !checkAnswer(t.answer, lastExp.value)))
+  // (Tasks with a blank are solved by the blank; their steps may end on an intermediate value.)
+  if (answerExp && lastExp && !t.show.includes(BLANK) && (lastExp.form === 'relation' ? lastExp.value !== answerExp.value : !checkAnswer(t.answer, lastExp.value)))
     errs.push(`${where}: last step expected "${lastExp.value}" differs from answer "${value}"`);
 
   if (!answerExp) return errs;
