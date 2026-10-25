@@ -1,9 +1,9 @@
 # Deploy runbook: Maincloud + Cloudflare Pages (CLOUD_PLAN Part A)
 
-**Status: prepared, not deployed.** The scripts and the client build are ready (branch
-`night/maincloud-prep`). Nothing has been published to Maincloud and nothing has been deployed to
-Cloudflare. The local stack (`local` server on `127.0.0.1:3000`, database `voice-tutor`) is not
-changed by any step below.
+**Status: deployed 2026-10-25** (Maincloud database `fibonacci-demo`, Cloudflare Pages project
+`fibonacci` at <https://fibonacci-26f.pages.dev/>). See [Current deployment](#current-deployment)
+for the exact state, commands and measured numbers. The local stack (`local` server on
+`127.0.0.1:3000`, database `voice-tutor`) is not changed by any step below.
 
 What runs where after this runbook:
 
@@ -160,9 +160,13 @@ Deploy (Cloudflare limits verified 2026-10-25: 25 MiB per file, 20,000 files on 
 
 ```bash
 npx wrangler login                                                     # [USER] once, browser
-npx wrangler pages project create fibonacci --production-branch main   # [USER] once
+npx wrangler pages project create fibonacci --production-branch main --force   # [USER] once
 npx wrangler pages deploy client/dist --project-name fibonacci --branch main
 ```
+
+wrangler 4.15x delegates `pages project create` to Workers, which fails in a pnpm workspace root;
+`--force` (once, on create only) creates a classic Pages project. Run wrangler from `client/`. The
+`fibonacci.pages.dev` subdomain was taken, so Pages assigned `fibonacci-26f.pages.dev`.
 
 **[USER]** decisions: Cloudflare account, project name (`fibonacci` gives
 `https://fibonacci.pages.dev`; it must be free), custom domain (Pages dashboard → Custom domains).
@@ -205,6 +209,106 @@ interim end-to-end check.
 - Pages: roll back to an earlier deployment in the dashboard, or delete the project.
 - **[USER]** The Maincloud database can stay (Free pauses it when idle) or be deleted:
   `spacetime delete fibonacci-demo --server maincloud` (cannot be undone).
+
+## Current deployment
+
+As of 2026-10-25 16:10 UTC (branch `night/maincloud-deploy`).
+
+| Piece | Value |
+| --- | --- |
+| Maincloud database | `fibonacci-demo` (owner = the logged-in CLI identity `c200657a…`), Free plan |
+| Database identity | `c200b332ee7a2cef0cb77fd41083155a9189d2c80bd2cf137aa7cd27b9c0b26b` |
+| Module URI | `wss://maincloud.spacetimedb.com` (worker and client) |
+| STT | Cartesia direct: `STT_BASE_URL=https://api.cartesia.ai`, `CARTESIA_STT_MODEL=ink-whisper` |
+| Client | Cloudflare Pages project `fibonacci`, <https://fibonacci-26f.pages.dev/> (production branch `main`) |
+| Worker | **not running persistently**: start it on the laptop (below) |
+| Secrets | `AGENT_SECRET`, `INSIGHTS_KEY` (+ the STT vars) in `/Users/leanderneubronner/Desktop/CalHacks2026/.env.maincloud` (ignored via `.env.*`, mode 600). API keys come from the main checkout's `.env`. Never commit or print them. |
+| Seeded | demo students Ava Chen, Sam Rivera, Priya Patel; teachers Ms. Park, Mr. Alvarez; 20 sim profiles from `init` |
+| Test data | learners `Smoke NNNNN` and sessions 1–10 from smoke runs; class 1 (preset A, 4 sims, ended) |
+
+**Module env is honoured on Maincloud (CLOUD_PLAN F6: verified).** `register_agent` compares
+against `ctx.env.AGENT_SECRET` and succeeded; STT and TTS (Cartesia key) and the sim turns, memory
+and dashboard (Anthropic key) all worked. No secret-table workaround is needed.
+
+### Commands
+
+All from the repository root (main checkout). Load the cloud secrets and API keys into the shell
+first (nothing is printed):
+
+```bash
+set -a; source .env; source .env.maincloud; set +a
+export SPACETIME_SERVER=maincloud SPACETIME_DB=fibonacci-demo
+```
+
+Worker (keep the laptop awake; only one worker per database):
+
+```bash
+SPACETIME_URI=wss://maincloud.spacetimedb.com AGENT_TOKEN_FILE=worker/.agent-token.maincloud \
+pnpm --filter worker start
+# expect: connected to wss://maincloud.spacetimedb.com/fibonacci-demo, registered as agent, subscribed
+```
+
+A relative `AGENT_TOKEN_FILE` is resolved from the repo root since this branch. Before, the
+`pnpm --filter` cwd `worker/` made the write fail silently (`worker/worker/` does not exist), so
+the worker registered a fresh identity on every start.
+
+Republish the module after a code change (hot-swap, keeps data): `node scripts/publish.mjs --yes-remote`.
+
+Rebuild and redeploy the client:
+
+```bash
+VITE_SPACETIME_URI=wss://maincloud.spacetimedb.com VITE_SPACETIME_DB=fibonacci-demo pnpm --filter client build
+node client/scripts/check-dist.mjs
+(cd client && npx wrangler pages deploy dist --project-name fibonacci --branch main --commit-dirty=true)
+```
+
+The upload of 83 files took about 5 minutes from this laptop. To serve the same build locally
+instead (any free port, not 5175): `python3 -m http.server 5397 --bind 127.0.0.1 -d client/dist`.
+
+Smoke (needs the worker): `pnpm --filter e2e smoke:deployed https://fibonacci-26f.pages.dev/ [wav]`
+(`e2e/fixtures/` is not in git; generate it with `pnpm --filter e2e gen-speech` or pass a wav path).
+
+Class simulation: `node scripts/simulate.mjs --yes-remote --preset A --n 4`, end it with
+`node scripts/simulate.mjs --end --yes-remote`. It prints a `127.0.0.1:5175` dashboard link; for
+the cloud open `https://fibonacci-26f.pages.dev/?class=<id>` instead.
+
+Raw SQL: run `spacetime sql` **with `--no-config`, or outside the repo**. Inside the repo the CLI
+reads `spacetime.json` and queries `voice-tutor` instead (on maincloud: "failed to find database
+`voice-tutor`"):
+`spacetime sql --no-config --server maincloud fibonacci-demo "SELECT name FROM learner"`.
+
+### Checks done
+
+- Publish, seed (`SELECT name FROM learner` lists the 3 demo students), worker registered as agent.
+- `check-dist.mjs` ok (84 files, baked URI/DB). Pages headers: `.wasm` `application/wasm`, `.onnx`
+  `application/octet-stream`, `.mjs` `text/javascript`, `index.html` `no-cache`, `vad/` 1 day.
+- `smoke:deployed` against a local static serve of the build: 5 of 7 runs green. The first 2 (just
+  after the database was created) waited 20 s for the session screen and failed, although the
+  session row existed on the server. All later runs passed; not reproduced. Against
+  <https://fibonacci-26f.pages.dev/>: 2 of 2 green (session, mic, STT transcript, 3+ tutor sentences).
+- Simulated class (preset A, 4 students): openings, sim turns, a dashboard summary and 2 clusters
+  within 35 s; ended cleanly.
+
+### Measured (Maincloud, worker on the laptop, `turn_metrics`)
+
+| Metric | Maincloud | Local (latency-internal) |
+| --- | --- | --- |
+| Network RTT laptop to maincloud (TCP connect) | 67–117 ms | n/a |
+| Reducer RTT, browser (`pushAudio`, 5 KB) | 136–290 ms, about 230 ms median (n=8) | 8 / 14 ms |
+| Reducer RTT, browser (`endTurn`, `reportNoise`) | about 105 ms | n/a |
+| Voice turn end to first audio (n=6, 4 preemptive) | p50 2.8 s, range 2.16–3.46 s | p50 about 2.75–3.4 s |
+| Voice turn end to first playback | p50 3.2 s, range 2.49–3.82 s | n/a |
+| Session start to opening audio (lead-in TTS, n=7) | p50 0.80 s, range 0.55–1.41 s | n/a |
+| Session start to opening playback | p50 1.15 s, range 0.87–2.11 s | n/a |
+| Sim (text) turn end to first sentence (n=9) | p50 1.54 s, range 1.44–3.01 s | n/a |
+| Topic prefetch, 4 sims at once | 139 / 175 / 266 / 392 ms | n/a |
+| Pages: Smart Turn model fetch (8.3 MiB, cold) | 1.3–2.0 s | about 40 ms (local serve) |
+
+Turn end to first audio is about the same as local, as predicted: the LLM hop is still laptop to
+Anthropic. The staggered topic-prefetch times with 4 parallel sessions suggest procedures run one
+at a time (about 100 ms each); no errors. One outlier: a turn whose STT returned "…" took 17.4 s to
+first audio (stall watchdog path). The module log shows one benign `begin_lesson: utterance … is
+not current` after a barge-in.
 
 ## Env vars at a glance
 
