@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.base.json",
+  // No Node or DOM typings: the package must run inside the SpacetimeDB module.
+  "compilerOptions": { "lib": ["ES2022"], "types": [] },
+  "include": ["src", "test"]
+}
