@@ -1,0 +1,30 @@
+{
+  "_help": "Demo users for `node scripts/seed-demo.mjs`. Edit names/ages/grades/styles here and re-run the script. Names are the key: a name that already exists is skipped (rows are never changed or deleted); to change an existing user, reset with `SPACETIME_DB=voice-tutor node scripts/publish.mjs --clear` and re-run. Module limits: name 1-40 chars (teacher 1-60), age 5-18, grade 0-13, style max 200 chars. Avoid the 20 simulated students' names (shared/src/classroom/simStudents.ts: Mia Hoffmann, Jonas Becker, ...).",
+  "students": [
+    {
+      "name": "Ava Chen",
+      "age": 9,
+      "grade": 4,
+      "style": "pictures first, short hints",
+      "demo": "self-learning flow (On my own): fractions"
+    },
+    {
+      "name": "Sam Rivera",
+      "age": 11,
+      "grade": 6,
+      "style": "step by step, likes to check with numbers",
+      "demo": "self-learning flow (On my own): decimals"
+    },
+    {
+      "name": "Priya Patel",
+      "age": 8,
+      "grade": 3,
+      "style": "short sentences, lots of encouragement, pictures first",
+      "demo": "wait-for-teacher flow (joins Ms. Park's class)"
+    }
+  ],
+  "teachers": [
+    { "name": "Ms. Park" },
+    { "name": "Mr. Alvarez" }
+  ]
+}
