@@ -1,5 +1,6 @@
 // Identity and authorization (src/auth.ts): every client reducer/procedure, allowed and denied.
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { TimeDuration } from 'spacetimedb';
 import { TestAuth } from 'spacetimedb/server/test-utils';
@@ -42,7 +43,7 @@ function boardItem(h: H, sessionId: bigint): bigint {
   h.withReducerTx(TestAuth.internal(), ctx => {
     id = ctx.db.boardItem.insert({
       id: 0n, sessionId, idx: 0, kind: 'plain', content: '{}', phase: 'explore', visible: true, utteranceId: 0n, sentenceIdx: 0,
-      taskKey: '', answerState: 'open', lastAnswer: '', createdAt: ctx.timestamp, markerPos: -1,
+      taskKey: '', answerState: 'open', lastAnswer: '', createdAt: ctx.timestamp, markerPos: -1, attempts: 0,
     }).id;
   });
   return id;
@@ -318,5 +319,20 @@ describe('scheduled functions: scheduler only (client-callable in 2.13)', () => 
   it('finishTextSentence (scheduled reducer) refuses a client and the agent', () => {
     const { h, client, agent } = setup();
     for (const who of [client, agent]) expect(() => call(h, who, mod.finishTextSentence as any, { job: { ...job, sentenceId: 1n, utteranceId: 1n, idx: 0 } })).toThrow(/scheduler only/);
+  });
+  it('runRetention (scheduled reducer) refuses a client and the agent', () => {
+    const { h, client, agent } = setup();
+    for (const who of [client, agent]) expect(() => call(h, who, mod.runRetention as any, { job })).toThrow(/scheduler only/);
+  });
+  it('every scheduled function of the module is covered above', () => {
+    const covered = ['transcribePhrase', 'synthesizeSentence', 'extractMemory', 'summarizeSession', 'dashboardTick', 'simStudentTurn', 'finishTextSentence', 'runRetention'];
+    const src = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+    const scheduled = [...src.matchAll(/export const (\w+) = spacetimedb\.(?:reducer|procedure)\(\s*\{ onSchedule:/g)].map(m => m[1]);
+    expect(scheduled.sort()).toEqual(covered.sort());
+    // Each scheduled body starts with the guard.
+    for (const name of scheduled) {
+      const body = src.slice(src.indexOf(`export const ${name} =`)).split('\n});')[0]!.split('\n);')[0]!;
+      expect(body, name).toContain('auth.requireScheduler(ctx)');
+    }
   });
 });

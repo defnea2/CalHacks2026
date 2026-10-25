@@ -21,7 +21,7 @@ const clear = argv.includes('--clear');
 
 const fileEnv = loadEnv();
 // Shell variables override .env (e.g. STT_BASE_URL=https://host/stt-proxy.php node scripts/publish.mjs).
-const PASS = /^(CARTESIA_|OPENROUTER_|ANTHROPIC_|STT_|TTS_|MEMORY_|SIM_|DASHBOARD_|LESSON_|INSIGHTS_|AGENT_SECRET$|SPACETIME_DB$|SPACETIME_SERVER$)/;
+const PASS = /^(CARTESIA_|OPENROUTER_|ANTHROPIC_|STT_|TTS_|MEMORY_|SIM_|DASHBOARD_|LESSON_|INSIGHTS_|RETENTION_|AGENT_SECRET$|SPACETIME_DB$|SPACETIME_SERVER$)/;
 const env = { ...fileEnv, ...Object.fromEntries(Object.entries(process.env).filter(([k]) => PASS.test(k))) };
 const target = resolveTarget(env);
 
@@ -56,7 +56,7 @@ const moduleEnv = {
   OPENROUTER_EXTRACTION_MODEL: env.OPENROUTER_EXTRACTION_MODEL || env.OPENROUTER_MODEL || '',
   AGENT_SECRET: env.AGENT_SECRET,
 };
-const OPTIONAL_MODULE_ENV = ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS', 'SIM_MAX_TURNS', 'DASHBOARD_INTERVAL_S', 'DASHBOARD_EFFORT', 'LESSON_ARC', 'INSIGHTS_KEY', 'ANTHROPIC_API_KEY', 'ANTHROPIC_EXTRACTION_MODEL', 'MEMORY_PROVIDER'];
+const OPTIONAL_MODULE_ENV = ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS', 'SIM_MAX_TURNS', 'DASHBOARD_INTERVAL_S', 'DASHBOARD_EFFORT', 'LESSON_ARC', 'INSIGHTS_KEY', 'RETENTION_IMAGE_MIN', 'RETENTION_DAYS', 'ANTHROPIC_API_KEY', 'ANTHROPIC_EXTRACTION_MODEL', 'MEMORY_PROVIDER'];
 for (const k of OPTIONAL_MODULE_ENV) if (env[k]) moduleEnv[k] = env[k];
 
 const args = ['publish', target.db, '--server', target.server, '--module-path', 'spacetimedb', '--yes'];

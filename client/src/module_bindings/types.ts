@@ -90,6 +90,7 @@ export const BoardItem = __t.object("BoardItem", {
   lastAnswer: __t.string(),
   createdAt: __t.timestamp(),
   markerPos: __t.i32(),
+  attempts: __t.u32(),
 });
 export type BoardItem = __Infer<typeof BoardItem>;
 
@@ -343,6 +344,16 @@ export const Presence = __t.object("Presence", {
 });
 export type Presence = __Infer<typeof Presence>;
 
+export const RefreshDashboardResult = __t.object("RefreshDashboardResult", {
+  ok: __t.bool(),
+  skipped: __t.string(),
+  error: __t.string(),
+  repaired: __t.bool(),
+  repairs: __t.array(__t.string()),
+  clusters: __t.u32(),
+});
+export type RefreshDashboardResult = __Infer<typeof RefreshDashboardResult>;
+
 export const ReplySentence = __t.object("ReplySentence", {
   id: __t.u64(),
   sessionId: __t.u64(),
@@ -354,6 +365,12 @@ export const ReplySentence = __t.object("ReplySentence", {
   createdAt: __t.timestamp(),
 });
 export type ReplySentence = __Infer<typeof ReplySentence>;
+
+export const RetentionJob = __t.object("RetentionJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type RetentionJob = __Infer<typeof RetentionJob>;
 
 export const Role = __t.object("Role", {
   identity: __t.identity(),
@@ -489,6 +506,7 @@ export const StudentCluster = __t.object("StudentCluster", {
   name: __t.string(),
   description: __t.string(),
   learnerIds: __t.string(),
+  members: __t.array(__t.u64()),
 });
 export type StudentCluster = __Infer<typeof StudentCluster>;
 
@@ -555,6 +573,7 @@ export const TtsJob = __t.object("TtsJob", {
   utteranceId: __t.u64(),
   idx: __t.u32(),
   speech: __t.string(),
+  attempt: __t.u32(),
 });
 export type TtsJob = __Infer<typeof TtsJob>;
 

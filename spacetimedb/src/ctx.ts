@@ -69,17 +69,22 @@ export function findSentence(ctx: Ctx, utteranceId: bigint, idx: number): Senten
   return undefined;
 }
 
-/** (Prefix scans on multi-column indexes fail in the test datastore, so scan by session.) */
+/** Sentences of one utterance in idx order. Uses the single-column utteranceId index: a prefix
+ *  scan on byUtteranceIdx ([utteranceId] alone) is valid on the host, but the 2.13 test datastore
+ *  cannot decode a prefix whose last element is a point (empty range end). */
 export function utteranceSentences(ctx: Ctx, sessionId: bigint, utteranceId: bigint): SentenceRow[] {
-  return [...ctx.db.replySentence.sessionId.filter(sessionId)].filter(s => s.utteranceId === utteranceId).sort((a, b) => a.idx - b.idx);
+  return [...ctx.db.replySentence.utteranceId.filter(utteranceId)].filter(s => s.sessionId === sessionId).sort((a, b) => a.idx - b.idx);
 }
 
 /** Deletes the not-yet-started tts_job rows of a session (all, or one utterance), so a cancelled
  *  reply (barge-in, supersede, end of session) makes no further Cartesia calls and holds no
- *  procedure slots. A job already running is unaffected; its commit re-checks `pending`.
- *  tts_job holds only the few in-flight sentences, so a scan is cheap (no index needed). */
+ *  procedure slots. A job already running is unaffected; its commit re-checks `pending`
+ *  (and a retry it schedules is only inserted while the sentence is still pending). */
 export function cancelTtsJobs(ctx: Ctx, sessionId: bigint, utteranceId?: bigint): number {
-  const doomed = [...ctx.db.ttsJob.iter()].filter(j => j.sessionId === sessionId && (utteranceId === undefined || j.utteranceId === utteranceId));
+  const doomed =
+    utteranceId === undefined
+      ? [...ctx.db.ttsJob.sessionId.filter(sessionId)]
+      : [...ctx.db.ttsJob.utteranceId.filter(utteranceId)].filter(j => j.sessionId === sessionId);
   for (const j of doomed) ctx.db.ttsJob.scheduledId.delete(j.scheduledId);
   return doomed.length;
 }
@@ -105,7 +110,7 @@ export function metricsFor(ctx: Ctx, sessionId: bigint, turnIdx: number): Metric
 
 export function metricsForUtterance(ctx: Ctx, sessionId: bigint, utteranceId: bigint): MetricsRow | undefined {
   if (utteranceId === 0n) return undefined;
-  for (const m of ctx.db.turnMetrics.sessionId.filter(sessionId)) if (m.utteranceId === utteranceId) return m;
+  for (const m of ctx.db.turnMetrics.utteranceId.filter(utteranceId)) if (m.sessionId === sessionId) return m;
   return undefined;
 }
 

@@ -5,8 +5,21 @@ import type { Ctx } from './ctx';
 
 const META_ID = 0;
 
-/** Pack version plus a content hash, so edited seed content reloads even without a version bump. */
+let cachedVersion: string | undefined;
+
+/** Pack version plus a content hash, so edited seed content reloads even without a version bump.
+ *  The pack is bundled into the module, so the hash is computed once per module instance (every
+ *  client connect compares it with library_meta). */
 function libraryVersion(): string {
+  return (cachedVersion ??= computeLibraryVersion());
+}
+
+/** Tests only (they edit the bundled pack at runtime). */
+export function resetLibraryVersionCache(): void {
+  cachedVersion = undefined;
+}
+
+function computeLibraryVersion(): string {
   const json = JSON.stringify(pack.content);
   let h = 0x811c9dc5;
   for (let i = 0; i < json.length; i++) {

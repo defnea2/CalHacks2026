@@ -274,6 +274,12 @@ const tablesSchema = __schema({
       { accessor: 'id', name: 'learner_id_idx_btree', algorithm: 'btree', columns: [
         'id',
       ] },
+      { accessor: 'isSimulated', name: 'learner_is_simulated_idx_btree', algorithm: 'btree', columns: [
+        'isSimulated',
+      ] },
+      { accessor: 'simRank', name: 'learner_sim_rank_idx_btree', algorithm: 'btree', columns: [
+        'simRank',
+      ] },
     ],
     constraints: [
       { name: 'learner_id_key', constraint: 'unique', columns: ['id'] },
@@ -339,6 +345,9 @@ const tablesSchema = __schema({
       { accessor: 'learnerId', name: 'presence_learner_id_idx_btree', algorithm: 'btree', columns: [
         'learnerId',
       ] },
+      { accessor: 'status', name: 'presence_status_idx_btree', algorithm: 'btree', columns: [
+        'status',
+      ] },
     ],
     constraints: [
       { name: 'presence_learner_id_key', constraint: 'unique', columns: ['learnerId'] },
@@ -352,6 +361,9 @@ const tablesSchema = __schema({
       ] },
       { accessor: 'sessionId', name: 'reply_sentence_session_id_idx_btree', algorithm: 'btree', columns: [
         'sessionId',
+      ] },
+      { accessor: 'utteranceId', name: 'reply_sentence_utterance_id_idx_btree', algorithm: 'btree', columns: [
+        'utteranceId',
       ] },
       { accessor: 'byUtteranceIdx', name: 'reply_sentence_utterance_id_idx_idx_btree', algorithm: 'btree', columns: [
         'utteranceId',
@@ -367,6 +379,9 @@ const tablesSchema = __schema({
     indexes: [
       { accessor: 'active', name: 'session_active_idx_btree', algorithm: 'btree', columns: [
         'active',
+      ] },
+      { accessor: 'classSessionId', name: 'session_class_session_id_idx_btree', algorithm: 'btree', columns: [
+        'classSessionId',
       ] },
       { accessor: 'id', name: 'session_id_idx_btree', algorithm: 'btree', columns: [
         'id',
@@ -484,6 +499,9 @@ const tablesSchema = __schema({
       { accessor: 'bySessionTurn', name: 'turn_metrics_session_id_turn_idx_idx_btree', algorithm: 'btree', columns: [
         'sessionId',
         'turnIdx',
+      ] },
+      { accessor: 'utteranceId', name: 'turn_metrics_utterance_id_idx_btree', algorithm: 'btree', columns: [
+        'utteranceId',
       ] },
     ],
     constraints: [

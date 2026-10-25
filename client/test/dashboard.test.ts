@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agoLabel, clusterRows, clusterSlots, nextLabel, observeOrder, parseLearnerIds, ROW_SLOTS, stepObserve, ungroupedIds, type ClusterIn } from '../src/lib/dashboard';
+import { agoLabel, clusterRows, clusterSlots, nextLabel, observeOrder, parseLearnerIds, refreshResult, clusterMemberIds, ROW_SLOTS, stepObserve, ungroupedIds, type ClusterIn } from '../src/lib/dashboard';
 
 let n = 0;
 const cl = (size: number, position = n): ClusterIn => {
@@ -112,5 +112,21 @@ describe('dashboard timers', () => {
     expect(nextLabel(now, { ...base, impersonating: true })).toBe('paused while you observe');
     expect(nextLabel(now, { ...base, lastError: 'http 529' })).toBe('last update failed, retrying');
     expect(nextLabel(now, { ...base, nextDueMs: null })).toBe('');
+  });
+});
+
+describe('refreshResult (typed procedure result, older JSON string accepted)', () => {
+  it('reads both shapes', () => {
+    expect(refreshResult({ ok: false, skipped: 'impersonating', error: '', repaired: false, repairs: [], clusters: 0 })).toEqual({ ok: false, skipped: 'impersonating', error: '' });
+    expect(refreshResult('{"ok":true,"clusters":2}')).toEqual({ ok: true, skipped: '', error: '' });
+    expect(refreshResult('')).toEqual({ ok: false, skipped: '', error: '' });
+  });
+});
+
+describe('clusterMemberIds', () => {
+  it('prefers the typed members column, falls back to the JSON string', () => {
+    expect(clusterMemberIds({ learnerIds: '["1"]', members: [5n, 6n] })).toEqual(['5', '6']);
+    expect(clusterMemberIds({ learnerIds: '["1","2"]', members: [] })).toEqual(['1', '2']);
+    expect(clusterMemberIds({ learnerIds: '["3"]' })).toEqual(['3']);
   });
 });

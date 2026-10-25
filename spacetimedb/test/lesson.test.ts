@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { pack } from '../../shared/src/lesson/index';
 import { canTransition } from '../../shared/src/lesson/api';
+import { GAP_MAX_ATTEMPTS } from '../src/lesson';
 import { call, makeLearner, makeSession, mod, proc, session, setup, studentSays } from './helpers';
 
 // Kinds/phases are taken from the pack by shape, never by name.
@@ -125,6 +126,25 @@ describe('board', () => {
     expect(h.db.boardItem.id.find(item.id)!).toMatchObject({ answerState: 'wrong', lastAnswer: 'four' });
     call(h, client, mod.submitGapAnswer, { boardItemId: item.id, answer: 'three' });
     expect(h.db.boardItem.id.find(item.id)!.answerState).toBe('correct');
+  });
+
+  it('submitGapAnswer: only in an active session, stops after GAP_MAX_ATTEMPTS, a solved task is not re-graded', () => {
+    const { h, agent, client, s } = start();
+    const content = JSON.stringify({ latex: '\\frac{1}{2} = \\frac{\\square}{6}' });
+    call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind: answerable.name, content, expectedAnswer: '{"form":"number","value":"3"}' }) });
+    const item = [...h.db.boardItem.sessionId.filter(s.id)][0]!;
+    for (let i = 0; i < GAP_MAX_ATTEMPTS; i++) call(h, client, mod.submitGapAnswer, { boardItemId: item.id, answer: String(10 + i) });
+    expect(h.db.boardItem.id.find(item.id)!).toMatchObject({ answerState: 'wrong', attempts: GAP_MAX_ATTEMPTS });
+    expect(() => call(h, client, mod.submitGapAnswer, { boardItemId: item.id, answer: '3' })).toThrow(/no more answers/);
+
+    call(h, agent, mod.showBoardItem, { sessionId: s.id, ...show({ kind: answerable.name, content, expectedAnswer: '{"form":"number","value":"3"}' }) });
+    const second = [...h.db.boardItem.sessionId.filter(s.id)].find(b => b.id !== item.id)!;
+    call(h, client, mod.submitGapAnswer, { boardItemId: second.id, answer: '3' });
+    call(h, client, mod.submitGapAnswer, { boardItemId: second.id, answer: '4' });
+    expect(h.db.boardItem.id.find(second.id)!).toMatchObject({ answerState: 'correct', lastAnswer: '3', attempts: 1 });
+
+    call(h, client, mod.endSession, { sessionId: s.id });
+    expect(() => call(h, client, mod.submitGapAnswer, { boardItemId: second.id, answer: '3' })).toThrow(/ended/);
   });
 
   it('fraction answers must match in form', () => {
