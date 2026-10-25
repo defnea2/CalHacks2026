@@ -314,6 +314,12 @@ export const ReplySentence = __t.object("ReplySentence", {
 });
 export type ReplySentence = __Infer<typeof ReplySentence>;
 
+export const RetentionJob = __t.object("RetentionJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type RetentionJob = __Infer<typeof RetentionJob>;
+
 export const Role = __t.object("Role", {
   identity: __t.identity(),
   role: __t.string(),

@@ -21,7 +21,9 @@ export type EnvName =
   | 'DASHBOARD_INTERVAL_S'
   | 'DASHBOARD_EFFORT'
   | 'LESSON_ARC'
-  | 'INSIGHTS_KEY';
+  | 'INSIGHTS_KEY'
+  | 'RETENTION_IMAGE_MIN'
+  | 'RETENTION_DAYS';
 
 let override: Partial<Record<EnvName, string>> | null = null;
 

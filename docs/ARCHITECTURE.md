@@ -158,6 +158,23 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 | `summary_job` | procedure `summarizeSession` | at session end | |
 | `sim_turn_job` | procedure `simStudentTurn` | 2–5 s after the tutor finished speaking to a simulated student | busy re-check every 1.5 s (max 40), failures retried after 5 s twice; stale jobs do nothing |
 | `dashboard_job` | procedure `dashboardTick` | `DASHBOARD_INTERVAL_S` (30 s) after the previous refresh finished | failed run retried in 10 s; skipped while the teacher observes |
+| `retention_job` | reducer `runRetention` | one interval row, every 5 min (created on init and on connect) | scheduler-only; idempotent sweep, see Retention |
+
+### Retention
+
+`retention.ts` deletes what is only needed while a session runs:
+
+| Data | Deleted | Env |
+| --- | --- | --- |
+| `turn_image`, `session_image` (photo bytes) | `RETENTION_IMAGE_MIN` minutes (default 30) after the session ended | `0` / `off` keeps them |
+| `class_document` (image bytes of a class's document) | the same time after the class session ended | same |
+| `lesson_record`, `lesson_plan`, `beat` (planner JSON) | `RETENTION_DAYS` days after the session ended | default off |
+| `audio_in` (raw mic audio) | at transcription and at session end (not the sweep) | |
+
+Kept: sessions, turns, phrases (text), reply sentences, metrics, `lesson_state`, `canvas_state`,
+memory notes, evidence, mastery, summaries, and the history flags `session.hasImage` /
+`turn.hasPhoto`. A sweep only touches rows past their limit, so it is idempotent; photo tables stay
+small, so it reads them whole (`lesson_record` / `lesson_plan` only when `RETENTION_DAYS` is set).
 
 ### Indexes
 

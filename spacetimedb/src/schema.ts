@@ -345,6 +345,16 @@ export const summaryJob = table(
   }
 );
 
+/** One interval row (every RETENTION_SWEEP_S): deletes photo bytes / old lesson JSON of ended
+ *  sessions (retention.ts). Created on init and on connect. */
+export const retentionJob = table(
+  { name: 'retention_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+  }
+);
+
 // ---------------------------------------------------------------- learner memory (private)
 
 export const memoryNote = table(
@@ -532,6 +542,7 @@ const spacetimedb = schema(
     ttsJob,
     extractionJob,
     summaryJob,
+    retentionJob,
     memoryNote,
     noteEvidence,
     conceptState,
@@ -588,6 +599,10 @@ const spacetimedb = schema(
       LESSON_ARC: t.option(t.string()),
       /** Optional key the teacher's student-profile read (learnerInsights) must present. Unset = teacher id only. */
       INSIGHTS_KEY: t.option(t.string()),
+      /** Minutes after a session ended that its photo bytes are kept (default 30; 0/off = forever). */
+      RETENTION_IMAGE_MIN: t.option(t.string()),
+      /** Days after a session ended that its lesson JSON (lesson_record, lesson_plan, beat) is kept (default off = forever). */
+      RETENTION_DAYS: t.option(t.string()),
     },
   }
 );

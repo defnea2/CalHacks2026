@@ -3,7 +3,7 @@
 // this one; only registered reducers/procedures are named exports here.
 import './polyfills';
 import { t, SenderError } from 'spacetimedb/server';
-import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob } from './schema';
+import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob, retentionJob } from './schema';
 import { dashboardJob, simTurnJob } from './schema_classroom';
 import * as classroom from './classroom';
 import { textPlayJob } from './schema_pipeline';
@@ -21,6 +21,7 @@ import * as sessions from './sessions';
 import * as textMode from './text_mode';
 import * as turnPhoto from './turn_photo';
 import * as pipeline from './pipeline';
+import { ensureRetentionJob, sweepRetention } from './retention';
 import * as voiceIn from './voice_in';
 import * as voiceOut from './voice_out';
 
@@ -31,12 +32,14 @@ export default spacetimedb;
 export const init = spacetimedb.init(ctx => {
   ensureLibrary(ctx);
   classroom.ensureSimProfiles(ctx);
+  ensureRetentionJob(ctx);
 });
 
 /** init only runs when the database is created; a republished pack reloads on the next connect. */
 export const onConnect = spacetimedb.clientConnected(ctx => {
   ensureLibrary(ctx);
   classroom.ensureSimProfiles(ctx);
+  ensureRetentionJob(ctx);
 });
 /** Marks the connection's (real) learners offline in `presence`. */
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
@@ -385,6 +388,17 @@ export const synthesizeSentence = spacetimedb.procedure(
 export const finishTextSentence = spacetimedb.reducer({ onSchedule: textPlayJob }, { job: textPlayJob.rowType }, (ctx, { job }) => {
   if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
   textMode.finishTextSentence(ctx, job);
+});
+
+/** Scheduled every RETENTION_SWEEP_S: photo bytes / old lesson JSON of ended sessions (retention.ts). */
+export const runRetention = spacetimedb.reducer({ onSchedule: retentionJob }, { job: retentionJob.rowType }, ctx => {
+  // Scheduled reducers stay client-callable in 2.13 (verified: a CLI call reaches the body), so
+  // every scheduled reducer checks that the scheduler (the module identity) called it.
+  if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
+  const r = sweepRetention(ctx);
+  if (r.turnImages + r.sessionImages + r.classDocuments + r.lessonSessions > 0) {
+    console.log(`retention: ${r.turnImages} turn photos, ${r.sessionImages} task photos, ${r.classDocuments} class documents, lesson JSON of ${r.lessonSessions} sessions`);
+  }
 });
 
 export const extractMemory = spacetimedb.procedure(
