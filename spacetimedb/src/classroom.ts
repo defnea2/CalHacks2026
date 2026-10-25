@@ -164,8 +164,8 @@ export function startClassSession(ctx: Ctx, a: StartClassArgs): ClassRow {
   if (isImageMime(mime)) ctx.db.classDocument.insert({ classSessionId: cls.id, data: a.documentData });
 
   // Every online real student joins (waiting or already in a session, ad-hoc or another class).
-  for (const p of [...ctx.db.presence.iter()]) {
-    if (p.status !== WAITING && p.status !== IN_SESSION) continue;
+  const online = [...ctx.db.presence.status.filter(WAITING), ...ctx.db.presence.status.filter(IN_SESSION)].sort((a, b) => (a.learnerId < b.learnerId ? -1 : 1));
+  for (const p of online) {
     const l = ctx.db.learner.id.find(p.learnerId);
     if (!l || l.isSimulated) continue;
     // Keeps the student's mode (a typed ad-hoc session stays in text mode).
@@ -175,8 +175,8 @@ export function startClassSession(ctx: Ctx, a: StartClassArgs): ClassRow {
   }
 
   // Simulation users: 1..n are reset (unless resetSimulated is false) and join in text mode; the others leave.
-  for (const l of [...ctx.db.learner.iter()]) {
-    if (l.isSimulated && (l.simRank < 1 || l.simRank > a.simulatedCount)) retireSimUser(ctx, l);
+  for (const l of [...ctx.db.learner.isSimulated.filter(true)]) {
+    if (l.simRank < 1 || l.simRank > a.simulatedCount) retireSimUser(ctx, l);
   }
   const reset = a.resetSimulated ?? true;
   for (let rank = 1; rank <= a.simulatedCount; rank++) {
@@ -228,7 +228,7 @@ export function endClassSession(ctx: Ctx, classSessionId: bigint): void {
 
 /** Active sessions linked to the class session. */
 export function linkedSessions(ctx: Ctx, classSessionId: bigint): SessionRow[] {
-  return [...ctx.db.session.active.filter(true)].filter(s => s.classSessionId === classSessionId).sort((a, b) => (a.id < b.id ? -1 : 1));
+  return [...ctx.db.session.classSessionId.filter(classSessionId)].filter(s => s.active).sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
 // ================================================================ simulation users
@@ -249,7 +249,7 @@ export function simSeed(p: SimStudent): SeedMemory {
 export function resetSimUser(ctx: Ctx, rank: number): LearnerRow {
   const p = ctx.db.simProfile.rank.find(rank);
   if (!p) throw new SenderError(`no simulation profile ${rank}`);
-  for (const l of [...ctx.db.learner.iter()]) if (l.isSimulated && l.simRank === rank) deleteLearner(ctx, l.id);
+  for (const l of simUsers(ctx, rank)) deleteLearner(ctx, l.id);
   const learner = ctx.db.learner.insert({
     id: 0n,
     name: p.name,
@@ -271,7 +271,12 @@ export function resetSimUser(ctx: Ctx, rank: number): LearnerRow {
 
 /** The existing simulation user of seed rank `rank` (lowest id), if any. */
 export function simUser(ctx: Ctx, rank: number): LearnerRow | undefined {
-  return [...ctx.db.learner.iter()].filter(l => l.isSimulated && l.simRank === rank).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+  return simUsers(ctx, rank)[0];
+}
+
+/** Simulation users of seed rank `rank` (simRank index; real learners have rank 0), lowest id first. */
+function simUsers(ctx: Ctx, rank: number): LearnerRow[] {
+  return [...ctx.db.learner.simRank.filter(rank)].filter(l => l.isSimulated).sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
 /** resetSimulatedStudents: simulation users 1..count (0 = all) back to their seed state (learner
@@ -322,10 +327,10 @@ function deleteSessionData(ctx: Ctx, sessionId: bigint): void {
   if (db.sessionImage.sessionId.find(sessionId)) db.sessionImage.sessionId.delete(sessionId);
   if (db.extractionCursor.sessionId.find(sessionId)) db.extractionCursor.sessionId.delete(sessionId);
   if (db.sessionSummary.sessionId.find(sessionId)) db.sessionSummary.sessionId.delete(sessionId);
-  for (const j of [...db.extractionJob.iter()]) if (j.sessionId === sessionId) db.extractionJob.scheduledId.delete(j.scheduledId);
-  for (const j of [...db.summaryJob.iter()]) if (j.sessionId === sessionId) db.summaryJob.scheduledId.delete(j.scheduledId);
-  for (const j of [...db.ttsJob.iter()]) if (j.sessionId === sessionId) db.ttsJob.scheduledId.delete(j.scheduledId);
-  for (const j of [...db.sttJob.iter()]) if (j.sessionId === sessionId) db.sttJob.scheduledId.delete(j.scheduledId);
+  db.extractionJob.sessionId.delete(sessionId);
+  db.summaryJob.sessionId.delete(sessionId);
+  db.ttsJob.sessionId.delete(sessionId);
+  db.sttJob.sessionId.delete(sessionId);
   clearSimJobs(ctx, sessionId);
   const anyDb = db as unknown as Record<string, { iter?: () => Iterable<Record<string, unknown>>; sessionId?: { delete?: (k: bigint) => void }; id?: { delete?: (k: bigint) => void } }>;
   for (const name of EXTRA_SESSION_TABLES) {

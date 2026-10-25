@@ -33,7 +33,7 @@ function processableEnd(ctx: Ctx, sessionId: bigint, turnCount: number): number 
 }
 
 function pendingJob(ctx: Ctx, sessionId: bigint) {
-  for (const j of ctx.db.extractionJob.iter()) if (j.sessionId === sessionId) return j;
+  for (const j of ctx.db.extractionJob.sessionId.filter(sessionId)) return j;
   return undefined;
 }
 

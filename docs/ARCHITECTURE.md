@@ -159,6 +159,31 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 | `sim_turn_job` | procedure `simStudentTurn` | 2–5 s after the tutor finished speaking to a simulated student | busy re-check every 1.5 s (max 40), failures retried after 5 s twice; stale jobs do nothing |
 | `dashboard_job` | procedure `dashboardTick` | `DASHBOARD_INTERVAL_S` (30 s) after the previous refresh finished | failed run retried in 10 s; skipped while the teacher observes |
 
+### Indexes
+
+Every column module code looks rows up by has a btree index; no reducer or procedure scans a whole
+table that grows with use (only the small fixed ones: the content library on a pack reload and
+`sim_running`, which holds at most `SIM_MAX_CONCURRENT` rows). Besides primary keys:
+
+| Table | Indexed columns |
+| --- | --- |
+| `session` | `learnerId`, `active`, `classSessionId` (linked sessions of a class, dashboard subscription) |
+| `learner` | `isSimulated`, `simRank` (simulation users by seed rank; real learners have rank 0) |
+| `presence` | `connectionId` (disconnect), `status` (who joins a starting class) |
+| `turn`, `phrase`, `audio_in`, `turn_metrics` | `sessionId` + `(sessionId, idx / phraseId / turnIdx)` |
+| `reply_sentence`, `turn_metrics` | `utteranceId` (sentences / metrics of one utterance) |
+| `reply_sentence` | `sessionId`, `(utteranceId, idx)` |
+| `stt_job`, `tts_job`, `text_play_job`, `extraction_job`, `summary_job`, `sim_turn_job` | `sessionId` (cancel or find a session's jobs); `tts_job` also `utteranceId` |
+| `board_item`, `beat`, `learner_event`, `lesson_plan`, `turn_image`, `tutor_request`, `tutor_result` | `sessionId` |
+| memory tables | `learnerId` (`memory_note`, `concept_state`, `session_summary`, `seed_session`), `noteId` (`note_evidence`), `(learnerId, concept)` |
+| classroom | `class_session.teacherId` / `active`, `student_cluster.classSessionId`, `dashboard_job.classSessionId` |
+
+Lookups by the first column of a multi-column index use the single-column index instead: a prefix
+scan whose last element is a point (`byUtteranceIdx.filter(utteranceId)`) is valid on the host, but
+the 2.13 test datastore (`spacetimedb/server/test-utils`) cannot decode its empty range end ("Could
+not decode arguments to index scan"). Adding an index is an additive migration: `spacetime publish`
+without `--clear` creates it on a database with data.
+
 ## 3. Reducers and procedures
 
 Signatures live in `spacetimedb/src/index.ts`; bodies in the file named per row. "Client" means any

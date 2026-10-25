@@ -23,9 +23,9 @@ export const learner = table(
     style: t.string(),
     createdAt: t.timestamp(),
     /** Classroom simulation user (night/classroom-core). */
-    isSimulated: t.bool().default(false),
+    isSimulated: t.bool().default(false).index('btree'),
     /** Seed order 1..20 of a simulation user; 0 = real learner. */
-    simRank: t.u32().default(0),
+    simRank: t.u32().default(0).index('btree'),
   }
 );
 
@@ -51,7 +51,7 @@ export const session = table(
     startedAt: t.timestamp(),
     endedAt: t.option(t.timestamp()),
     /** Linked class session (0 = ad-hoc). */
-    classSessionId: t.u64().default(0n),
+    classSessionId: t.u64().default(0n).index('btree'),
     /** false = text mode: no STT/TTS; sentences count as played after a reading delay. */
     voice: t.bool().default(true),
     /** A turn photo is waiting for the learner's next turn (no bytes; see turn_image). */
@@ -189,7 +189,7 @@ export const replySentence = table(
   {
     id: t.u64().primaryKey().autoInc(),
     sessionId: t.u64().index('btree'),
-    utteranceId: t.u64(),
+    utteranceId: t.u64().index('btree'),
     idx: t.u32(),
     display: t.string(),
     speech: t.string(),
@@ -274,7 +274,7 @@ export const turnMetrics = table(
     sessionId: t.u64().index('btree'),
     /** Student turn idx the reply answers. */
     turnIdx: t.u32(),
-    utteranceId: t.u64(),
+    utteranceId: t.u64().index('btree'),
     turnEndAt: t.option(t.timestamp()),
     sttDoneAt: t.option(t.timestamp()),
     llmFirstTokenAt: t.option(t.timestamp()),
@@ -301,7 +301,7 @@ export const sttJob = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
-    sessionId: t.u64(),
+    sessionId: t.u64().index('btree'),
     phraseId: t.u32(),
     attempt: t.u32(),
   }
@@ -312,9 +312,9 @@ export const ttsJob = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
-    sessionId: t.u64(),
+    sessionId: t.u64().index('btree'),
     sentenceId: t.u64(),
-    utteranceId: t.u64(),
+    utteranceId: t.u64().index('btree'),
     idx: t.u32(),
     speech: t.string(),
   }
@@ -325,7 +325,7 @@ export const extractionJob = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
-    sessionId: t.u64(),
+    sessionId: t.u64().index('btree'),
     learnerId: t.u64(),
     /** Turn idx range [fromIdx, toIdx). */
     fromIdx: t.u32(),
@@ -339,7 +339,7 @@ export const summaryJob = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
-    sessionId: t.u64(),
+    sessionId: t.u64().index('btree'),
     learnerId: t.u64(),
     attempt: t.u32(),
   }

@@ -18,7 +18,7 @@ export const presence = table(
   {
     learnerId: t.u64().primaryKey(),
     /** offline | waiting | in_session */
-    status: t.string(),
+    status: t.string().index('btree'),
     connectionId: t.string().index('btree'),
     updatedAt: t.timestamp(),
   }
