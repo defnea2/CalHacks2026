@@ -13,3 +13,6 @@ recordings/
 
 # holds module env secrets in plain bytes; do not push to the public repo
 .spacetime-data/
+
+# agent worktrees
+.claude/
