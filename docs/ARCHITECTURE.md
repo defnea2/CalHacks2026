@@ -172,7 +172,7 @@ checks the caller's identity in the private `role` table.
 | `startSession(learnerId, taskText)` | client | `sessions.ts` | Ends the learner's active session, starts a new one |
 | `uploadPhoto` | client | `sessions.ts` | Task photo (jpeg/png/webp/gif, ≤ 1 MB) |
 | `endSession` | client | `sessions.ts` | Closes turns, drops unplayed sentences, schedules final memory extraction + summary |
-| `startConversation` | client (module for sims) | `opening.ts` | "Start talking": tutor speaks first (turnState thinking) |
+| `startConversation` | client (module for sims) | `opening.ts` | Session screen opens (voice auto-starts): tutor speaks first (turnState thinking) |
 | `pushAudio(sessionId, phraseId, seq, pcm, final)` | client | `voice_in.ts` | Buffers a 160 ms chunk; `final` closes the phrase and inserts an `stt_job` due now; emits `speech_activity` |
 | `endTurn` | client | `voice_in.ts` | Turn end from VAD/Smart Turn; the turn is `ready` once every phrase is transcribed |
 | `interrupt` | client | `voice_out.ts` | Barge-in: unplayed sentences dropped, `playback_flush`, turnState interrupted |

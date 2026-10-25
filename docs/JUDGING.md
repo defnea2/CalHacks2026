@@ -87,7 +87,7 @@ children's-voice test; English only (`TTS_LANGUAGE: 'en'`).
 ### 2-minute cut (Cartesia, demo first)
 
 1. **0:00–0:10** One sentence: "A voice tutor for kids stuck on fractions homework; Cartesia is its ears and voice."
-2. **0:10–1:15** Live: [DEMO.md 0:15–0:55](DEMO.md#015055-student-by-voice-left-window) (Ava Chen, `Why is 1/4 + 2/4 not 3/8?`, Start talking, say "I added the tops and the bottoms"). Point at the canvas changing **on the word** (Sonic word timestamps). Interrupt the tutor once (barge-in).
+2. **0:10–1:15** Live: [DEMO.md 0:15–0:55](DEMO.md#015055-student-by-voice-left-window) (Ava Chen, `Why is 1/4 + 2/4 not 3/8?`, Start my lesson (mic + sound start by themselves), say "I added the tops and the bottoms"). Point at the canvas changing **on the word** (Sonic word timestamps). Interrupt the tutor once (barge-in).
 3. **1:15–1:35** Debug panel under the session: the `turn_metrics` row of that turn, end of speech → first audio (~2.7 s).
 4. **1:35–2:00** Models and call sites ([README table](../README.md#cartesia-features-used)), the ink-2 decision, the limitations above.
 

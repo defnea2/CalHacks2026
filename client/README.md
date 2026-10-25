@@ -157,7 +157,7 @@ Inline markers: the tutor writes `⟦b1⟧` in its text where an item belongs an
 | `turnstate-indicator` | `data-state` | |
 | `noise-indicator` | `data-noise` = quiet / moderate / noisy, `data-floor` (dBFS) | session, miccheck |
 | `noise-hint` | | session |
-| `start-talking`, `stop-talking`, `end-session`, `open-observer` | | session |
+| `end-session`, `open-observer` | | session |
 | `mic-state` | `data-listening`, `data-speaking`, `data-tutor-audio` | session, while talking |
 | `task-display`, `session-photo-input`, `photo-state` | `data-state` | session |
 | `captions` | | |
