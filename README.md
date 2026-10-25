@@ -82,3 +82,18 @@ The proxy uses the caller's own Cartesia key from the `Authorization` header and
 The module only knows a base URL (`STT_BASE_URL`, default `http://127.0.0.1:8787`). The API key stays in the module env and passes through in the `Authorization` header. When SpacetimeDB gets websockets or async procedures (issue #4697), or Cartesia offers `ink-2` in batch, set `STT_BASE_URL=https://api.cartesia.ai` and delete `stt-proxy/`. Nothing else changes.
 
 **Why not stream from the worker?** That was the spec's fallback. It works (385 ms after `finalize`), but it moves a SpacetimeDB responsibility into the worker. The proxy keeps the architecture as close as possible to what SpacetimeDB would do natively. Phrases are transcribed while the student is still talking, so only the last phrase's transcription falls inside the turn-end wait.
+
+## Running on Maincloud (hosted SpacetimeDB)
+
+Local stays the default. To use SpacetimeDB's hosted cloud instead (web dashboard included):
+
+```bash
+spacetime login                                   # once, opens the browser
+SPACETIME_SERVER=maincloud SPACETIME_DB=<unique-name> \
+  STT_BASE_URL=https://<your-host>/stt-proxy.php CARTESIA_STT_MODEL=ink-2 \
+  node scripts/publish.mjs                        # or STT_BASE_URL=https://api.cartesia.ai CARTESIA_STT_MODEL=ink-whisper
+SPACETIME_URI=wss://maincloud.spacetimedb.com SPACETIME_DB=<unique-name> pnpm worker
+pnpm client   # open http://127.0.0.1:5173/?uri=wss://maincloud.spacetimedb.com&db=<unique-name>
+```
+
+Notes: database names on Maincloud are global, so pick a unique one. The module env (API keys) is then stored by Maincloud. Every hop (audio chunks up, sentences and audio down, worker ↔ database) crosses the internet, so expect more latency than locally, and more sensitivity to an unstable connection. Procedures on Maincloud can reach public hosts, so the PHP proxy (or Cartesia directly) works; localhost does not.
