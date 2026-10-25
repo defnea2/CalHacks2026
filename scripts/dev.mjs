@@ -12,7 +12,7 @@ const provider = env.LLM_PROVIDER || (env.ANTHROPIC_API_KEY ? 'anthropic' : 'ope
 const required = ['CARTESIA_API_KEY', ...(provider === 'anthropic' ? ['ANTHROPIC_API_KEY'] : ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL'])];
 const missing = required.filter(key => !env[key]?.trim());
 if (missing.length) {
-  console.error(`Missing local voice configuration: ${missing.join(', ')}. Fill .env.local before starting.`);
+  console.error(`Missing local voice configuration: ${missing.join(', ')}. Put the keys in .env (repo root) before starting.`);
   process.exit(1);
 }
 
