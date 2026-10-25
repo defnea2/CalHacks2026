@@ -538,6 +538,8 @@ const spacetimedb = schema(
       DASHBOARD_EFFORT: t.option(t.string()),
       /** Lesson arc of new sessions: a pack arc id (default demo2min) or `adaptive` (no arc). */
       LESSON_ARC: t.option(t.string()),
+      /** Optional key the teacher's student-profile read (learnerInsights) must present. Unset = teacher id only. */
+      INSIGHTS_KEY: t.option(t.string()),
     },
   }
 );

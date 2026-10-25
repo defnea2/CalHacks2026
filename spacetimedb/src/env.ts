@@ -20,7 +20,8 @@ export type EnvName =
   | 'SIM_MAX_TURNS'
   | 'DASHBOARD_INTERVAL_S'
   | 'DASHBOARD_EFFORT'
-  | 'LESSON_ARC';
+  | 'LESSON_ARC'
+  | 'INSIGHTS_KEY';
 
 let override: Partial<Record<EnvName, string>> | null = null;
 

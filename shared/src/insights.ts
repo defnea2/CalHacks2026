@@ -8,7 +8,8 @@ export interface InsightEvidence {
   sessionId: string;
   fromTurn: number;
   toTurn: number;
-  /** Quote from the transcript backing the note, at most 200 chars. */
+  /** Quote from the transcript backing the note, at most 200 chars; '' for notes the tutor
+   *  saved with its remember tool (then only the turn range is known). */
   quote: string;
 }
 
@@ -70,9 +71,9 @@ export interface LearnerInsights {
     /** Simulation persona ('' for real learners). */
     persona: string;
     sessionCount: number;
-    /** First / last session start (learner.createdAt when there are no sessions). */
+    /** Earliest session start (learner.createdAt when there are no sessions). */
     firstSeenMs: number;
-    /** Latest session start or end. */
+    /** Latest session end (start while active); learner.createdAt when there are no sessions. */
     lastSeenMs: number;
   };
   /** Ordered by kind (misconception, strategy, mnemonic, quote, understood, preference),
