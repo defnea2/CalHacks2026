@@ -38,6 +38,7 @@ pnpm --filter client build
 | `?harness` | The team's planning harness (offline fixtures) |
 | `?overview` | All active sessions (ad-hoc and class) with learner, phase, turn state; links open the observer; running class sessions link to their dashboards |
 | `?miccheck` | Runs microphone + VAD locally, sends nothing. Useful to check VAD assets and timings |
+| `?profile=<learnerId>&as=<teacherId>` | Student profile full page (same panel as the dashboard drawer; works without a running class, e.g. for the seeded demo users). `&insightsFixture` (or `=empty`) shows a local fixture instead of calling the module |
 
 ### Student presence and auto-join (`lib/presence.ts`, `stdb/usePresence.ts`)
 
@@ -56,6 +57,17 @@ Own SVG/CSS character (no external assets). States: `idle` (breathes, blinks), `
 - Observe: a frame over the dashboard with `<SessionView readOnly embedded />` of the student, Previous / Next (dashboard order, wraps around; `observeOrder` + `stepObserve`), Stop (Esc). Calls `setImpersonation(classSessionId, learnerId)` on open and on every switch and `setImpersonation(classSessionId, 0)` on stop, page hide and unmount.
 - "All sessions" tab: one table row per student (group, stage, tutor state, turns, latest message, Observe). "End class session" (two clicks) → `endClassSession`.
 - Subscriptions: `class_session`, `class_summary`, `student_cluster`, `dashboard_state`, `session WHERE class_session_id = X`, `learner`, `teacher`, plus `turn` and `lesson_state` per linked session.
+- **Profile** (card, next to Observe; also in the "All sessions" row): right-side drawer (`insights/ProfileDrawer.tsx`, Esc / × / backdrop close) with `<StudentProfile learnerId teacherId />`.
+
+### Student profile (`insights/StudentProfile.tsx`, `insights/useLearnerInsights.ts`, wording in `lib/insights.ts`)
+
+Long-term information only (no live status): what the tutor has learned about the student, in teacher language. Memory tables stay private; the panel calls the procedure `learnerInsights({ learnerId, teacherId, key })` once on open and on Refresh (no polling) and parses `LearnerInsightsResult` (`shared/src/insights.ts`). The key comes from `localStorage['tutor.insightsKey']` (empty by default; when the module has `INSIGHTS_KEY` set, a "locked" result shows a key field that stores it). On an error the last good profile stays on screen; `ok:false` reasons are shown in plain words.
+
+- Header: name, age, grade, learning style, "simulated" badge + persona, "N sessions since …".
+- **At a glance**: 1–2 sentences built deterministically from the data (`atAGlance`, no LLM call), **Next focus** from the latest session summary.
+- Notes in sections: "Still mixing up" (misconception), "What helps" (strategy worked/unknown + preference), "What didn't help" (strategy didnt), "Memory aids" (mnemonic), "Can do now" (understood), "In their own words" (quote). Confidence and sightings as words ("clearly · seen 3 times · 2 days ago"), evidence quote in italics ("— said in session 4"), a "seeded" tag for notes from the starting profile.
+- Mastery by category: bar + band (not started / beginning / getting there / secure / mastered). Past sessions: topic, task, summary, date.
+- Privacy guard (`test/insights.test.ts`): nothing under `src/session/`, nor `StudentHome.tsx`, `WaitingRoom.tsx`, `SessionScreen.tsx`, imports `insights/` or mentions `learnerInsights`.
 
 Subscriptions are narrow: a session tab subscribes to `session WHERE id = X`, `learner WHERE id = L`, and `phrase`, `turn`, `reply_sentence`, `board_item`, `turn_metrics`, `playback_flush`, `audio_out`, `beat`, `lesson_state`, `canvas_state` `WHERE session_id = X`, plus the single-row `agent_status`. Only the pick-user and overview screens read all learners and all active sessions.
 
@@ -115,6 +127,8 @@ Inline markers: the tutor writes `⟦b1⟧` in its text where an item belongs an
 | `cluster-grid`, `cluster-row` (`data-sizes`, e.g. `2+2`), `cluster` (`data-size`, `data-slots`), `cluster-name`, `cluster-description`, `ungrouped` | | dashboard |
 | `student-card` (`data-learner-id`, `data-session-id`, `data-cluster`), `student-stage`, `student-chat`, `observe-student` (`data-learner-id`) | | dashboard |
 | `all-sessions`, `all-sessions-row` (`data-learner-id`, `data-session-id`), `observe-student-row` | | dashboard, "All sessions" |
+| `open-profile` (`data-learner-id`), `open-profile-row`, `profile-drawer`, `profile-close` | | dashboard (card / "All sessions" row) |
+| `student-profile` (`data-learner-id`, `data-loaded`), `profile-refresh`, `profile-error` (`data-error`), `profile-key`, `profile-simulated`, `profile-glance`, `profile-next-focus`, `profile-section` (`data-section`), `profile-note` (`data-kind`, `data-outcome`), `profile-mastery-row` (`data-concept`, `data-mastery`), `profile-session` (`data-session-id`) | | profile drawer, `?profile=<id>&as=<teacher>` |
 | `observe-frame` (`data-learner-id`, `data-session-id`), `observe-name`, `observe-prev`, `observe-next`, `observe-stop` | | dashboard while observing (contains `observer-screen`) |
 | `tutor-avatar` | `data-state` = idle / listening / thinking / speaking | session, observer, entry, waiting room |
 | `welcome-start` | | session: voice session without turns, microphone off ("Start talking" / "Join the lesson") |
