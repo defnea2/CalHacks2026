@@ -33,7 +33,7 @@ export const demoMeta = {
 export const demoMoments: Array<{ visual: Record<string, unknown>; narration: string; interactive?: boolean; showEquation?: boolean }> = [
   { visual: { kind: "bars", bars: [{ id: "pizza", label: "Pizza", parts: 3, shaded: 2 }] }, narration: "Here is a pizza cut into three big slices. You have two of them." },
   { visual: set(12, 8), narration: "Now I cut every slice into four smaller slices. You still have the same pizza, just more slices." },
-  { visual: { kind: "keep" }, narration: "So the top and the bottom both got four times bigger. Two thirds equals eight twelfths." },
+  { visual: { kind: "keep" }, narration: "So the top and the bottom both got bigger in the same way. Two thirds equals eight twelfths." },
   { visual: set(6, 4), narration: "Cut each big slice in two instead. Four of six slices is the same amount again." },
   { visual: set(2, 1), narration: "Now look at one half of a new pizza." },
 ];

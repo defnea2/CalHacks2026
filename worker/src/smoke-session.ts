@@ -44,6 +44,9 @@ async function main() {
       .onApplied(() => r())
       .subscribe(['SELECT * FROM learner', 'SELECT * FROM session', 'SELECT * FROM turn', 'SELECT * FROM beat', 'SELECT * FROM reply_sentence', 'SELECT * FROM turn_metrics', 'SELECT * FROM lesson_state', 'SELECT * FROM agent_status', ...(voice ? ['SELECT * FROM audio_out'] : [])])
   );
+  // audio_out is an event table (rows are not kept in the cache): collect them as they arrive.
+  const audioRows = new Map<string, { pcm: Uint8Array; sampleRate: number }>();
+  conn.db.audioOut.onInsert((_c, a) => audioRows.set(`${a.utteranceId}:${a.idx}`, { pcm: a.pcm, sampleRate: a.sampleRate }));
   const name = `Smoke${Date.now() % 100000}`;
   await conn.reducers.createTestUser({ name, age: 9, grade: 4, style: 'pictures' });
   await sleep(200);
@@ -70,7 +73,7 @@ async function main() {
           if (!prev) break;
           if (voice) {
             if (x.status === 'dropped') { startedAt.set(key(u, x.idx), NaN); continue; }
-            const audio = [...conn.db.audioOut.iter()].find(a => a.utteranceId === u && a.idx === x.idx);
+            const audio = audioRows.get(key(u, x.idx));
             if (!audio) break;
             startedAt.set(key(u, x.idx), Date.now());
             await conn.reducers.markPlayed({ sessionId: session.id, utteranceId: u, idx: x.idx });

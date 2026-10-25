@@ -51,6 +51,8 @@ describe('per-sentence keyframes', () => {
 
   it('no split: one sentence, or no equation change', () => {
     expect(splitKeyframes(single as never, sentences.slice(0, 1)).cues).toHaveLength(1);
+    // The first sentence already reads the equation out: it lands with the beat.
+    expect(splitKeyframes(single as never, ['Three times four equals twelve.', 'Count the dots.']).cues).toHaveLength(1);
     expect(splitKeyframes({ id: 'b', narration: 'x', ...array(2, 2) } as never, sentences).cues).toHaveLength(1);
     expect(orderBeats([row(6n, 0, array(2, 2), 'Two rows.')]).map(b => b.part)).toEqual([0]);
     expect(cueSentenceOffset('math-cue-3-s2')).toBe(2);

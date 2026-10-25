@@ -19,9 +19,10 @@ export function cueSentenceOffset(cueId: string): number {
 /** A sentence that reads an equation out (numbers, operators, "equals"). */
 const EQUATION_WORDS = /\d|=|\b(equals?|times|over|plus|minus|divided|is the same as|makes|rule)\b/i;
 
-/** Index (>= 1) of the sentence that should reveal the equation, or -1 if the beat has one sentence. */
+/** Index (>= 1) of the sentence that should reveal the equation, or -1 when it belongs to the
+ *  beat's first sentence (one sentence, or the first one already reads the equation out). */
 export function equationSentence(sentences: readonly string[]): number {
-  if (sentences.length < 2) return -1;
+  if (sentences.length < 2 || EQUATION_WORDS.test(sentences[0]!)) return -1;
   for (let k = 1; k < sentences.length; k++) if (EQUATION_WORDS.test(sentences[k]!)) return k;
   return sentences.length - 1;
 }
