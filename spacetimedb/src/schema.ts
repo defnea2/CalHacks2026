@@ -404,6 +404,20 @@ export const sessionSummary = table(
   }
 );
 
+/** Seeded "earlier sessions" (seed.ts): task and topic of a pseudo session id
+ *  (>= SEED_SESSION_BASE) that has no session row. Its summary is in session_summary. */
+export const seedSession = table(
+  { name: 'seed_session' },
+  {
+    sessionId: t.u64().primaryKey(),
+    learnerId: t.u64().index('btree'),
+    taskText: t.string(),
+    category: t.string(),
+    concept: t.string(),
+    startedAt: t.timestamp(),
+  }
+);
+
 export const extractionCursor = table(
   { name: 'extraction_cursor' },
   {
@@ -522,6 +536,7 @@ const spacetimedb = schema(
     noteEvidence,
     conceptState,
     sessionSummary,
+    seedSession,
     extractionCursor,
     category,
     concept,

@@ -5,7 +5,8 @@
 import type { MemoryKind } from './types';
 
 export interface InsightEvidence {
-  /** '' for seeded evidence (demo seed, no real session). */
+  /** Decimal session id; 'seed-<n>' for seeded evidence (demo seed / simulation profile), which
+   *  matches the sessionId of that seeded summary. */
   sessionId: string;
   fromTurn: number;
   toTurn: number;
@@ -32,8 +33,8 @@ export interface InsightNote {
   reinforced: number;
   createdMs: number;
   updatedMs: number;
-  /** true = seeded (simulation profile or demo seed), not learned in a session: no evidence,
-   *  or only seed evidence (sessionId ''). */
+  /** true = seeded (simulation profile or demo seed), not learned in a session: only seed
+   *  evidence (sessionId 'seed-<n>'). */
   seeded: boolean;
   /** Last (up to) 2 evidence rows, newest first. */
   evidence: InsightEvidence[];
@@ -50,7 +51,8 @@ export interface InsightMastery {
 }
 
 export interface InsightSummary {
-  /** '' for the demo seed summary (no real session; taskText/topic are '' then). */
+  /** Decimal session id; 'seed-<n>' for a seeded earlier session (no session row; task and
+   *  topic come from the seed, '' when the seed gave none). */
   sessionId: string;
   summary: string;
   nextFocus: string;
@@ -73,10 +75,11 @@ export interface LearnerInsights {
     isSimulated: boolean;
     /** Simulation persona ('' for real learners). */
     persona: string;
+    /** Real sessions + seeded earlier sessions. */
     sessionCount: number;
-    /** Earliest session start (learner.createdAt when there are no sessions). */
+    /** Earliest session start, seeded sessions included (learner.createdAt when there are none). */
     firstSeenMs: number;
-    /** Latest session end (start while active); learner.createdAt when there are no sessions. */
+    /** Latest session end (start while active; a seeded session's date); learner.createdAt when there are none. */
     lastSeenMs: number;
   };
   /** Ordered by kind (misconception, strategy, mnemonic, quote, understood, preference),

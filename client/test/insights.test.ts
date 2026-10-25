@@ -93,6 +93,23 @@ describe('sections in teacher language', () => {
     expect(evidenceLine(x.notes[2]!, partial)!.where).toBe('said 3 days ago');
     expect(evidenceLine({ ...x.notes[0]!, evidence: [{ sessionId: '999', fromTurn: 0, toTurn: 1, quote: '"hi"' }] }, labels)).toEqual({ quote: 'hi', where: 'said in a session' });
   });
+
+  it('seeded sessions (sessionId seed-<n>, counted in sessionCount) number like real ones', () => {
+    const x = fx();
+    const day = 86_400_000;
+    const seeded = {
+      ...x,
+      learner: { ...x.learner, sessionCount: 2 },
+      summaries: [
+        { sessionId: 'seed-1', summary: 'a', nextFocus: 'b', createdMs: NOW - 2 * day, taskText: 't1', topic: 'fractions-expand', topicTitle: 'Expanding fractions' },
+        { sessionId: 'seed-2', summary: 'c', nextFocus: 'd', createdMs: NOW - 6 * day, taskText: 't2', topic: 'fractions-unit', topicTitle: 'What a fraction is' },
+      ],
+    };
+    const labels = sessionLabels(NOW, seeded);
+    const note = (sessionId: string) => ({ ...x.notes[0]!, evidence: [{ sessionId, fromTurn: 0, toTurn: 0, quote: 'how many pieces' }] });
+    expect(evidenceLine(note('seed-1'), labels)!.where).toBe('said in session 2');
+    expect(evidenceLine(note('seed-2'), labels)!.where).toBe('said in session 1');
+  });
 });
 
 describe('mastery', () => {

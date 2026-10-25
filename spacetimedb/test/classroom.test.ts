@@ -736,7 +736,9 @@ describe('simulated students reset option', () => {
       const l = simByRank(h, rank)[0]!;
       expect([...h.db.session.learnerId.filter(l.id)]).toHaveLength(0);
       expect([...h.db.memoryNote.learnerId.filter(l.id)].map(n => n.text)).toEqual(SIM_STUDENTS[rank - 1]!.memory.map(n => n.text));
-      expect([...h.db.conceptState.learnerId.filter(l.id)]).toHaveLength(0);
+      // seeded past only: the persona's mastery and earlier sessions, nothing from the class run
+      expect([...h.db.conceptState.learnerId.filter(l.id)].map(c => [c.concept, c.mastery])).toEqual(SIM_STUDENTS[rank - 1]!.mastery.map(m => [m.concept, m.mastery]));
+      expect([...h.db.sessionSummary.learnerId.filter(l.id)]).toHaveLength(SIM_STUDENTS[rank - 1]!.history.length);
     }
     expect(() => call(h, env.client, mod.resetSimulatedStudents, { count: 21 })).toThrow(/at most 20/);
   });
