@@ -97,9 +97,17 @@ export const startConversation = spacetimedb.reducer({ sessionId: t.u64() }, (ct
 });
 
 /** Barge-in: turnState = interrupted, unplayed sentences dropped, playback_flush emitted. */
-export const interrupt = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => voiceOut.interrupt(ctx, sessionId));
+export const interrupt = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => {
+  const before = ctx.db.session.id.find(sessionId)?.currentUtteranceId ?? 0n;
+  voiceOut.interrupt(ctx, sessionId);
+  dispatch.onInterrupted(ctx, sessionId, before);
+});
 /** Barge-in on the utterance the client was playing (also its last sentence, after the session moved on). */
-export const interruptUtterance = spacetimedb.reducer({ sessionId: t.u64(), utteranceId: t.u64() }, (ctx, { sessionId, utteranceId }) => voiceOut.interruptUtterance(ctx, sessionId, utteranceId));
+export const interruptUtterance = spacetimedb.reducer({ sessionId: t.u64(), utteranceId: t.u64() }, (ctx, { sessionId, utteranceId }) => {
+  const before = ctx.db.session.id.find(sessionId)?.currentUtteranceId ?? 0n;
+  voiceOut.interruptUtterance(ctx, sessionId, utteranceId);
+  dispatch.onInterrupted(ctx, sessionId, before);
+});
 
 /** Client started playing a sentence (drives firstPlaybackAt and "unplayed" for interrupts). */
 export const markPlayed = spacetimedb.reducer(

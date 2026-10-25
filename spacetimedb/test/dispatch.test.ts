@@ -8,7 +8,7 @@ import { TimeDuration } from 'spacetimedb';
 import { OPENING_TURN_IDX } from '../../shared/src/types';
 import { FALLBACK_LINE, WATCH_FIRST_S, STALL_S } from '../src/dispatch';
 import { hmacSha256, sha256, signDispatch, toHex } from '../src/hmac';
-import { auth, call, makeLearner, makeSession, mod, proc, session, setup, turns, type H, type Req, type Responder } from './helpers';
+import { auth, call, makeLearner, makeSession, mod, proc, runTts, session, setup, ttsSse, turns, type H, type Req, type Responder } from './helpers';
 
 const CF = { LLM_DISPATCH: 'cloudflare', CF_DISPATCH_URL: 'https://fibonacci-dispatch.example.workers.dev/dispatch', CF_DISPATCH_SECRET: 'dispatch-secret' };
 
@@ -213,5 +213,25 @@ describe('LLM_DISPATCH=manual (local testing)', () => {
     expect(dispatches(h, s.id)[0]!.status).toBe('sent');
     expect(take(agent)).toBe('');
     call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: BigInt(body.utteranceId), replyToIdx: 0, preemptive: false });
+  });
+});
+
+describe('barge-in on a dispatched utterance', () => {
+  it('the module records the interrupted tutor turn at once; the late appendTutorTurn of the run is a no-op', () => {
+    const { h, client, agent, s } = fresh();
+    call(h, client, mod.submitTextTurn, { sessionId: s.id, text: 'hello', intent: '' });
+    runDispatch(h);
+    const u = dispatches(h, s.id)[0]!.utteranceId;
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: u, replyToIdx: 0, preemptive: false });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: u, idx: 0, display: 'Look here.', speech: 'Look here.' });
+    runTts(h, () => ({ status: 200, body: ttsSse(new Uint8Array(4800).fill(1)) }));
+    call(h, client, mod.markPlayed, { sessionId: s.id, utteranceId: u, idx: 0 });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: u, idx: 1, display: 'And here.', speech: 'And here.' });
+    call(h, client, mod.interrupt, { sessionId: s.id });
+    expect(turns(h, s.id).map(t => [t.role, t.text, t.interrupted])).toEqual([['student', 'hello', false], ['tutor', 'Look here.', true]]);
+    expect(session(h, s.id).turnState).toBe('listening');
+    expect(dispatches(h, s.id)[0]!.status).toBe('done');
+    call(h, agent, mod.appendTutorTurn, { sessionId: s.id, utteranceId: u, text: 'Look here. And here.', interrupted: true });
+    expect(turns(h, s.id)).toHaveLength(2);
   });
 });

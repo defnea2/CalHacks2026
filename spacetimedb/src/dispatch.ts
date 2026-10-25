@@ -138,6 +138,19 @@ export function noteProgress(ctx: Ctx, utteranceId: bigint, what: 'began' | 'sen
   } else if (OPEN.has(d.status)) ctx.db.llmDispatch.id.update({ ...d, status: 'done' });
 }
 
+/** Barge-in on a dispatched utterance: the Cloudflare run only notices at its next reducer call
+ *  (up to one moment later), so the module records the tutor turn (what was heard) at once, in
+ *  order, like a typed turn does (text_mode.ts). The run's own appendTutorTurn is then a no-op. */
+export function onInterrupted(ctx: Ctx, sessionId: bigint, utteranceId: bigint): void {
+  if (!isCloudflare(ctx) || utteranceId === 0n) return;
+  const s = ctx.db.session.id.find(sessionId);
+  if (!s || s.currentUtteranceId === utteranceId || tutorTurnFor(ctx, sessionId, utteranceId)) return;
+  const d = dispatchFor(ctx, utteranceId);
+  if (!d) return;
+  appendTutorTurn(ctx, { sessionId, utteranceId, text: heardText(ctx, sessionId, utteranceId), interrupted: true });
+  ctx.db.llmDispatch.id.update({ ...ctx.db.llmDispatch.id.find(d.id)!, status: 'done', error: 'interrupted (barge-in)' });
+}
+
 /** LLM_DISPATCH=cloudflare: only a dispatched, not yet started utterance may begin (one answerer:
  *  a Node worker still running, a duplicate delivery, a superseded run). */
 export function assertDispatched(ctx: Ctx, utteranceId: bigint): void {
