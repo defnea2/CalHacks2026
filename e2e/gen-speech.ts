@@ -101,8 +101,11 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     name: 'noisy',
-    description: 'Correct step with steady background noise.',
-    noiseDbfs: -42,
+    // Chrome's capture noise suppression removes most steady noise (-42 dBFS steady noise arrived
+    // at -52..-66 dBFS and the indicator stayed "quiet"), so the noise is louder and fluctuates
+    // like a busy room.
+    description: 'Correct step with loud, fluctuating background noise.',
+    noiseDbfs: -28,
     segments: [{ silenceMs: 2000 }, { say: 'I need to find the number to multiply by.' }, { silenceMs: 2500 }],
   },
   {
@@ -159,16 +162,19 @@ function wav(samples: Int16Array, rate: number): Buffer {
   return Buffer.concat([h, data]);
 }
 
-/** Deterministic pseudo-random noise so fixtures are reproducible. */
+/** Deterministic pseudo-random noise so fixtures are reproducible. Slowly fluctuating level
+ *  (0.3..1 of the peak), which noise suppression cannot simply subtract. */
 function mixNoise(s: Int16Array, dbfs: number): void {
   const amp = 32767 * 10 ** (dbfs / 20) * Math.SQRT2;
   let x = 12345;
   let lp = 0;
   for (let i = 0; i < s.length; i++) {
-    x = (x * 1103515245 + 12345) & 0x7fffffff;
-    const white = (x / 0x7fffffff) * 2 - 1;
+    x = (x * 1103515245 + 12345) % 2147483648;
+    const white = (x / 2147483648) * 2 - 1;
     lp = lp * 0.7 + white * 0.3; // slightly darker than white, like room/fan noise
-    s[i] = Math.max(-32768, Math.min(32767, s[i]! + lp * amp * 1.8));
+    const t = i / RATE;
+    const env = 0.65 + 0.35 * Math.sin(2 * Math.PI * 0.9 * t) * Math.sin(2 * Math.PI * 0.31 * t + 1);
+    s[i] = Math.max(-32768, Math.min(32767, s[i]! + lp * amp * 1.8 * env));
   }
 }
 

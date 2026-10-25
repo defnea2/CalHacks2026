@@ -35,6 +35,7 @@ export async function launch(wav: string | null): Promise<MicBrowser> {
   const browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: true,
+    protocolTimeout: 60_000,
     userDataDir: path.join(profile, 'profile'),
     args,
     defaultViewport: { width: 1280, height: 1400 },

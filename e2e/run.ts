@@ -126,14 +126,14 @@ const SYM: Record<string, string> = { pass: 'ok', fail: 'FAIL', warn: 'warn', sk
 function printReport(results: GroupResult[], globalChecks: Check[], externalFlakes: number): void {
   const runs = results.flatMap(g => g.runs);
   const names = [...new Set(runs.flatMap(r => r.checks.map(c => c.name)))];
-  const short = (n: string) => n.replace('responds-to-interruption', 'responds').replace('dropped-sentences', 'dropped').replace('barge-in-stop', 'bi-stop').replace('own-data-only', 'own-data').replace('noise-indicator', 'noise').replace('turn-metrics', 'metrics').replace('student-turns', 'turns').replace('single-turn', '1-turn');
+  const short = (n: string) => n.replace('responds-to-interruption', 'responds').replace('dropped-sentences', 'dropped').replace('barge-in-stop', 'bi-stop').replace('own-data-only', 'own-data').replace('noise-indicator', 'noise').replace('turn-metrics', 'metrics').replace('student-turns', 'turns').replace('single-turn', '1-turn').replace('metrics-noise', 'm-noise').replace('interrupted-turn', 'int-turn');
   const head = ['scenario', 'result', 'try', ...names.map(short), 'audio ms', 'local ms'];
   const rows = runs.map(r => [
     r.id,
     r.status.toUpperCase(),
     String(r.attempt),
     ...names.map(n => SYM[r.checks.find(c => c.name === n)?.status ?? 'skip']!),
-    r.metrics.map(m => m.firstAudio ?? '–').join('/') || '–',
+    r.metrics.filter(m => m.utteranceId !== '0').map(m => m.firstAudio ?? '–').join('/') || '–',
     r.localLatencyMs.map(String).join('/') || '–',
   ]);
   const w = head.map((h, i) => Math.max(h.length, ...rows.map(r => r[i]!.length)));
@@ -147,7 +147,7 @@ function printReport(results: GroupResult[], globalChecks: Check[], externalFlak
     for (const e of r.externalEvidence.slice(0, 3)) console.log(`  ${r.id} external: ${e.slice(0, 240)}`);
   }
   for (const c of [...results.flatMap(g => g.checks), ...globalChecks]) console.log(`  ${c.name} [${SYM[c.status]}]: ${c.detail}`);
-  const lat = runs.flatMap(r => r.metrics.map(m => m.firstAudio)).filter((x): x is number => x !== null).sort((a, b) => a - b);
+  const lat = runs.flatMap(r => r.metrics.filter(m => m.utteranceId !== '0').map(m => m.firstAudio)).filter((x): x is number => x !== null).sort((a, b) => a - b);
   if (lat.length) {
     const p = (q: number) => lat[Math.min(lat.length - 1, Math.floor(q * lat.length))];
     console.log(`  latency turn end → first audio (server): n=${lat.length} min ${lat[0]} p50 ${p(0.5)} max ${lat[lat.length - 1]} ms (target ${E2E_DEFAULTS.latencyTargetMs})`);

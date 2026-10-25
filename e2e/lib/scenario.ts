@@ -156,6 +156,9 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
   const pageLog: string[] = [];
   const log = (m: string) => ctx.log(`[${sc.id}] ${m}`);
   const mic = await launch(path.join(FIXTURES, `${sc.fixture}.wav`));
+  // The observer gets its own browser (no mic): a second tab in the mic browser is a background
+  // tab whose evaluate calls can stall while the session tab is busy.
+  const viewer = sc.observer ? await launch(null) : null;
   let observerSamples: ObserverSample[] = [];
   let stopObserver = () => {};
   try {
@@ -166,7 +169,7 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
     run.checks.push({ name: 'ui.session', status: 'pass', detail: `session ${run.sessionId} via create-user → learner → start-session` });
 
     if (sc.observer) {
-      const obs = await mic.newPage(`${sc.id}/observer`, m => pageLog.push(m));
+      const obs = await viewer!.newPage(`${sc.id}/observer`, m => pageLog.push(m));
       await obs.goto(`${base}&observe=${run.sessionId}`, { waitUntil: 'domcontentloaded' });
       await obs.waitForSelector(tid('observer-screen'), { timeout: 15_000 });
       let on = true;
@@ -226,6 +229,7 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
   } finally {
     stopObserver();
     await mic.close();
+    await viewer?.close();
   }
   if (pageLog.length) fs.appendFileSync(path.join(ctx.outDir, `${sc.id}-a${ctx.attempt}.pagelog`), pageLog.join('\n') + '\n');
   run.durationMs = Date.now() - started;
@@ -321,6 +325,16 @@ function evaluate(run: ScenarioRun, sc: Scenario, fx: Fixture, events: Ev[], sta
     replied.map(m => `t${m.turnIdx}: stt ${m.sttDone ?? '–'} / llm ${m.llmFirstToken ?? '–'} / sent ${m.firstSentence ?? '–'} / audio ${m.firstAudio ?? '–'} / play ${m.firstPlayback ?? '–'} ms${m.preemptive ? ' (pre)' : ''}`).join('; ') +
       (slow.length ? ` — above ${E2E_DEFAULTS.latencyTargetMs} ms target` : '') +
       (replied.length < sc.turns ? ` — only ${replied.length} row(s) with a reply` : '')
+  );
+  // Rows for turns that never existed (e.g. noise reported after the turn already became ready).
+  const studentIdx = new Set(srv.turns.filter(t => t.role === 'student').map(t => t.idx));
+  const phantom = srv.metrics.filter(m => m.utteranceId === '0' && !studentIdx.has(m.turnIdx));
+  const noNoise = replied.filter(m => m.noiseDb === 0);
+  add(
+    'metrics-noise',
+    phantom.length || noNoise.length ? 'warn' : 'pass',
+    `noiseDb per replied turn: ${replied.map(m => `t${m.turnIdx} ${m.noiseDb.toFixed(0)}`).join(', ')}` +
+      (phantom.length ? `; ${phantom.length} row(s) for non-existent turn(s) ${phantom.map(m => `t${m.turnIdx} (noiseDb ${m.noiseDb.toFixed(0)})`).join(', ')}` : '')
   );
 
   // No foreign data on this page (subscriptions are per session).
