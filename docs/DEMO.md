@@ -169,9 +169,10 @@ opening), so keep it as concrete fractions/decimals like above.
 
 1. `/` → **I'm a student** → pick **Ava Chen** → **On my own · Learn by myself**.
 2. Task: `Why is 1/4 + 2/4 not 3/8?` (optionally attach a photo of the task) → **Start my lesson**.
-3. **Start talking** (the big button in the middle of the canvas). The tutor greets her and names
-   the task (authored lead-in; first audio ~1.7 s after the click in the rehearsal). The canvas stays
-   on "Your picture will appear here" during the lead-in; the first picture comes ~11 s after the click.
+3. Microphone and sound are on right away (voice only; allow the microphone if the browser asks).
+   The tutor greets her and names the task (authored lead-in). The canvas stays on "Your picture will
+   appear here" during the lead-in; the first picture comes ~11 s after the click. The gear next to
+   the mute button picks microphone / speaker and sets the microphone boost and tutor volume.
 4. Say: *"I added the tops and the bottoms and got three eighths."*
 5. While it answers, point at:
    - the avatar thinking (dots) while Claude plans, then speaking with the audio;
@@ -221,8 +222,9 @@ opening), so keep it as concrete fractions/decimals like above.
 
 | Problem | Do this |
 | --- | --- |
-| Slow or flaky network on voice | Start the lesson with **Type instead of talking** (or `?voice=0`): same lesson pipeline, no STT/TTS; text plays with Pause / Next / Replay |
-| STT returns nothing / mic trouble | Type in the session's text box instead; check `?miccheck` |
+| Microphone blocked / not found | Use the inline **Try again** after allowing the microphone (address-bar icon); pick another device in the gear menu; check `?miccheck` |
+| Too quiet / STT returns nothing | Gear → **Microphone boost** (up to 4×) or another microphone; check the level meter in the gear menu or `?miccheck` |
+| No sound | **Tap for sound** if shown; gear → speaker (Chrome/Edge) and **Tutor volume** |
 | "Tutor offline: start the worker." | Restart `pnpm worker`; a ready turn without a reply is answered again after 12 s |
 | LLM down entirely | `?lesson` → **Equal groups** (offline sample) → choose **2 + 3** → **Show another way** → move an object into a basket → answer **six**; also **Comparing decimals**, **Where does a puddle go?**, **Open math studio**. `?canvasPreview` needs no database or keys |
 | Dashboard still empty | Press **Refresh** (needs at least one student turn); with no summary yet, cards are listed under "Not grouped yet" |

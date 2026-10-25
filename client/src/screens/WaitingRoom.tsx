@@ -1,11 +1,12 @@
 // Waiting room (?wait=<learnerId>): presence 'waiting' until a teacher starts a class session,
 // which links a new session for this learner (startClassSession). Then the tab jumps into it:
-// ?session=<id>&join=1. The session screen asks for one click to turn on sound (voice) and then
-// calls startConversation; a typed session starts at once.
+// ?session=<id>&join=1. The session screen turns on microphone + sound at once (the clicks that
+// led here gave the page its user activation; otherwise "Tap for sound" appears) and calls
+// startConversation.
 import { useEffect, useRef, useState } from 'react';
 import type { DbConnection } from '../module_bindings';
 import type { Learner, Session } from '../module_bindings/types';
-import { callReducer, subscribe } from '../stdb/connection';
+import { subscribe } from '../stdb/connection';
 import { useRows } from '../stdb/useRows';
 import { setPresence, usePresence } from '../stdb/usePresence';
 import { classSessionToJoin } from '../lib/presence';
@@ -15,7 +16,6 @@ import { TutorAvatar } from '../components/TutorAvatar';
 
 export function WaitingRoom({ conn, learnerId }: { conn: DbConnection; learnerId: bigint }) {
   const [error, setError] = useState('');
-  const [typing, setTyping] = useState(() => new URLSearchParams(window.location.search).get('voice') === '0');
   useEffect(() => {
     const id = learnerId.toString();
     const sub = subscribe(conn, [`SELECT * FROM learner WHERE id = ${id}`, `SELECT * FROM session WHERE learner_id = ${id}`], `wait ${id}`);
@@ -31,16 +31,9 @@ export function WaitingRoom({ conn, learnerId }: { conn: DbConnection; learnerId
   useEffect(() => {
     if (!target || joined.current === target.id) return;
     joined.current = target.id;
-    eventLog.log('ui.class_join', { sessionId: target.id.toString(), classSessionId: target.classSessionId.toString(), typing });
-    void (async () => {
-      if (typing && target.voice) {
-        const args = { sessionId: target.id, voice: false };
-        const r = await callReducer('setSessionVoice', args, () => conn.reducers.setSessionVoice(args));
-        if (!r.ok) eventLog.log('ui.text_mode_failed', { error: r.error });
-      }
-      navigate(sessionUrl('session', target.id, { join: '1' }));
-    })();
-  }, [target, typing, conn]);
+    eventLog.log('ui.class_join', { sessionId: target.id.toString(), classSessionId: target.classSessionId.toString() });
+    navigate(sessionUrl('session', target.id, { join: '1' }));
+  }, [target]);
 
   const leave = async () => {
     await setPresence(conn, learnerId, 'offline');
@@ -59,10 +52,6 @@ export function WaitingRoom({ conn, learnerId }: { conn: DbConnection; learnerId
       </span>
       {error && <p className="pr-error" data-testid="error">{error}</p>}
       <div className="pr-wait-actions">
-        <label className="pr-check">
-          <input data-testid="text-mode" type="checkbox" checked={typing} onChange={e => setTyping(e.target.checked)} />
-          Type instead of talking (no sound)
-        </label>
         <button className="pr-link" data-testid="leave-waiting" onClick={leave}>Leave the waiting room</button>
       </div>
     </div>

@@ -164,15 +164,14 @@ const main = async () => {
   const sessionId = await page.$eval(tid('session-screen'), el => el.getAttribute('data-session-id'));
   // session tab URL now carries ?session=; wait until ready
   for (let i = 0; i < 75; i++) {
-    const ok = await page.evaluate(() => window.__tutor?.state?.sessionReady === true && !!document.querySelector('[data-testid="start-talking"]:not([disabled])'));
+    const ok = await page.evaluate(() => window.__tutor?.state?.sessionReady === true);
     if (ok) break;
     await sleep(200);
   }
   const obs = process.env.OBSERVER === '1' ? await observerPage(sessionId) : null;
   const frames = await wsCapture(page);
-  await page.evaluate(() => window.__tutor.clear());
+  // Voice auto-starts with the session (no "Start talking" click any more).
   const startWall = Date.now();
-  await page.click(tid('start-talking'));
   await page.waitForSelector(tid('mic-state'), { timeout: 15_000 });
   const hook = await page.evaluate(HOOKS);
   console.error(`[lat] session ${sessionId} started, hooks: ${hook}`);

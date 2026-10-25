@@ -161,8 +161,9 @@ Test users only. Never use real children's data.
 
 ## Features
 
-- **Self-learning by voice or text**: "Learn by myself" with a task description and an optional photo;
-  talk (browser VAD + semantic turn detection, barge-in) or type ("Type instead of talking").
+- **Self-learning by voice**: "Learn by myself" with a task description and an optional photo;
+  microphone and sound start with the lesson (browser VAD + semantic turn detection, barge-in);
+  a gear menu picks microphone / speaker and sets the microphone boost and tutor volume.
 - **Lesson arc**: the team's teaching methodology (intuition → formalization → solving) planned by
   Claude Haiku 5.5 and streamed moment by moment; every moment is compiled and validated by
   SpacetimeDB against the live canvas, with a repair round or a recap when the model slips.

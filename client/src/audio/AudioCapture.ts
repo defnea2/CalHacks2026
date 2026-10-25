@@ -12,6 +12,7 @@ import { VadMachine, type VadEvent } from './vadMachine';
 import { rmsDbfs } from './pcm';
 import { eventLog } from '../lib/debug';
 import { SmartTurnDetector } from './SmartTurn';
+import { clampInputGain, micConstraints } from './audioPrefs';
 
 export interface CaptureOptions {
   ctx: AudioContext;
@@ -20,6 +21,12 @@ export interface CaptureOptions {
   onEvent: (e: VadEvent) => void;
   /** Called with the latest frame level and probability (UI meter), throttled by the caller. */
   onFrame?: (levelDb: number, prob: number) => void;
+  /** audioinput deviceId ('' = default). */
+  micId?: string;
+  /** Input gain before the VAD / encoder (0.5..4). */
+  inputGain?: number;
+  /** The microphone track ended (device unplugged). */
+  onTrackEnded?: () => void;
 }
 
 export const VAD_ASSET_PATH = `${import.meta.env.BASE_URL ?? '/'}vad/`;
@@ -27,7 +34,12 @@ export const VAD_ASSET_PATH = `${import.meta.env.BASE_URL ?? '/'}vad/`;
 export class AudioCapture {
   readonly machine: VadMachine;
   private vad: MicVAD | null = null;
+  /** Raw microphone stream; the VAD reads `dest.stream` (mic → GainNode → destination). */
   private stream: MediaStream | null = null;
+  private source: MediaStreamAudioSourceNode | null = null;
+  private gain: GainNode | null = null;
+  private dest: MediaStreamAudioDestinationNode | null = null;
+  private micId: string;
   private stopped = false;
   private smartTurn: SmartTurnDetector | null = null;
   private smartTurnReady = false;
@@ -35,6 +47,55 @@ export class AudioCapture {
   constructor(private readonly opts: CaptureOptions) {
     const { voice, client } = opts.settings;
     this.machine = new VadMachine({ ...voice, ...client }, { firstPhraseId: opts.firstPhraseId });
+    this.micId = opts.micId ?? '';
+  }
+
+  private async openMic(micId: string): Promise<MediaStream> {
+    const { client } = this.opts.settings;
+    const base: MediaTrackConstraints = {
+      channelCount: 1,
+      echoCancellation: client.MIC_AEC !== 0,
+      noiseSuppression: client.MIC_NS !== 0,
+      autoGainControl: client.MIC_AGC !== 0,
+    };
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(base, micId) });
+    const track = stream.getAudioTracks()[0];
+    eventLog.log('capture.mic', { label: track?.label ?? '', deviceId: micId, settings: track?.getSettings?.() ?? {} });
+    track?.addEventListener('ended', () => {
+      if (this.stopped || this.stream !== stream) return;
+      eventLog.log('capture.mic_ended', { deviceId: micId });
+      this.opts.onTrackEnded?.();
+    });
+    return stream;
+  }
+
+  /** Hot-swap the microphone: the VAD keeps running, only the source in front of the gain changes. */
+  async switchMic(micId: string): Promise<void> {
+    if (this.stopped || !this.gain) {
+      this.micId = micId;
+      return;
+    }
+    const next = await this.openMic(micId);
+    if (this.stopped) {
+      next.getTracks().forEach(t => t.stop());
+      return;
+    }
+    const old = this.stream;
+    this.source?.disconnect();
+    this.stream = next;
+    this.micId = micId;
+    this.source = this.opts.ctx.createMediaStreamSource(next);
+    this.source.connect(this.gain);
+    old?.getTracks().forEach(t => t.stop());
+    eventLog.log('capture.mic_switched', { deviceId: micId });
+  }
+
+  setInputGain(v: number): void {
+    if (this.gain) this.gain.gain.value = clampInputGain(v);
+  }
+
+  get deviceId(): string {
+    return this.micId;
   }
 
   async start(): Promise<void> {
@@ -57,21 +118,23 @@ export class AudioCapture {
         ort.env.wasm.numThreads = 1;
       },
       getStream: async () => {
-        this.stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: 1,
-            echoCancellation: settings.client.MIC_AEC !== 0,
-            noiseSuppression: settings.client.MIC_NS !== 0,
-            autoGainControl: settings.client.MIC_AGC !== 0,
-          },
-        });
-        const track = this.stream.getAudioTracks()[0];
-        eventLog.log('capture.mic', { label: track?.label ?? '', settings: track?.getSettings?.() ?? {} });
-        return this.stream;
+        this.stream = await this.openMic(this.micId);
+        this.source = ctx.createMediaStreamSource(this.stream);
+        this.gain = ctx.createGain();
+        this.gain.gain.value = clampInputGain(this.opts.inputGain ?? 1);
+        this.dest = ctx.createMediaStreamDestination();
+        this.source.connect(this.gain).connect(this.dest);
+        return this.dest.stream;
       },
       onFrameProcessed: (probs, frame) => this.onFrame(probs.isSpeech, frame),
     });
     await this.vad.start();
+    if (this.stopped) {
+      // stop() ran while the microphone was opening: release what start() created after it
+      await this.vad.destroy().catch(() => {});
+      this.releaseGraph();
+      return;
+    }
     eventLog.log('capture.started', {});
     if (settings.voice.SMART_TURN) this.startSmartTurn();
   }
@@ -203,7 +266,14 @@ export class AudioCapture {
     } catch (err) {
       eventLog.log('capture.error', { error: String(err) });
     }
-    this.stream?.getTracks().forEach(t => t.stop());
+    this.releaseGraph();
     eventLog.log('capture.stopped', {});
+  }
+
+  private releaseGraph(): void {
+    this.source?.disconnect();
+    this.gain?.disconnect();
+    this.stream?.getTracks().forEach(t => t.stop());
+    this.dest?.stream.getTracks().forEach(t => t.stop());
   }
 }

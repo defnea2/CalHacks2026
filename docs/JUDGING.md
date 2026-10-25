@@ -55,8 +55,8 @@ all sessions · `?lesson` offline lab · `?miccheck`.
 Use the "3 minutes" text in [PITCH.md §1](PITCH.md#3-minutes) over the live flow in
 [DEMO.md "Script"](DEMO.md#script): problem 30 s → student by voice 60 s (DEMO 0:15–0:55) → teacher
 dashboard, groups and observe 60 s (DEMO 0:55–1:45) → why SpacetimeDB 30 s. Then 2 minutes Q&A
-([PITCH.md §3](PITCH.md#3-likely-judge-questions)). **Demo by voice**: text mode exists
-("Type instead of talking"), but it is only the fallback for a broken network.
+([PITCH.md §3](PITCH.md#3-likely-judge-questions)). **Voice only**: the student UI has no
+text mode; microphone and sound start with the lesson (gear menu: devices, boost, volume).
 
 ---
 
@@ -89,7 +89,7 @@ children's-voice test; English only (`TTS_LANGUAGE: 'en'`).
 ### 2-minute cut (Cartesia, demo first)
 
 1. **0:00–0:10** One sentence: "A voice tutor for kids stuck on fractions homework; Cartesia is its ears and voice."
-2. **0:10–1:15** Live: [DEMO.md 0:15–0:55](DEMO.md#015055-student-by-voice-left-window) (Ava Chen, `Why is 1/4 + 2/4 not 3/8?`, Start talking, say "I added the tops and the bottoms"). Point at the canvas changing **on the word** (Sonic word timestamps). Interrupt the tutor once (barge-in).
+2. **0:10–1:15** Live: [DEMO.md 0:15–0:55](DEMO.md#015055-student-by-voice-left-window) (Ava Chen, `Why is 1/4 + 2/4 not 3/8?`, Start my lesson (mic + sound start by themselves), say "I added the tops and the bottoms"). Point at the canvas changing **on the word** (Sonic word timestamps). Interrupt the tutor once (barge-in).
 3. **1:15–1:35** Debug panel under the session: the `turn_metrics` row of that turn, end of speech → first audio (~2.7 s).
 4. **1:35–2:00** Models and call sites ([README table](../README.md#cartesia-features-used)), the ink-2 decision, the limitations above.
 
@@ -166,8 +166,8 @@ Conflicts between the judging brief and what is on `main`:
    `assessResponse` (see table above). Say that instead.
 4. **12–15-word sentence chunker.** Does not exist; the chunker splits at sentence ends with no
    maximum (`maxWords: Infinity`). Word budgets are prompted per stage.
-5. **"No text fallback in the demo."** Text mode exists ("Type instead of talking", `?voice=0`) and
-   is listed in DEMO.md "Fallbacks". The demo must use voice; text only if the network fails.
+5. **Voice only.** The student UI has no text mode (removed: it cluttered the screen); the text
+   path stays in the backend for simulated students and harnesses. Mic trouble: DEMO.md "Fallbacks".
 6. **Chunk size.** PITCH.md says 160 ms chunks; config says `AUDIO_CHUNK_MS: 150`. Measured chunks
    are 5,120 B = 160 ms (rounded to whole VAD frames). Both are consistent; say "about 160 ms".
 7. **README Quickstart said OpenRouter was required**; `scripts/publish.mjs:10` only requires it

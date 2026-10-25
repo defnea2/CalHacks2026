@@ -1,0 +1,30 @@
+/* Sound settings popover + round icon buttons of the session controls (mic mute, gear, camera). */
+.aset { position: relative; display: inline-flex; }
+.aset-icon, .stage-controls .aset-icon, .stage-controls .stage-icon {
+  display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 999px;
+  border: 1px solid #d9ded6; background: #fffefa; color: #24382f; cursor: pointer; flex-shrink: 0;
+}
+.aset-icon:hover, .stage-controls .aset-icon:hover, .stage-controls .stage-icon:hover { background: #eef2ea; }
+.aset-icon[aria-expanded="true"] { background: #eef2ea; border-color: #24594b; }
+.stage-controls .stage-icon[aria-pressed="true"] { background: #b8723f; border-color: #b8723f; color: #fffdf6; }
+.aset-pop {
+  position: absolute; right: 0; z-index: 40; width: 292px; max-width: calc(100vw - 32px);
+  background: #fffefa; color: #24382f; border: 1px solid #d9ded6; border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(36, 56, 47, .14); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; text-align: left;
+}
+.aset-up { bottom: calc(100% + 10px); }
+.aset-down { top: calc(100% + 10px); }
+.aset-pop h3 { font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: #657168; margin: 0; }
+.aset-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #657168; }
+.aset-field > span { display: flex; justify-content: space-between; }
+.aset-field output { color: #24382f; font-variant-numeric: tabular-nums; }
+.aset-field select { height: 34px; padding: 0 8px; border: 1px solid #d9ded6; border-radius: 5px; background: #fff; color: #24382f; font-size: 13px; max-width: 100%; }
+.aset-field input[type="range"] { accent-color: #24594b; width: 100%; }
+.aset-meter { height: 6px; border-radius: 3px; background: #eef2ea; overflow: hidden; margin-top: -4px; }
+.aset-meter i { display: block; height: 100%; background: #24594b; border-radius: 3px; transition: width 90ms linear; }
+.aset-note { font-size: 12px; color: #657168; margin: 0; }
+.aset-error { color: #a4442b; }
+.stage-notice { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #24382f; background: #f7ecd9; border: 1px solid #e6cfa8; border-radius: 6px; padding: 6px 6px 6px 12px; }
+.stage-controls .stage-notice button { height: 32px; font-size: 12px; padding: 0 12px; border-radius: 999px; }
+@media (prefers-reduced-motion: reduce) { .aset-meter i { transition: none; } }
+.stage-muted { font-size: 12px; color: #657168; }
