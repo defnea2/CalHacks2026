@@ -24,6 +24,12 @@ export function clusterSlots(size: number): 2 | 4 {
 }
 
 /** student_cluster.learnerIds: JSON string[] (u64 as strings). Never throws. */
+/** Learner ids of a student_cluster row: the typed `members` column, or the JSON `learnerIds`
+ *  string of a row from an older module (members empty or missing). */
+export function clusterMemberIds(c: { learnerIds: string; members?: readonly bigint[] }): string[] {
+  return c.members && c.members.length ? c.members.map(String) : parseLearnerIds(c.learnerIds);
+}
+
 export function parseLearnerIds(json: string): string[] {
   try {
     const v = JSON.parse(json) as unknown;
@@ -106,4 +112,10 @@ export function nextLabel(nowMs: number, r: RefreshInfo): string {
   if (r.nextDueMs === null) return '';
   const s = Math.ceil((r.nextDueMs - nowMs) / 1000);
   return s <= 0 ? 'next update now' : `next in ${s} s`;
+}
+
+/** refreshDashboard returns a typed object; a module published before that returned a JSON string. */
+export function refreshResult(out: unknown): { ok: boolean; skipped: string; error: string } {
+  const r = (typeof out === 'string' ? JSON.parse(out || '{}') : (out ?? {})) as { ok?: boolean; skipped?: string; error?: string };
+  return { ok: !!r.ok, skipped: r.skipped ?? '', error: r.error ?? '' };
 }

@@ -10,7 +10,11 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+import {
+  RefreshDashboardResult,
+} from "./types";
+
 export const params = {
   classSessionId: __t.u64(),
 };
-export const returnType = __t.string()
+export const returnType = RefreshDashboardResult

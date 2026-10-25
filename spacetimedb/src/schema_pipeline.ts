@@ -10,7 +10,7 @@ export const textPlayJob = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
-    sessionId: t.u64(),
+    sessionId: t.u64().index('btree'),
     sentenceId: t.u64(),
     utteranceId: t.u64(),
     idx: t.u32(),

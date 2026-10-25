@@ -176,17 +176,43 @@ describe('interrupt', () => {
     expect(session(h, s.id).turnCount).toBe(3);
   });
 
-  it('TTS failure retries once, then marks the sentence dropped', () => {
+  it('TTS failure retries once as a new tts_job row (attempt 1), then marks the sentence dropped', () => {
     const { h, agent, s } = ready();
     call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 8n, replyToIdx: 0, preemptive: false });
     call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 8n, idx: 0, display: 'A.', speech: 'A.' });
+    expect([...h.db.ttsJob.iter()].map(j => j.attempt)).toEqual([0]);
     let calls = 0;
-    runTts(h, () => {
+    const fail = () => {
       calls++;
       return { status: 500, body: 'nope' };
-    });
+    };
+    expect(runTts(h, fail)).toBe(1);
+    expect(calls).toBe(1);
+    const retry = [...h.db.ttsJob.iter()];
+    expect(retry.map(j => [j.attempt, j.sentenceId, j.idx])).toEqual([[1, sentences(h, 8n)[0]!.id, 0]]);
+    expect(sentences(h, 8n)[0]!.status).toBe('pending');
+    expect(runTts(h, fail)).toBe(1);
     expect(calls).toBe(2);
+    expect([...h.db.ttsJob.iter()]).toHaveLength(0);
     expect(sentences(h, 8n)[0]!.status).toBe('dropped');
+  });
+
+  it('a failed TTS call whose retry succeeds plays; a barge-in cancels a scheduled retry', () => {
+    const { h, agent, client, s } = ready();
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 9n, replyToIdx: 0, preemptive: false });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 9n, idx: 0, display: 'A.', speech: 'A.' });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 9n, idx: 1, display: 'B.', speech: 'B.' });
+    let n = 0;
+    runTts(h, req => (n++ === 0 ? { status: 503, body: 'busy' } : ttsOk(req)));
+    expect(sentences(h, 9n).map(x => x.status)).toEqual(['pending', 'ready']);
+    runTts(h, ttsOk);
+    expect(sentences(h, 9n).map(x => x.status)).toEqual(['ready', 'ready']);
+
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 9n, idx: 2, display: 'C.', speech: 'C.' });
+    runTts(h, () => ({ status: 500, body: 'nope' }));
+    expect([...h.db.ttsJob.iter()].map(j => j.attempt)).toEqual([1]);
+    call(h, client, mod.interrupt, { sessionId: s.id });
+    expect([...h.db.ttsJob.iter()]).toHaveLength(0);
   });
 });
 

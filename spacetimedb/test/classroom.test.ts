@@ -5,7 +5,7 @@ import { TestAuth } from 'spacetimedb/server/test-utils';
 import { CLASSROOM_DEFAULTS as C } from '../../shared/src/config';
 import { SIM_STUDENTS } from '../../shared/src/classroom/simStudents';
 import { clusterViolations } from '../../shared/src/classroom/clusters';
-import { cleanChildMessage, pickBehaviour } from '../src/classroom';
+import { cleanChildMessage, pickBehaviour, resetClusterBackfill } from '../src/classroom';
 import { anthropicResponse, auth, call, makeLearner, makeSession, mod, proc, runExtraction, runTextPlay, session, setup, turns, type H, type Req, type Responder } from './helpers';
 
 type Env = ReturnType<typeof setup>;
@@ -444,11 +444,25 @@ const dashboardAnswer = (summary: string, clusters: Array<{ name: string; ids: s
 const clustersOf = (h: H, classId: bigint) =>
   [...h.db.studentCluster.classSessionId.filter(classId)].sort((a, b) => a.position - b.position).map(c => ({ name: c.name, ids: JSON.parse(c.learnerIds) as string[] }));
 
+describe('student_cluster.members (typed learner ids)', () => {
+  it('written with learnerIds; older rows are backfilled once on connect', () => {
+    const { h, env, cls, ids } = classWithSims(4);
+    (mod.refreshDashboard as any)(proc(h, env.client, dashboardAnswer('s', [{ name: 'A', ids: ids.slice(0, 2) }, { name: 'B', ids: ids.slice(2) }])), { classSessionId: cls.id });
+    const rows = [...h.db.studentCluster.classSessionId.filter(cls.id)].sort((a, b) => a.position - b.position);
+    expect(rows.map(r => r.members.map(String))).toEqual([ids.slice(0, 2), ids.slice(2)]);
+    // A row as an older module wrote it (members defaulted to []).
+    h.withReducerTx(TestAuth.internal(), ctx => ctx.db.studentCluster.id.update({ ...rows[0]!, members: [] }));
+    resetClusterBackfill();
+    h.withReducerTx(env.client, ctx => (mod.onConnect as any)(ctx, {}));
+    expect(h.db.studentCluster.id.find(rows[0]!.id)!.members.map(String)).toEqual(ids.slice(0, 2));
+  });
+});
+
 describe('dashboard', () => {
   it('refresh writes summary + valid clusters and books the next run in 30 s', () => {
     const { h, env, cls, ids } = classWithSims(6);
     let req: Req | undefined;
-    const out = JSON.parse(
+    const out = (
       (mod.refreshDashboard as any)(
         proc(h, env.client, r => {
           req = r;
@@ -566,8 +580,8 @@ describe('dashboard', () => {
     expect(runDashboardJobs(h)).toBe(1); // no responder: no HTTP call while observing
     expect([...h.db.dashboardJob.iter()]).toHaveLength(0);
     expect(h.db.classSummary.classSessionId.find(cls.id)).toBeFalsy();
-    const button = JSON.parse((mod.refreshDashboard as any)(proc(h, env.client), { classSessionId: cls.id }));
-    expect(button).toEqual({ ok: false, skipped: 'impersonating' });
+    const button = ((mod.refreshDashboard as any)(proc(h, env.client), { classSessionId: cls.id }));
+    expect(button).toEqual({ ok: false, skipped: 'impersonating', error: '', repaired: false, repairs: [], clusters: 0 });
     expect(() => call(h, env.client, mod.setImpersonation, { classSessionId: cls.id, learnerId: 777n })).toThrow(/not in class session/);
 
     call(h, env.client, mod.setImpersonation, { classSessionId: cls.id, learnerId: 0n });
@@ -623,7 +637,7 @@ describe('dashboard', () => {
   it('no students: summary without an LLM call, clusters cleared', () => {
     const env = setup(ANTHROPIC);
     const cls = startClass(env, teacher(env).id);
-    const out = JSON.parse((mod.refreshDashboard as any)(proc(env.h, env.client), { classSessionId: cls.id }));
+    const out = ((mod.refreshDashboard as any)(proc(env.h, env.client), { classSessionId: cls.id }));
     expect(out.ok).toBe(true);
     expect(env.h.db.classSummary.classSessionId.find(cls.id)!.summary).toMatch(/No students/);
   });
@@ -648,7 +662,8 @@ describe('memory extraction window dedupe (running marker)', () => {
       // While the window is in flight two more turns arrive.
       call(hh, client, mod.submitTextTurn, { sessionId: s.id, text: 'three', intent: '' });
       tutorReplies(env, s.id, 'Four.');
-      duringCall = [...hh.db.extractionJob.iter()].length;
+      // Only the watchdog backup of the running window is queued (due after the stale limit).
+      duringCall = [...hh.db.extractionJob.iter()].filter(j => !(j.fromIdx === 0 && at(j) >= now(hh) + 300_000_000n)).length;
       return anthropicResponse({ items: [], mastery: [] });
     });
     expect(duringCall).toBe(0); // the old code scheduled [0, 4) again here

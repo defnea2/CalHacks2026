@@ -117,8 +117,8 @@ read them) can see them; **event** = rows are broadcast to subscribers at commit
 | `lesson_record` | private | Authoritative `TeachingPlanner` record (current step incl. its check with the answer, history) |
 | `lesson_plan` | private | The lesson being streamed for one utterance (meta, accepted beats, canvas after each beat) |
 | `agent_status` | public | Worker heartbeat (row 0, every 5 s): model, provider, busy sessions. The UI shows "tutor online" |
-| `tutor_request` / `tutor_result` | public | Request/result rows for the slant lesson's tutor feedback (replaces the old `/api/teaching/shear-feedback`) |
-| `text_playback` | private | Reading clock of a text-mode session |
+| `tutor_request` / `tutor_result` | public | Request/result rows for the slant lesson's tutor feedback (replaces the old `/api/teaching/shear-feedback`). Unused: no UI inserts requests and the worker does not subscribe |
+| `text_playback` | private | Reading clock of a text-mode session (`endsAtMicros`: u64 Unix micros, see Column types) |
 
 ### Memory (all private)
 
@@ -128,7 +128,7 @@ read them) can see them; **event** = rows are broadcast to subscribers at commit
 | `note_evidence` | Quote + turn range that supports a note |
 | `concept_state` | Mastery 0–100 per learner and concept |
 | `session_summary` | Summary + next focus written at session end |
-| `extraction_cursor` | First turn not yet processed + a running marker (no duplicate windows) |
+| `extraction_cursor` | First turn not yet processed + a running marker `runningSinceMicros` (u64 Unix micros; no duplicate windows) |
 
 Memory is never subscribed to by a client; it reaches the LLM only through the agent-only procedures
 `buildContext` / `buildLessonRequest`, and the dashboard through its own procedure.
@@ -143,7 +143,7 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 | `class_document` | private | Image payload of the class document (reaches the worker like a task photo) |
 | `sim_profile` | public, read-only | 20 seed students (persona, misconceptions, seed memory) from `shared/src/classroom/simStudents.ts` |
 | `class_summary` | public | Class-wide LLM summary + version |
-| `student_cluster` | public | Groups of exactly 2 or 4 students (one 3 only for odd classes) with a short name and description |
+| `student_cluster` | public | Groups of exactly 2 or 4 students (one 3 only for odd classes) with a short name and description. `members: u64[]` (typed); `learnerIds` (JSON string) is still written for older clients |
 | `dashboard_state` | public | Who the teacher is observing, `nextDueAt`, `running`, `lastError` |
 | `sim_running` | private | Student-LLM calls in flight (concurrency cap) |
 
@@ -152,12 +152,64 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 | Table | Runs | When | Notes |
 | --- | --- | --- | --- |
 | `stt_job` | procedure `transcribePhrase` | now, on a phrase's final chunk | one retry after 0.3 s, then the phrase is discarded |
-| `tts_job` | procedure `synthesizeSentence` | now, per sentence (voice mode) | retried, then the sentence is `dropped` so playback skips it |
+| `tts_job` | procedure `synthesizeSentence` | now, per sentence (voice mode) | a failed call schedules one retry row (`attempt` 1, after 0.2 s, only while the sentence is pending), then the sentence is `dropped` so playback skips it; barge-in deletes pending rows |
 | `text_play_job` | reducer `finishTextSentence` | after the reading time of a text-mode sentence: `max(700 ms, 280 ms × words)`, sentences one after another | scheduler-only (checks `ctx.sender == ctx.identity`) |
-| `extraction_job` | procedure `extractMemory` | every `MEMORY_EVERY_N_TURNS` (6) turns, and once at session end | retries after 10 / 30 / 90 s |
-| `summary_job` | procedure `summarizeSession` | at session end | |
+| `extraction_job` | procedure `extractMemory` | every `MEMORY_EVERY_N_TURNS` (6) turns, and once at session end | retries after 10 / 30 / 90 s; a run that takes the window also queues a backup row due after the 300 s stale limit (deleted when the run ends), so a crashed run cannot lose the window |
+| `summary_job` | procedure `summarizeSession` | at session end | one per session (not scheduled while one is queued); retries after 10 / 30 / 90 s |
 | `sim_turn_job` | procedure `simStudentTurn` | 2–5 s after the tutor finished speaking to a simulated student | busy re-check every 1.5 s (max 40), failures retried after 5 s twice; stale jobs do nothing |
 | `dashboard_job` | procedure `dashboardTick` | `DASHBOARD_INTERVAL_S` (30 s) after the previous refresh finished | failed run retried in 10 s; skipped while the teacher observes |
+| `retention_job` | reducer `runRetention` | one interval row, every 5 min (created on init and on connect) | scheduler-only; idempotent sweep, see Retention |
+
+### Retention
+
+`retention.ts` deletes what is only needed while a session runs:
+
+| Data | Deleted | Env |
+| --- | --- | --- |
+| `turn_image`, `session_image` (photo bytes) | `RETENTION_IMAGE_MIN` minutes (default 30) after the session ended | `0` / `off` keeps them |
+| `class_document` (image bytes of a class's document) | the same time after the class session ended | same |
+| `lesson_record`, `lesson_plan`, `beat` (planner JSON) | `RETENTION_DAYS` days after the session ended | default off |
+| `audio_in` (raw mic audio) | at transcription and at session end (not the sweep) | |
+
+Kept: sessions, turns, phrases (text), reply sentences, metrics, `lesson_state`, `canvas_state`,
+memory notes, evidence, mastery, summaries, and the history flags `session.hasImage` /
+`turn.hasPhoto`. A sweep only touches rows past their limit, so it is idempotent; photo tables stay
+small, so it reads them whole (`lesson_record` / `lesson_plan` only when `RETENTION_DAYS` is set).
+
+### Column types
+
+Two time columns stay `u64` Unix micros instead of `t.timestamp()`: `text_playback.endsAtMicros`
+and `extraction_cursor.runningSinceMicros` (0 = idle). Changing a column's type is not an
+automatic migration in 2.13 (only adding tables, indexes and columns with defaults at the end is),
+so it would need `--clear` or a parallel column holding the same state twice; both are private and
+only compared with `ctx.timestamp.microsSinceUnixEpoch`. `student_cluster.learnerIds` got the
+additive typed column `members: u64[]` instead (written together; rows from before are backfilled
+from the JSON once per module instance on init / connect).
+
+### Indexes
+
+Every column module code looks rows up by has a btree index; no reducer or procedure scans a whole
+table that grows with use (only the small fixed ones: the content library on a pack reload and
+`sim_running`, which holds at most `SIM_MAX_CONCURRENT` rows). Besides primary keys:
+
+| Table | Indexed columns |
+| --- | --- |
+| `session` | `learnerId`, `active`, `classSessionId` (linked sessions of a class, dashboard subscription) |
+| `learner` | `isSimulated`, `simRank` (simulation users by seed rank; real learners have rank 0) |
+| `presence` | `connectionId` (disconnect), `status` (who joins a starting class) |
+| `turn`, `phrase`, `audio_in`, `turn_metrics` | `sessionId` + `(sessionId, idx / phraseId / turnIdx)` |
+| `reply_sentence`, `turn_metrics` | `utteranceId` (sentences / metrics of one utterance) |
+| `reply_sentence` | `sessionId`, `(utteranceId, idx)` |
+| `stt_job`, `tts_job`, `text_play_job`, `extraction_job`, `summary_job`, `sim_turn_job` | `sessionId` (cancel or find a session's jobs); `tts_job` also `utteranceId` |
+| `board_item`, `beat`, `learner_event`, `lesson_plan`, `turn_image`, `tutor_request`, `tutor_result` | `sessionId` |
+| memory tables | `learnerId` (`memory_note`, `concept_state`, `session_summary`, `seed_session`), `noteId` (`note_evidence`), `(learnerId, concept)` |
+| classroom | `class_session.teacherId` / `active`, `student_cluster.classSessionId`, `dashboard_job.classSessionId` |
+
+Lookups by the first column of a multi-column index use the single-column index instead: a prefix
+scan whose last element is a point (`byUtteranceIdx.filter(utteranceId)`) is valid on the host, but
+the 2.13 test datastore (`spacetimedb/server/test-utils`) cannot decode its empty range end ("Could
+not decode arguments to index scan"). Adding an index is an additive migration: `spacetime publish`
+without `--clear` creates it on a database with data.
 
 ## 3. Reducers and procedures
 
@@ -168,7 +220,7 @@ checks the caller's identity in the private `role` table.
 
 | Reducer / procedure | Caller | File | What |
 | --- | --- | --- | --- |
-| `init`, `onConnect` | lifecycle | `library.ts`, `classroom.ts` | Load the content library and the 20 sim profiles (cheap when unchanged) |
+| `init`, `onConnect` | lifecycle | `library.ts`, `classroom.ts`, `retention.ts` | Load the content library and the 20 sim profiles when they changed (pack hash and profile rows computed once per module instance; a connect does one `library_meta` and 20 `sim_profile` lookups), ensure the `retention_job` row, backfill `student_cluster.members` |
 | `onDisconnect` | lifecycle | `classroom.ts` | That connection's real learners → `offline` |
 | `createTestUser` | client | `sessions.ts` | New learner |
 | `startSession(learnerId, taskText)` | client | `sessions.ts` | Ends the learner's active session, starts a new one |
@@ -183,11 +235,11 @@ checks the caller's identity in the private `role` table.
 | `interruptUtterance(sessionId, utteranceId)` | client | `voice_out.ts` | Barge-in scoped to the utterance the client was playing: the current one → `interrupt`; one that just finished (learner cut into its last sentence) → its tutor turn marked interrupted + flush; older ones ignored |
 | `markPlayed` | client | `voice_out.ts` | A sentence started playing (drives reveals, first-playback metric, "what was heard") |
 | `reportNoise` | client | `index.ts` | Noise floor of the turn, for metrics |
-| `submitGapAnswer` | client | `lesson.ts` | Gap task answer, checked against the private `board_answer` |
+| `submitGapAnswer` | client | `lesson.ts` | Gap task answer, checked against the private `board_answer`; only while the session is active, at most 10 answers per task (`board_item.attempts`), a solved task is not re-graded |
 | `submitTextTurn(sessionId, text, intent)` | client (module for sims) | `text_mode.ts` | Typed turn or a lesson button (`another_way`, `smaller_step`, `continue`, `demonstrate`); interrupts a running reply like barge-in |
 | `setSessionVoice(sessionId, voice)` | client | `text_mode.ts` | Text mode on/off |
 | `submitInteraction(sessionId, kind, payload)` | client | `pipeline.ts` | Canvas manipulation (`math_action`, `activity_action`), `submit`, `choice`; validated against `canvas_state` and the open check |
-| `requestTutor` | client | `pipeline.ts` | Slant-lesson feedback request row (`tutor_request`). No UI calls it today; the worker (`tutorRequests.ts`) serves the rows if one appears |
+| `requestTutor` | client | `pipeline.ts` | **Unused.** Slant-lesson feedback request row (`tutor_request`); no UI calls it and the worker no longer subscribes (`tutorRequests.ts` stays, re-enabled by adding the subscription back) |
 | `registerAgent(secret)` | worker | `index.ts` | Registers the worker identity as `agent` |
 | `agentHeartbeat`, `submitTutorResult` | agent | `pipeline.ts` | Heartbeat row 0; result of a `tutor_request` |
 | `beginUtterance`, `beginOpening` | agent | `voice_out.ts`, `opening.ts` | Start a tutor reply (or the opening) with a worker-chosen unique utterance id |
@@ -214,9 +266,28 @@ checks the caller's identity in the private `role` table.
 | `resetSimulatedStudents(count)` | client | `classroom.ts` | Simulation users 1..count (0 = all 20) back to their seed state; refused while one is in a running class |
 | `endClassSession` | client | `classroom.ts` | Ends linked sessions; real students back to `waiting` |
 | `setImpersonation(classSessionId, learnerId)` | client | `classroom.ts` | Teacher observes a student (0 = stop; an overdue refresh then runs at once) |
-| `refreshDashboard(classSessionId) → string` | client (procedure) | `classroom.ts` | Refresh button: one Haiku call → summary + clusters |
+| `refreshDashboard(classSessionId) → RefreshDashboardResult` | client (procedure) | `classroom.ts` | Refresh button: one Haiku call → summary + clusters. Typed product `{ok, skipped, error, repaired, repairs, clusters}` ('' / false / 0 = not set) |
 | `learnerInsights(learnerId, teacherId, key) → string` | client (procedure) | `insights.ts` | Teacher's student profile: memory notes, mastery, last 5 summaries (JSON `LearnerInsightsResult`, `shared/src/insights.ts`) |
 | `dashboardTick`, `simStudentTurn` | scheduled | `classroom.ts` | 30 s dashboard cadence; next simulated student message |
+
+**Error convention.** A reducer or procedure that refuses its input throws `SenderError` (unknown
+ids, ended session, wrong caller, validation of client and agent arguments, LLM output a reducer
+rejects, e.g. `addBeat` / `beginLesson`; the worker's repair round reads the message). A result
+`{ok: false, ...}` is used only where the caller needs a structured outcome rather than a failure:
+the agent procedures the LLM tool loop feeds back to the model (`setTopic`, `buildLessonRequest`,
+`prefetchTopic`: `{ok:false, error}` becomes the tool result), `learnerInsights` (error codes the
+profile panel maps to text) and `refreshDashboard` (a skip or a provider failure is a note on the
+button). Scheduled reducers / procedures log and retry; they throw only for "scheduler only".
+
+**Return types.** `refreshDashboard` returns a typed product (`t.object`); the client accepts the
+older JSON string too, so a client deployed before a module update keeps working. The other
+procedures still return JSON strings on purpose: `learnerInsights` has a nested contract
+(`shared/src/insights.ts`, ids as decimal strings, times as Unix ms) that the client validates with
+`parseInsights` and also loads from fixtures; mirroring it as SpacetimeDB product types would put a
+second definition next to the shared one, and a module republish would break every deployed client
+until it is rebuilt. The agent procedures' JSON goes straight into LLM prompts. Changing a
+procedure's return type is accepted by `spacetime publish` without `--clear` (verified locally), but
+it is a breaking change for clients built from older bindings.
 
 ## 4. Voice turn, end to end
 
@@ -483,6 +554,16 @@ Procedures are the module's only way out: STT, TTS and all non-streaming LLM cal
   [SPACETIME_AUDIT.md](SPACETIME_AUDIT.md)). That is why
   observing/impersonating a student cost nothing to build: the observe frame subscribes to the same
   rows as the student's tab, and fan-out to a second client adds no measurable latency.
+  The worker, which serves every session, uses JOIN subscriptions on the active sessions
+  (`SELECT t.* FROM turn t JOIN session s ON t.session_id = s.id WHERE s.active = true`, the same
+  for `phrase`, `reply_sentence`, `board_item` and the sessions' `learner` rows; `worker/src/stdb.ts`).
+  2.13 maintains them incrementally: a session's rows arrive when it starts and are dropped from the
+  worker's cache when it ends. On a database with 36 sessions of history the worker's initial
+  subscription went from 1456 rows (~487 KiB) to 42 rows (~14 KiB)
+  (`pnpm --filter worker exec tsx src/measure-subscriptions.ts`; `src/gen-history.ts` fills a
+  scratch database). The teacher screens subscribe likewise: the dashboard to the learners of its
+  class's sessions and its teacher, class setup to online students only, the overview to the
+  learners of active sessions, the student picker to real learners.
 - **Validation in reducers.** The LLM proposes, the module disposes: phase transitions, beats
   compiled against the live canvas, checks, cluster sizes, presence transitions, interaction payloads
   are all validated in transactions; a rejection is a `SenderError` the worker turns into a repair
@@ -496,8 +577,9 @@ Procedures are the module's only way out: STT, TTS and all non-streaming LLM cal
 - **Scheduled tables instead of external queues.** STT, TTS, reading delays, memory windows, simulated
   students and the 30 s dashboard are rows with `scheduleAt`; cancellation is a delete of the
   pending job row (barge-in, supersede and `endSession` delete the reply's `tts_job`s) plus a status
-  check in the job's commit transaction for a call already in flight. Retries: STT schedules a new
-  row; TTS retries once inside the same procedure call.
+  check in the job's commit transaction for a call already in flight. Retries are new rows: STT,
+  TTS (`tts_job.attempt`, one retry after 0.2 s, only while the sentence is still pending) and
+  memory windows schedule the next attempt instead of looping inside the procedure.
 - **Procedures for side effects, reducers stay pure and fast.** Reducers make no network calls; every
   outbound call is a procedure that commits its result in its own transaction.
 - **One identity model, for the worker.** The worker authenticates as `agent` via a shared secret
