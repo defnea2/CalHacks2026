@@ -43,11 +43,16 @@ export function Board({ items, progress, serverOver, onSubmitAnswer, markerAt }:
     const timer = setTimeout(() => setTick(t => t + 1), Math.max(0, nextAt - performance.now()));
     return () => clearTimeout(timer);
   }, [nextAt]);
-  // Debug/E2E: when each item first became visible.
+  // Debug/E2E: when each item first arrived (board.seen) and first became visible (board.reveal).
   const logged = useRef(new Set<string>());
+  const seen = useRef(new Set<string>());
   useEffect(() => {
     shown.forEach((item, i) => {
       const k = item.id.toString();
+      if (!seen.current.has(k)) {
+        seen.current.add(k);
+        eventLog.log('board.seen', { id: k, utteranceId: item.utteranceId.toString(), sentenceIdx: item.sentenceIdx, markerPos: item.markerPos });
+      }
       if (!states[i]!.revealed || logged.current.has(k)) return;
       logged.current.add(k);
       eventLog.log('board.reveal', {
