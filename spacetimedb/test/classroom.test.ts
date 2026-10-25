@@ -92,7 +92,10 @@ describe('teachers and presence', () => {
     const b = makeLearner(h, env.client, 'Ben');
     const other = auth('other-tab');
     call(h, env.client, mod.setPresence, { learnerId: a.id, status: 'waiting' });
-    call(h, other, mod.setPresence, { learnerId: b.id, status: 'in_session' });
+    // Same identity (device), another connection: the presence remembers that connection.
+    const otherConn = Object.assign(Object.create(Object.getPrototypeOf(env.client)), env.client, { connectionId: other.connectionId });
+    call(h, otherConn, mod.setPresence, { learnerId: b.id, status: 'in_session' });
+    expect(() => call(h, other, mod.setPresence, { learnerId: b.id, status: 'waiting' })).toThrow(/another device/);
     expect(() => call(h, env.client, mod.setPresence, { learnerId: a.id, status: 'asleep' })).toThrow(/status must be/);
     expect(() => call(h, env.client, mod.setPresence, { learnerId: 999n, status: 'waiting' })).toThrow(/not found/);
     expect(h.db.presence.learnerId.find(a.id)!.connectionId).toBe(env.client.connectionId!.toHexString());
@@ -406,7 +409,7 @@ describe('simulation', () => {
     const cls = startClass(env, teacher(env).id, { simulatedCount: 1 });
     const s = linked(h, cls.id)[0]!;
     tutorReplies(env, s.id);
-    call(h, client, mod.submitTextTurn, { sessionId: s.id, text: 'teacher typed for the student', intent: '' });
+    call(h, env.agent, mod.submitTextTurn, { sessionId: s.id, text: 'operator typed for the student', intent: '' });
     runSim(h); // stale: turnCount changed -> no HTTP
     expect(turns(h, s.id).filter(t => t.source === 'sim')).toHaveLength(0);
 
@@ -750,6 +753,8 @@ describe('simulated students reset option', () => {
   it('resetSimulatedStudents(count) resets 1..count in seed order (0 = all), refused while in a running class', () => {
     const env = setup();
     const { h } = env;
+    expect(() => call(h, env.client, mod.resetSimulatedStudents, { count: 3 })).toThrow(/teachers only/);
+    teacher(env, 'Mr. Reset');
     call(h, env.client, mod.resetSimulatedStudents, { count: 3 });
     expect(simLearners(h).map(l => [l.simRank, l.name])).toEqual(SIM_STUDENTS.slice(0, 3).map(s => [s.rank, s.name]));
     const t = teacher(env);

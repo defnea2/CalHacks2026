@@ -1,5 +1,6 @@
 // Turn photos: the learner takes a picture at any time during a session; it travels with the
 // next student turn that closes (docs/ARCHITECTURE.md "turn_image").
+// - Only the session's learner (index.ts: auth.requireSessionLearner).
 // - attachImage stores it pending (a newer one replaces the pending one), session.pendingPhoto = true.
 // - completeTurn (voice_in) calls bindPendingImage: turn_image.bound/turnIdx/usedAt, turn.hasPhoto.
 // - The worker reads it with the agent-only procedure getTurnImage(sessionId, turnIdx).
@@ -11,25 +12,12 @@ export const TURN_IMAGE_MIME = /^image\/(jpeg|png|webp|gif)$/;
 
 type TurnImageRow = NonNullable<ReturnType<Ctx['db']['turnImage']['id']['find']>>;
 
-/** Records the identity that started an ad-hoc session (client startSession). */
+/** Records the identity that started an ad-hoc session (client startSession). Kept for the
+ *  session_owner table; authorization uses account_link (auth.ts requireSessionLearner). */
 export function recordOwner(ctx: Ctx, sessionId: bigint): void {
   const row = { sessionId, owner: ctx.sender };
   if (ctx.db.sessionOwner.sessionId.find(sessionId)) ctx.db.sessionOwner.sessionId.update(row);
   else ctx.db.sessionOwner.insert(row);
-}
-
-/** Only the session's learner may attach photos. There are no accounts (test users), so
- *  "owner" means: the identity that started the session, or (class sessions, started by the
- *  teacher) the connection that holds the learner's presence. Sessions with neither on record
- *  (older rows) stay open, as every other client reducer. */
-export function requireOwner(ctx: Ctx, session: SessionRow): void {
-  if (session.classSessionId) {
-    const presence = ctx.db.presence.learnerId.find(session.learnerId);
-    if (presence?.connectionId && presence.connectionId !== (ctx.connectionId?.toHexString() ?? '')) throw new SenderError('not your session');
-    return;
-  }
-  const owner = ctx.db.sessionOwner.sessionId.find(session.id);
-  if (owner && !owner.owner.isEqual(ctx.sender)) throw new SenderError('not your session');
 }
 
 function pendingOf(ctx: Ctx, sessionId: bigint): TurnImageRow[] {
@@ -39,7 +27,6 @@ function pendingOf(ctx: Ctx, sessionId: bigint): TurnImageRow[] {
 export function attachImage(ctx: Ctx, args: { sessionId: bigint; mime: string; data: Uint8Array }): void {
   const session = getSession(ctx, args.sessionId);
   if (!session.active) throw new SenderError('session has ended');
-  requireOwner(ctx, session);
   if (!TURN_IMAGE_MIME.test(args.mime)) throw new SenderError('photo must be jpeg, png, webp or gif');
   if (args.data.length === 0) throw new SenderError('empty photo');
   if (args.data.length > MODULE_DEFAULTS.PHOTO_MAX_BYTES) throw new SenderError(`photo too large (max ${MODULE_DEFAULTS.PHOTO_MAX_BYTES} bytes)`);
@@ -60,7 +47,6 @@ export function attachImage(ctx: Ctx, args: { sessionId: bigint; mime: string; d
 
 export function removePendingImage(ctx: Ctx, sessionId: bigint): void {
   const session = getSession(ctx, sessionId);
-  requireOwner(ctx, session);
   for (const r of pendingOf(ctx, session.id)) ctx.db.turnImage.id.delete(r.id);
   if (session.pendingPhoto) updateSession(ctx, session, { pendingPhoto: false });
 }

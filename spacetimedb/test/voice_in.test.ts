@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { TestAuth } from 'spacetimedb/server/test-utils';
 import { call, makeLearner, makeSession, mod, pcm, runStt, session, setup, sttOk, turns, type Req } from './helpers';
 
 function start() {
@@ -88,7 +89,7 @@ describe('turn closing', () => {
     const texts: Record<number, string> = { 1: 'I think', 2: 'it is eight twelfths' };
     for (const job of jobs) {
       h.withReducerTx(client, ctx => ctx.db.sttJob.scheduledId.delete(job.scheduledId));
-      const ctx = (h as any).procedureContextBuilder(client)
+      const ctx = (h as any).procedureContextBuilder(TestAuth.internal())
         .http(() => ({ code: 200, headers: { entries: [] }, version: { tag: 'Http11' }, body: JSON.stringify({ text: texts[job.phraseId] }) }))
         .build();
       (mod.transcribePhrase as any)(ctx, { job });

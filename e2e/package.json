@@ -8,6 +8,7 @@
     "smoke:generation": "tsx smoke-generation.ts",
     "typecheck": "tsc -p .",
     "test:e2e": "tsx run.ts",
+    "identity-check": "tsx identity-check.ts",
     "stack": "tsx stack.ts",
     "smoke:deployed": "node smoke-deployed.mjs"
   },

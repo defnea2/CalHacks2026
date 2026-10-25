@@ -1,10 +1,14 @@
-// Teacher flow: pick or create yourself (?teacher), set up and start a class session
-// (?teacher=<id>), then the dashboard (?class=<id>). No accounts.
+// Teacher flow: continue as one of this device's teacher accounts, add yourself or sign in with a
+// code (?teacher), set up and start a class session (?teacher=<id>), then the dashboard
+// (?class=<id>). Passwordless: accounts belong to devices (docs/ARCHITECTURE.md "Identity and
+// authorization").
 import { useEffect, useRef, useState } from 'react';
 import type { DbConnection } from '../module_bindings';
 import type { ClassSession, Learner, Presence, Teacher } from '../module_bindings/types';
 import { callReducer, subscribe } from '../stdb/connection';
 import { useRows } from '../stdb/useRows';
+import { useAccounts } from '../stdb/useAccounts';
+import { ClaimLegacy, CodeForm, DeviceCode, StudentRoster } from '../components/SignIn';
 import { APP_CONFIG } from '../app-config';
 import { navigate, routeUrl } from '../lib/format';
 import { DOC_ACCEPT, NO_DOCUMENT, readClassDocument, type ClassDocument } from '../lib/classDocument';
@@ -18,11 +22,12 @@ export function TeacherHome({ conn }: { conn: DbConnection }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    const sub = subscribe(conn, ['SELECT * FROM teacher', 'SELECT * FROM class_session WHERE active = true'], 'teachers');
+    const sub = subscribe(conn, ['SELECT * FROM class_session WHERE active = true'], 'teachers');
     sub.ready.catch(e => setError(String(e?.message ?? e)));
     return () => sub.unsubscribe();
   }, [conn]);
-  const teachers = useRows<Teacher>(conn.db.teacher, () => true, []).sort((a, b) => Number(a.id - b.id));
+  const acc = useAccounts(conn);
+  const teachers = acc.teachers;
   const running = useRows<ClassSession>(conn.db.classSession, c => c.active, []);
 
   const create = async (e: React.FormEvent) => {
@@ -42,27 +47,29 @@ export function TeacherHome({ conn }: { conn: DbConnection }) {
       <section className="pr-intro" style={{ paddingTop: 22 }}>
         <span className="pr-eyebrow">Teacher</span>
         <h1>Welcome, teacher.</h1>
-        <p>Pick your name or add yourself, then set up today's class.</p>
+        <p>Continue on this device, add yourself, or sign in with a code from your other device. No password needed.</p>
       </section>
       {error && <p className="pr-error" data-testid="error">{error}</p>}
       <div className="pr-split">
         <div>
-          <div className="pr-section-label"><h2>Teachers</h2><span>{teachers.length}</span></div>
+          <div className="pr-section-label"><h2>On this device</h2><span>{teachers.length}</span></div>
           <div className="pr-people" data-testid="teacher-list">
-            {teachers.length === 0 && <p className="pr-empty">No teachers yet. Add yourself on the right.</p>}
+            {acc.ready && teachers.length === 0 && <p className="pr-empty">No teacher account on this device yet. Add yourself, or enter a sign-in code.</p>}
             {teachers.map(t => {
               const live = running.some(c => c.teacherId === t.id);
               return (
                 <button key={t.id.toString()} className="pr-person" data-testid="teacher-item" data-teacher-id={t.id.toString()} data-teacher-name={t.name} onClick={() => navigate(routeUrl({ teacher: t.id }))}>
                   <Initial name={t.name} />
                   <span>
-                    <strong>{t.name}</strong>
+                    <strong>Continue as {t.name}</strong>
                     <small>{live ? 'Class running' : 'No class running'}</small>
                   </span>
                 </button>
               );
             })}
           </div>
+          <CodeForm conn={conn} kind="teacher" />
+          <ClaimLegacy conn={conn} kind="teacher" />
         </div>
         <form className="pr-panel pr-form" data-testid="create-teacher-form" onSubmit={create}>
           <h2>Add yourself</h2>
@@ -189,7 +196,7 @@ export function ClassSetup({ conn, teacherId }: { conn: DbConnection; teacherId:
 
   return (
     <div data-testid="class-setup" data-teacher-id={teacherId.toString()}>
-      <a className="pr-back" href={routeUrl({ teacher: '' })} onClick={e => { e.preventDefault(); navigate(routeUrl({ teacher: '' })); }}>← Not you?</a>
+      <a className="pr-back" href={routeUrl({ teacher: '' })} onClick={e => { e.preventDefault(); navigate(routeUrl({ teacher: '' })); }}>← Other account</a>
       <section className="pr-intro" style={{ paddingTop: 22 }}>
         <span className="pr-eyebrow">{teacher?.name ?? 'Teacher'}</span>
         <h1>Set up today's class</h1>
@@ -266,6 +273,10 @@ export function ClassSetup({ conn, teacherId }: { conn: DbConnection; teacherId:
           </button>
         </aside>
       </form>
+      <div className="pr-split" style={{ marginTop: 28 }}>
+        <StudentRoster conn={conn} teacherId={teacherId} />
+        <DeviceCode conn={conn} kind="teacher" accountId={teacherId} />
+      </div>
     </div>
   );
 }

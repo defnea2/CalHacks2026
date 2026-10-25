@@ -88,7 +88,7 @@ describe('seedMemory', () => {
 
   it('rejects simulated learners', () => {
     const env = setup();
-    call(env.h, env.client, mod.resetSimulatedStudents, { count: 1 });
+    call(env.h, env.agent, mod.resetSimulatedStudents, { count: 1 });
     const sim = [...env.h.db.learner.iter()].find(l => l.isSimulated)!;
     expect(() => seedIt(env, sim.id)).toThrow(/simulated/);
   });
@@ -211,7 +211,7 @@ describe('seed history (several earlier sessions)', () => {
 
   it('the seedMemory reducer still refuses simulated learners', () => {
     const env = setup();
-    call(env.h, env.client, mod.resetSimulatedStudents, { count: 1 });
+    call(env.h, env.agent, mod.resetSimulatedStudents, { count: 1 });
     const sim = [...env.h.db.learner.iter()].find(l => l.isSimulated)!;
     const before = [...env.h.db.seedSession.learnerId.filter(sim.id)].length;
     expect(before).toBe(SIM_STUDENTS[0]!.history.length);

@@ -78,6 +78,9 @@ importers:
       onnxruntime-web:
         specifier: ^1.30.0
         version: 1.30.0
+      qrcode-generator:
+        specifier: 1.4.4
+        version: 1.4.4
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -1948,6 +1951,9 @@ packages:
 
   pure-rand@7.0.1:
     resolution: {integrity: sha512-oTUZM/NAZS8p7ANR3SHh30kXB+zK2r2BPcEn/awJIbOvq82WoMN4p62AWWp3Hhw50G0xMsw1mhIBLqHw64EcNQ==}
+
+  qrcode-generator@1.4.4:
+    resolution: {integrity: sha512-HM7yY8O2ilqhmULxGMpcHSF1EhJJ9yBj8gvDEuZ6M+KGJ0YY2hKpnXvRD+hZPLrDVck3ExIGhmPtSdcjC+guuw==}
 
   react-dom@19.3.1:
     resolution: {integrity: sha512-Y0bARz53lhEC1NMCASs0/j+faB/zqt3R8hpvg1e8+61ZVJ4UL0UdC4cBbXfZMcIuhrfgeILTLe+ZeBCavQPtKQ==}
@@ -3876,6 +3882,8 @@ snapshots:
       - utf-8-validate
 
   pure-rand@7.0.1: {}
+
+  qrcode-generator@1.4.4: {}
 
   react-dom@19.3.1(react@19.3.1):
     dependencies:

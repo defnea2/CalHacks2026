@@ -74,6 +74,26 @@ export function call(reducer, args, opts) {
   return cli(['call', '--no-config', '--server', server, db, reducer, ...args], opts);
 }
 
+/** Calls a procedure and parses its JSON string result (e.g. issue_sign_in_code). */
+export function callJson(procedure, args, opts) {
+  const out = call(procedure, args, opts).trim();
+  if (dryRun) return null;
+  // The CLI prints the returned string JSON-quoted.
+  const line = out.split('\n').filter(l => l.trim()).pop() ?? '';
+  const text = line.startsWith('"') ? JSON.parse(line) : line;
+  return JSON.parse(text);
+}
+
+/** One-time sign-in code for a learner/teacher (agent only: registerAgent() first). */
+export function signInCode(kind, id) {
+  const r = callJson('issue_sign_in_code', [JSON.stringify(kind), String(id), '0']);
+  if (!r) return { ok: true, code: '<code>', expiresMs: 0 };
+  return r;
+}
+
+/** XXX-XXX for display. */
+export const formatCode = c => (c.length === 6 ? `${c.slice(0, 3)}-${c.slice(3)}` : c);
+
 /**
  * Registers the CLI identity as agent. The secret is AGENT_SECRET from the shell, else from
  * .env.local (never printed). On a remote server the shell value is required: it must be the

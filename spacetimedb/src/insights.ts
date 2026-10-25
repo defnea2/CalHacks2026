@@ -2,9 +2,10 @@
 // only: memory notes with evidence, concept mastery, the last session summaries.
 //
 // Privacy: memory_note / note_evidence / concept_state / session_summary stay private tables
-// (no subscription path). This procedure is their only client read path, gated by an existing
-// teacher id and, when the module env INSIGHTS_KEY is set, a matching key. Without real teacher
-// auth anyone who knows a teacher id can read a profile: acceptable for test users only.
+// (no subscription path). This procedure is their only client read path: the caller must own
+// the teacher account (account_link) and the learner must be on that teacher's roster (added by
+// the teacher or in one of the teacher's class sessions; auth.ts). When the module env
+// INSIGHTS_KEY is set, the key must match as well (optional extra).
 import type { Timestamp } from 'spacetimedb';
 import {
   INSIGHT_EVIDENCE_PER_NOTE,
@@ -20,6 +21,8 @@ import { type Ctx, type PCtx, truncate } from './ctx';
 import { readEnv } from './env';
 import { pack } from '../../shared/src/lesson/index';
 import { SEED_SESSION_BASE, seedSessionIndex } from './seed';
+import { TEACHER, isLinked, isTeacherOf } from './auth';
+import { isAgent } from './ctx';
 
 const ms = (t: Timestamp): number => Number(t.microsSinceUnixEpoch / 1000n);
 /** Newest first. */
@@ -39,8 +42,11 @@ export function readInsights(tx: Ctx, args: { learnerId: bigint; teacherId: bigi
   const required = readEnv(tx, 'INSIGHTS_KEY');
   if (required !== undefined && args.key.trim() !== required) return { ok: false, error: 'locked' };
   if (!tx.db.teacher.id.find(args.teacherId)) return { ok: false, error: 'unknown_teacher' };
+  const agent = isAgent(tx);
+  if (!agent && !isLinked(tx, TEACHER, args.teacherId)) return { ok: false, error: 'not_your_teacher' };
   const l = tx.db.learner.id.find(args.learnerId);
   if (!l) return { ok: false, error: 'unknown_learner' };
+  if (!agent && !isTeacherOf(tx, args.teacherId, l.id)) return { ok: false, error: 'not_your_student' };
 
   // Content-library title, else the pack taxonomy's (concepts without library content, e.g. regrouping).
   const conceptTitle = (key: string) =>

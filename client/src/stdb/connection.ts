@@ -1,36 +1,54 @@
-// One SpacetimeDB connection per tab (no shared token, no global state across tabs).
+// One SpacetimeDB connection per tab. The token is kept (lib/token.ts), so the identity, and
+// with it the accounts this device owns, survives reloads.
 import { useEffect, useState } from 'react';
 import { DbConnection } from '../module_bindings';
 import type { AppSettings } from '../config';
 import { eventLog } from '../lib/debug';
+import { browserTokenEnv, clearToken, loadToken, saveToken } from '../lib/token';
 
 export type ConnStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
-export function useConnection(settings: AppSettings): { conn: DbConnection | null; status: ConnStatus; error: string } {
+export function useConnection(settings: AppSettings): { conn: DbConnection | null; status: ConnStatus; error: string; identity: string } {
   const [conn, setConn] = useState<DbConnection | null>(null);
   const [status, setStatus] = useState<ConnStatus>('connecting');
   const [error, setError] = useState('');
+  const [identity, setIdentity] = useState('');
+  /** Bumped once when a stored token is rejected (e.g. the local server was reset): reconnect without it. */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
-    eventLog.log('conn.connecting', { uri: settings.spacetimeUri, db: settings.spacetimeDb });
+    const env = browserTokenEnv();
+    const token = attempt === 0 ? loadToken(env, settings.spacetimeUri, settings.spacetimeDb) : undefined;
+    eventLog.log('conn.connecting', { uri: settings.spacetimeUri, db: settings.spacetimeDb, storedToken: Boolean(token) });
     const c = DbConnection.builder()
       .withUri(settings.spacetimeUri)
       .withDatabaseName(settings.spacetimeDb)
+      .withToken(token)
       // Confirmed reads stay ON in the client (~5.5 ms per hop, docs/latency-internal.md): with
       // unconfirmed reads a row seen by the previous screen's subscription went missing from the
       // cache when the session screen swapped subscriptions ("Session N does not exist", 3 of 5
       // runs on night/base). The worker, whose subscriptions never change, keeps them off.
       .withConfirmedReads(true)
-      .onConnect((cn, identity) => {
+      .onConnect((cn, id, newToken) => {
         if (!alive) return;
-        eventLog.log('conn.connected', { identity: identity.toHexString().slice(0, 16) });
+        saveToken(env, settings.spacetimeUri, settings.spacetimeDb, newToken);
+        const hex = id.toHexString();
+        eventLog.log('conn.connected', { identity: hex.slice(0, 16), reused: Boolean(token) });
+        if (typeof window !== 'undefined' && window.__tutor) window.__tutor.state.identity = hex;
+        setIdentity(hex);
         setStatus('connected');
         setConn(cn);
       })
       .onConnectError((_ctx, err) => {
         if (!alive) return;
-        eventLog.log('conn.error', { error: String(err) });
+        eventLog.log('conn.error', { error: String(err), storedToken: Boolean(token) });
+        if (token) {
+          // A token this server does not accept: forget it and connect as a new device.
+          clearToken(env, settings.spacetimeUri, settings.spacetimeDb);
+          setAttempt(a => a + 1);
+          return;
+        }
         setError(String(err?.message ?? err));
         setStatus('error');
       })
@@ -48,9 +66,9 @@ export function useConnection(settings: AppSettings): { conn: DbConnection | nul
         /* ignore */
       }
     };
-  }, [settings.spacetimeUri, settings.spacetimeDb]);
+  }, [settings.spacetimeUri, settings.spacetimeDb, attempt]);
 
-  return { conn, status, error };
+  return { conn, status, error, identity };
 }
 
 /** Subscribes to SQL queries; resolves once applied. Returns an unsubscribe function. */
