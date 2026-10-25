@@ -262,20 +262,13 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
     setError('');
     setMicError('');
     setStarting(true);
+    const v = ensureAudio() ?? null;
     try {
-      const v = ensureAudio() ?? null;
       if (!v) throw new Error('audio is off in this session');
       eventLog.log('ui.start_talking', {});
       await v.start();
       if (voiceRef.current !== v) return; // unmounted meanwhile
       setVoice(v);
-      // Fresh session: the tutor speaks first (audio can play now that the click created the AudioContext).
-      if (shouldStartConversation(session)) {
-        lastTurnEnd.current = Date.now();
-        turnCounter.current += 1;
-        const r = await callReducer('startConversation', { sessionId }, () => conn.reducers.startConversation({ sessionId }));
-        if (!r.ok) eventLog.log('ui.start_conversation_failed', { error: r.error ?? '' });
-      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       eventLog.log('ui.start_failed', { error: msg, name: (err as { name?: string } | null)?.name ?? '' });
@@ -283,6 +276,14 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
       await voiceRef.current?.stopCapture();
     } finally {
       setStarting(false);
+    }
+    // Fresh session: the tutor speaks first, also when the microphone failed (the speaker works;
+    // the learner can still tap choices and fix the microphone with "Try again").
+    if (v && voiceRef.current === v && shouldStartConversation(session)) {
+      lastTurnEnd.current = Date.now();
+      turnCounter.current += 1;
+      const r = await callReducer('startConversation', { sessionId }, () => conn.reducers.startConversation({ sessionId }));
+      if (!r.ok) eventLog.log('ui.start_conversation_failed', { error: r.error ?? '' });
     }
   };
 
