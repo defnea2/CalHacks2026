@@ -6,13 +6,14 @@ import { loadEnv, ROOT } from './env.mjs';
 
 // Shell variables override .env (e.g. STT_BASE_URL=https://host/stt-proxy.php node scripts/publish.mjs).
 const env = { ...loadEnv(), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(CARTESIA_|OPENROUTER_|ANTHROPIC_|STT_|TTS_|MEMORY_|SIM_|DASHBOARD_|SPACETIME_DB|SPACETIME_SERVER)/.test(k))) };
-const required = ['CARTESIA_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL'];
-for (const k of required) if (!env[k]) { console.error(`missing ${k} in .env`); process.exit(1); }
+// Cartesia is always needed; the LLM keys: Anthropic (default) or the OpenRouter pair.
+const required = ['CARTESIA_API_KEY', ...(env.ANTHROPIC_API_KEY ? [] : ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL'])];
+for (const k of required) if (!env[k]) { console.error(`missing ${k} in .env (set ANTHROPIC_API_KEY, or OPENROUTER_API_KEY + OPENROUTER_MODEL)`); process.exit(1); }
 
 const moduleEnv = {
   CARTESIA_API_KEY: env.CARTESIA_API_KEY,
-  OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
-  OPENROUTER_EXTRACTION_MODEL: env.OPENROUTER_EXTRACTION_MODEL || env.OPENROUTER_MODEL,
+  OPENROUTER_API_KEY: env.OPENROUTER_API_KEY || '',
+  OPENROUTER_EXTRACTION_MODEL: env.OPENROUTER_EXTRACTION_MODEL || env.OPENROUTER_MODEL || '',
   AGENT_SECRET: env.AGENT_SECRET,
 };
 for (const k of ['STT_BASE_URL', 'CARTESIA_STT_MODEL', 'CARTESIA_TTS_MODEL', 'CARTESIA_VOICE_ID', 'TTS_SAMPLE_RATE', 'MEMORY_EVERY_N_TURNS', 'SIM_MAX_TURNS', 'DASHBOARD_INTERVAL_S', 'DASHBOARD_EFFORT', 'ANTHROPIC_API_KEY', 'ANTHROPIC_EXTRACTION_MODEL', 'MEMORY_PROVIDER']) if (env[k]) moduleEnv[k] = env[k];

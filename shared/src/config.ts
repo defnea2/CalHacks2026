@@ -78,9 +78,11 @@ export const MODULE_DEFAULTS = {
   SUMMARY_EFFORT: 'low',
   SUMMARY_MAX_TOKENS: 4000,
   CARTESIA_TTS_MODEL: 'sonic-3.6',
-  CARTESIA_STT_MODEL: 'ink-2',
-  /** Local batch-STT endpoint (stt-proxy). */
-  STT_BASE_URL: 'http://127.0.0.1:8787',
+  /** Batch STT that works out of the box: Cartesia's own endpoint with ink-whisper. SpacetimeDB
+   *  2.13 refuses procedure HTTP to loopback/private addresses, so the ink-2 stt-proxy only works
+   *  on a public host: set STT_BASE_URL=https://<host>/stt-proxy.php and CARTESIA_STT_MODEL=ink-2. */
+  CARTESIA_STT_MODEL: 'ink-whisper',
+  STT_BASE_URL: 'https://api.cartesia.ai',
   /** "Parker": casual, supportive warmth. Child-friendly tutor voice. */
   CARTESIA_VOICE_ID: '30894953-bcce-41fe-892c-15ce19c843ff',
   CARTESIA_VERSION: '2026-08-14',
