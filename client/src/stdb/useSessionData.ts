@@ -37,34 +37,27 @@ export function sessionQueries(sessionId: bigint, withAudio: boolean): string[] 
 const MISSING_RETRIES = 5;
 
 export function useSessionData(conn: DbConnection | null, sessionId: bigint, opts: { withAudio: boolean }): SessionData {
-  const [ready, setReady] = useState(false);
+  const [subReady, setSubReady] = useState(false);
   const [error, setError] = useState('');
-  // Resubscribe attempts while the applied subscription lacks the session row. Right after
-  // startSession the row can be missing from the cache for a moment (the previous screen's
-  // overlapping subscription is torn down as this one is applied; unconfirmed reads), which used
-  // to show "Session N does not exist" for a session that exists.
+  // Resubscribe attempts while the session row is missing from the cache. Right after
+  // startSession the row can vanish for a moment (the previous screen's overlapping
+  // subscription is torn down after this one is applied), which used to show "Session N does
+  // not exist" for a session that exists. Re-applying the subscription brings it back.
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => setAttempt(0), [conn, sessionId]);
 
   useEffect(() => {
     if (!conn) return;
-    setReady(false);
+    setSubReady(false);
     let cancelled = false;
-    let retry: ReturnType<typeof setTimeout> | undefined;
     const sub = subscribe(conn, sessionQueries(sessionId, opts.withAudio), `session ${sessionId}`);
     sub.ready.then(
-      () => {
-        if (cancelled) return;
-        const found = [...conn.db.session.iter()].some(r => r.id === sessionId);
-        if (found || attempt >= MISSING_RETRIES) setReady(true);
-        else retry = setTimeout(() => !cancelled && setAttempt(a => a + 1), 150 * (attempt + 1));
-      },
+      () => !cancelled && setSubReady(true),
       e => setError(String(e?.message ?? e))
     );
     return () => {
       cancelled = true;
-      clearTimeout(retry);
       sub.unsubscribe();
     };
   }, [conn, sessionId, opts.withAudio, attempt]);
@@ -74,6 +67,15 @@ export function useSessionData(conn: DbConnection | null, sessionId: bigint, opt
   const sessions = useRows<Session>(db?.session, r => r.id === sessionId, [sessionId]);
   const session = sessions[0];
   const learnerId = session?.learnerId;
+
+  const missing = subReady && !session;
+  useEffect(() => {
+    if (!missing || attempt >= MISSING_RETRIES) return;
+    const t = setTimeout(() => setAttempt(a => a + 1), 150 * (attempt + 1));
+    return () => clearTimeout(t);
+  }, [missing, attempt]);
+  // "ready" for the screen: the row is there, or every retry came back without it.
+  const ready = subReady && (!!session || attempt >= MISSING_RETRIES);
 
   useEffect(() => {
     if (!conn || learnerId === undefined) return;

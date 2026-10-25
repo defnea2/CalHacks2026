@@ -175,8 +175,9 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
   const viewer = sc.observer ? await launch(null) : null;
   let observerSamples: ObserverSample[] = [];
   let stopObserver = () => {};
+  let page: Page | undefined;
   try {
-    const page = await mic.newPage(sc.id, m => pageLog.push(m));
+    page = await mic.newPage(sc.id, m => pageLog.push(m));
     const base = `${ctx.baseUrl}?db=${encodeURIComponent(ctx.db)}${E2E_DEFAULTS.clientQuery ? `&${E2E_DEFAULTS.clientQuery}` : ''}`;
     run.sessionId = await createSessionViaUi(page, base, learnerName, TASK_TEXT);
     log(`session ${run.sessionId} (learner "${learnerName}")`);
@@ -239,7 +240,11 @@ export async function runScenario(sc: Scenario, ctx: RunContext): Promise<Scenar
     evaluate(run, sc, fixture, events, state, dom, server, observerSamples);
   } catch (e) {
     run.error = e instanceof Error ? (e.stack ?? e.message) : String(e);
-    run.checks.push({ name: 'harness', status: 'fail', detail: run.error.split('\n')[0]! });
+    // What the page showed when the flow broke (e.g. "Session N does not exist", a render error).
+    const shown = await page
+      ?.evaluate(() => (document.querySelector('main')?.textContent ?? document.body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 160))
+      .catch(() => '');
+    run.checks.push({ name: 'harness', status: 'fail', detail: `${run.error.split('\n')[0]!}${shown ? ` | page: ${shown}` : ''}` });
   } finally {
     stopObserver();
     await mic.close();
