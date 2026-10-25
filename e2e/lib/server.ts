@@ -8,6 +8,8 @@ export interface ServerSession {
   turns: { idx: number; role: string; text: string; status: string; utteranceId: string; interrupted: boolean }[];
   sentences: { utteranceId: string; idx: number; status: string; display: string }[];
   boardItems: { id: string; kind: string; utteranceId: string }[];
+  /** Lesson beats (visual = the compiled VisualBeat JSON without narration). */
+  beats: { utteranceId: string; idx: number; sentenceIdx: number; visual: string }[];
   metrics: TurnMetric[];
 }
 
@@ -70,6 +72,9 @@ export function readSession(db: string, sessionId: string): ServerSession {
       .map(r => ({ utteranceId: str(r.utterance_id), idx: num(r.idx), status: str(r.status), display: str(r.display) }))
       .sort((a, b) => (a.utteranceId === b.utteranceId ? a.idx - b.idx : a.utteranceId < b.utteranceId ? -1 : 1)),
     boardItems: q('board_item').map(r => ({ id: str(r.id), kind: str(r.kind), utteranceId: str(r.utterance_id) })),
+    beats: q('beat')
+      .map(r => ({ utteranceId: str(r.utterance_id), idx: num(r.idx), sentenceIdx: num(r.sentence_idx), visual: str(r.visual) }))
+      .sort((a, b) => (a.utteranceId === b.utteranceId ? a.idx - b.idx : a.utteranceId < b.utteranceId ? -1 : 1)),
     metrics: metrics.sort((a, b) => a.turnIdx - b.turnIdx),
   };
 }

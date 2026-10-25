@@ -181,8 +181,8 @@ describe('opening in lesson mode', () => {
     // Lead-in sentences go out before the planner request returns anything.
     expect(names.indexOf('addSentence')).toBeLessThan(names.indexOf('beginLesson'));
     const lead = transport.of('addSentence');
-    expect(lead.map(s => s.idx)).toEqual([0, 1]);
-    expect(String(lead[0]!.display)).toContain('Expand 2/3 to twelfths');
+    expect(lead.map(s => s.idx)).toEqual([0, 1, 2]);
+    expect(String(lead[1]!.display)).toContain('Expand 2/3 to twelfths');
     expect(transport.of('addBeat')).toHaveLength(6);
     expect(llm.calls).toHaveLength(1);
     // The planner got the arc-free system prompt plus the library index.

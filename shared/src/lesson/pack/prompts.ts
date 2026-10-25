@@ -77,7 +77,8 @@ Board markers (items appear exactly when you say their words):
 `,
 
   // ~5 s of audio: covers the planner's first moment (first token ~1-2 s + one moment).
-  openingLessonScript: `Hi! Let us do your task together: {{task}}.
+  openingLessonScript: `Hi! Let us do your task together.
+Your task: {{task}}.
 First I will show you the idea with a picture, then you try one.`,
 
   openingScript: `Hi! Let us look at your task together.
