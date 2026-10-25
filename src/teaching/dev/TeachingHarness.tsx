@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { TeachingCanvas } from "../../presentation/TeachingCanvas";
 import { VisualDirector } from "../../presentation/VisualDirector";
-import { TeachingPlanner, type PlanningRequest } from "../TeachingPlanner";
-import { createHttpPlanningModel } from "../modelAdapter";
+import { TeachingPlanner, type PlanningModel, type PlanningRequest } from "../TeachingPlanner";
 import type { LearnerResponse, TeachingStep } from "../contracts";
 import { demoPlanningModel, demoTopics } from "./demoModel";
 import "./teaching.css";
 
-export function TeachingHarness() {
+/** `model`: a live planner (the client passes the SpacetimeDB adapter); scripted fixtures otherwise. */
+export function TeachingHarness({ model: liveModel }: { model?: PlanningModel } = {}) {
   const [topic, setTopic] = useState<string>(demoTopics[0].label);
   const [homework, setHomework] = useState<string>(demoTopics[0].homework);
   const [planner, setPlanner] = useState(
@@ -22,7 +22,6 @@ export function TeachingHarness() {
   const teaching = useSyncExternalStore(planner.subscribe, planner.getSnapshot);
   const visual = useSyncExternalStore(director.subscribe, director.getSnapshot);
   const [mode, setMode] = useState("demo");
-  const [endpoint, setEndpoint] = useState("/api/teaching/plan");
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -56,7 +55,7 @@ export function TeachingHarness() {
     setError("");
     try {
       const model =
-        mode === "demo" ? demoPlanningModel : createHttpPlanningModel(endpoint);
+        mode === "demo" || !liveModel ? demoPlanningModel : liveModel;
       const step = await planner.generate(
         async (request, signal) => {
           setLastRequest(request);
@@ -165,18 +164,11 @@ export function TeachingHarness() {
             onChange={(e) => setMode(e.target.value)}
           >
             <option value="demo">Scripted offline fixtures</option>
-            <option value="model">Model endpoint</option>
+            {liveModel && <option value="model">Live tutor (SpacetimeDB)</option>}
           </select>
         </label>
         {mode === "model" ? (
-          <label>
-            Server endpoint
-            <input
-              aria-label="Planning endpoint"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-            />
-          </label>
+          <span>Live tutor through SpacetimeDB</span>
         ) : (
           <span>Three sample topics · no AI or voice service connected</span>
         )}
