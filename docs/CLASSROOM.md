@@ -128,3 +128,18 @@ spacetime logs --no-config --server local night-class | grep -E 'simStudentTurn|
 
 Each LLM call logs model, latency and token usage (`simStudentTurn s<id> <name> [behaviour] ...`,
 `refreshDashboard c<id> <n> students ... clusters 4+2`).
+
+## Measured (2026-10-25, local server, real Haiku 5.5, DB `night-class`)
+
+- Runs: n=6 (fractions, no document) and n=8 (decimals, Markdown document; resets users 1..6 live).
+  Both: every session reached the cap of 8 simulated turns + 9 tutor replies in ~2 min
+  (n=8: 64 student turns, 09:16:43 → 09:18:44). No module warnings; no rejected turns.
+- Student LLM (112 calls): median 1.5 s (0.8-2.8 s), ~1.4k in / 65 out tokens, ≈ $0.00018 per
+  turn. Behaviour mix seen: correct 47, mistake 44, question 11, unsure 10.
+- Dashboard (11 calls): 6 students 2.7-4.4 s (5-10k in / ~400 out); 8 students 6.6-10 s
+  (5-12k in / 0.4-1.9k out, thinking at effort low); ≈ $0.0015 per refresh. Cadence ~33-38 s
+  (30 s after the previous run finished + LLM time). n=6 first two answers had singletons (repaired
+  4+2); after the prompt lists the allowed combinations, all n=8 answers were valid without repair
+  (4+2+2, 4+4, 2+2+4). Impersonation: no refresh while observing (button returned
+  `skipped: impersonating`); stop when overdue → refresh finished 2.9 s later.
+- Memory extraction during the runs: 28 windows for 14 sessions (2 each), no duplicates.
