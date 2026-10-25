@@ -22,6 +22,9 @@ Requirements: Node 22+, pnpm, the `spacetime` CLI (2.13), and a root `.env` with
 
 ```bash
 pnpm install
+pnpm dev                   # everything below in one command (add -- --clear to reset the DB)
+
+# or step by step:
 pnpm stdb:start            # terminal 1: local SpacetimeDB, data in ./.spacetime-data (git-ignored)
 pnpm stdb:publish          # publishes the module, passes keys as module env
 pnpm stdb:generate         # regenerates client + worker bindings

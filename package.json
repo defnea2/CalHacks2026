@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "stdb:start": "NO_PROXY=127.0.0.1,localhost spacetime start --data-dir ./.spacetime-data",
     "stdb:publish": "node scripts/publish.mjs",
     "stdb:generate": "NO_PROXY=127.0.0.1,localhost spacetime generate --lang typescript --out-dir client/src/module_bindings --module-path spacetimedb && NO_PROXY=127.0.0.1,localhost spacetime generate --lang typescript --out-dir worker/src/module_bindings --module-path spacetimedb",
