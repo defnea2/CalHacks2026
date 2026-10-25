@@ -22,6 +22,8 @@ export const CLIENT_DEFAULTS = {
   MIC_AEC: 1,
   MIC_NS: 1,
   MIC_AGC: 1,
+  /** Debug: 1 = log `vad.frame_dump` (per-frame probability, level, machine state), batched. */
+  VAD_FRAME_DUMP: 0,
 };
 
 export type VoiceSettings = { -readonly [K in keyof typeof VOICE_DEFAULTS]: number };

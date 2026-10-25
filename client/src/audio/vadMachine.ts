@@ -110,6 +110,9 @@ export class VadMachine {
   get inPhrase(): boolean {
     return this.phrase !== null;
   }
+  get inCandidate(): boolean {
+    return this.candidate !== null;
+  }
   get isTurnOpen(): boolean {
     return this.turnOpen;
   }

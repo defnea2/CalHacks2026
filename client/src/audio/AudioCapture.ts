@@ -158,7 +158,35 @@ export class AudioCapture {
       this.stats = { n: 0, levelSum: 0, maxLevel: -100, maxProb: 0, since: now };
     }
     this.opts.onFrame?.(level, prob);
-    this.emit(this.machine.process(prob, frame, level));
+    const events = this.machine.process(prob, frame, level);
+    if (this.opts.settings.client.VAD_FRAME_DUMP) this.dumpFrame(prob, level, events);
+    this.emit(events);
+  }
+
+  // Debug (?vad_frame_dump=1): per-frame data in batches of ~1 s, so the event log stays small.
+  private dump: { t0: number; p: number[]; db: number[]; s: string[] } | null = null;
+
+  private dumpFrame(prob: number, level: number, events: VadEvent[]): void {
+    const m = this.machine;
+    // i idle, c candidate, p phrase; upper case while the turn is open; event markers appended
+    let st = m.inPhrase ? 'p' : m.inCandidate ? 'c' : 'i';
+    if (m.isTurnOpen) st = st.toUpperCase();
+    for (const e of events) {
+      if (e.type === 'speech_start') st += '+';
+      else if (e.type === 'phrase_end') st += '/';
+      else if (e.type === 'turn_end') st += '|';
+      else if (e.type === 'misfire') st += 'x';
+    }
+    if (m.tutorSpeaking) st += 't';
+    this.dump ??= { t0: performance.now(), p: [], db: [], s: [] };
+    this.dump.p.push(Math.round(prob * 100) / 100);
+    this.dump.db.push(Math.round(level));
+    this.dump.s.push(st);
+    if (this.dump.p.length >= 32) {
+      const { t0, p, db, s } = this.dump;
+      eventLog.log('vad.frame_dump', { t0: Math.round(t0), floorDb: m.noise.floorDb === null ? null : Math.round(m.noise.floorDb), p, db, s });
+      this.dump = null;
+    }
   }
 
   set tutorSpeaking(v: boolean) {
