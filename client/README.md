@@ -17,7 +17,7 @@ This is the only frontend. The team's UI stays in the repo-root `src/` with its 
 
 ```bash
 pnpm --filter client dev     # http://127.0.0.1:5175
-pnpm --filter client test    # vitest: VAD state machine, Smart Turn features + decisions, noise floor, PCM, playback ordering, board registry
+pnpm --filter client test    # vitest: presence/auto-join, dashboard layout + observe order + timers, VAD state machine, Smart Turn features + decisions, noise floor, PCM, playback ordering, board registry
 pnpm --filter client build
 ```
 
@@ -25,13 +25,37 @@ pnpm --filter client build
 
 | URL | Screen |
 | --- | --- |
-| `/` | Pick a user: learner list, create a test user, start or reopen a session (task text + optional photo, compressed to ≤ 1 MB in the browser) |
-| `?session=<id>` | Session (`SessionView`): the canvas is the main area (team `TeachingCanvas` driven by `beat` rows; legacy `board_item`s when a session has no beats), a small conversation column (captions, lesson stage, check prompt/choices, lesson buttons). The learner talks ("Start talking"; on a session without turns the tutor speaks first via `startConversation`) or types (`submitTextTurn`); "Show another way" / "Smaller step" / "Continue" / "Show me" are turns with an intent; canvas manipulations go to `submitInteraction`. Voice sessions reveal beats when their sentence plays; text sessions (`session.voice = false`, "Type instead of talking" on the start form or `?voice=0`) use the team's local playback (Pause / Next / Skip / Replay). Debug panel with `?debug=1`. A reload resumes it |
-| `?observe=<id>` | Observer: `<SessionView readOnly />` (the classroom dashboard reuses it). Plays nothing, no inputs; reveals follow `reply_sentence.status = played` |
+| `/` | Entry: choose a role (student / teacher). No accounts |
+| `?student` | Pick or create a student (simulated classroom students are hidden) |
+| `?student=<id>` | "Learn by myself" (task text + optional photo, compressed to ≤ 1 MB in the browser, optional text mode → own session) or "Wait for my teacher"; "Continue" when the student has an active session |
+| `?wait=<id>` | Waiting room: presence `waiting`; when a teacher's `startClassSession` links a new session for this learner, the tab jumps to it (`?session=<id>&join=1`). Text mode can be chosen here (`setSessionVoice(false)` before the jump) |
+| `?teacher` | Pick or create a teacher |
+| `?teacher=<id>` | Class setup: learning goals, content to cover, how to teach, optional material (image compressed to ≤ 1 MB, Markdown or .txt ≤ 50 000 chars), number of simulated students (0–20; groups have 2 or 4 students, so even numbers fit best), students online now → `startClassSession` → dashboard. "Open dashboard" when a class is running |
+| `?class=<id>` | Teacher dashboard (below) |
+| `?session=<id>&join=1` | Same screen, opened by the waiting room: voice sessions show "Join the lesson" (one click for the AudioContext, then `startConversation`), typed sessions call `startConversation` at once |
+| `?observe=<id>` | Observer: `<SessionView readOnly />` (the classroom dashboard reuses it with `embedded`). Plays nothing, no inputs; reveals follow `reply_sentence.status = played` |
 | `?lesson` | The team's lesson app (prepared/sample lessons, slant lesson, math studio, development tools; all offline). "Start" on a question creates a text-mode SpacetimeDB session (`?learner=<id>` or a fresh guest learner) and opens it in the session screen. `?lesson&adapter=1` instead runs the team's `Lesson` UI on `TeachingSession` + `createSpacetimePlanningModel` (presentation only: the module keeps the answer keys, so its local feedback is not authoritative) |
 | `?harness` | The team's planning harness (offline fixtures) |
-| `?overview` | Active sessions with learner, phase, turn state; links open the observer |
+| `?overview` | All active sessions (ad-hoc and class) with learner, phase, turn state; links open the observer; running class sessions link to their dashboards |
 | `?miccheck` | Runs microphone + VAD locally, sends nothing. Useful to check VAD assets and timings |
+
+### Student presence and auto-join (`lib/presence.ts`, `stdb/usePresence.ts`)
+
+- Waiting room → `setPresence(id, 'waiting')`; an active session tab → `'in_session'`; closing the page (`pagehide`) → `'offline'` (the module also sets offline on disconnect). A hidden tab keeps its status and re-asserts it when visible again (a reconnect may have set it offline). An ended session is left to the module (`endClassSession` sets `waiting`).
+- The session tab watches the learner's sessions: a newer active class session (the teacher started a class while the student was in an ad-hoc session) → jump to it (`&join=1`); the class session on screen ended → back to the waiting room after 2.5 s.
+
+### Tutor avatar (`components/TutorAvatar.tsx`)
+
+Own SVG/CSS character (no external assets). States: `idle` (breathes, blinks), `listening` (halo follows the microphone level), `thinking` (`session.turnState = thinking`: eyes up, three pulsing dots, gentle sway), `speaking` (mouth opens with the playback RMS from `PlaybackQueue.level()`, an `AnalyserNode` after the output gain; text mode and observers use a synthetic rhythm). The level is written per animation frame to the CSS variable `--lv`, no React renders. The learner's own voice: five bars on the mic level and the latest transcribed phrase next to the microphone button. Reduced motion: only state changes.
+
+### Teacher dashboard (`screens/Dashboard.tsx`, layout logic in `lib/dashboard.ts`)
+
+- Top: `class_summary.summary`, "Updated N s ago · next in N s" (from `class_summary.updatedAt` and `dashboard_state.nextDueAt`; "updating…" while `running`, "paused while you observe" while impersonating), Refresh button → procedure `refreshDashboard(classSessionId)`. The module refreshes every 30 s by itself.
+- Below: `student_cluster` rows of the class (active students only): short name, short LLM description, student cards. Four card slots per row: a cluster of 4 fills a row, clusters of 2 pair up (`clusterRows`; the module's odd-class exception, one cluster of 3, takes a row of 4 slots). Students not in any cluster yet (before the first summary) are listed below.
+- Card: name, lesson stage (subtle), tutor turn state (dot), latest chat in/out (`turn` rows, greyscale and greyed out). Hover/focus → "Observe".
+- Observe: a frame over the dashboard with `<SessionView readOnly embedded />` of the student, Previous / Next (dashboard order, wraps around; `observeOrder` + `stepObserve`), Stop (Esc). Calls `setImpersonation(classSessionId, learnerId)` on open and on every switch and `setImpersonation(classSessionId, 0)` on stop, page hide and unmount.
+- "All sessions" tab: one table row per student (group, stage, tutor state, turns, latest message, Observe). "End class session" (two clicks) → `endClassSession`.
+- Subscriptions: `class_session`, `class_summary`, `student_cluster`, `dashboard_state`, `session WHERE class_session_id = X`, `learner`, `teacher`, plus `turn` and `lesson_state` per linked session.
 
 Subscriptions are narrow: a session tab subscribes to `session WHERE id = X`, `learner WHERE id = L`, and `phrase`, `turn`, `reply_sentence`, `board_item`, `turn_metrics`, `playback_flush`, `audio_out`, `beat`, `lesson_state`, `canvas_state` `WHERE session_id = X`, plus the single-row `agent_status`. Only the pick-user and overview screens read all learners and all active sessions.
 
@@ -78,10 +102,22 @@ Inline markers: the tutor writes `⟦b1⟧` in its text where an item belongs an
 | testid | attributes | where |
 | --- | --- | --- |
 | `conn-status` | `data-status` = connecting / connected / disconnected / error | header |
-| `learner-list`, `learner-item` | `data-learner-id`, `data-learner-name` | pick user (click → session or start form) |
-| `learner-active-session`, `learner-new-session` | | pick user |
-| `create-user-form`, `create-name`, `create-age`, `create-grade`, `create-style`, `create-submit` | | pick user |
-| `start-form`, `task-text`, `photo-input`, `text-mode`, `start-session` | | pick user, after choosing a learner without an active session (`text-mode`: checkbox, session starts with `voice = false`) |
+| `entry-screen`, `role-student`, `role-teacher` | | entry `/` |
+| `student-home`, `learner-list`, `learner-item` | `data-learner-id`, `data-learner-name` | `?student` (click → `?student=<id>`) |
+| `create-user-form`, `create-name`, `create-age`, `create-grade`, `create-style`, `create-submit` | | `?student` |
+| `student-start` (`data-learner-id`), `mode-self`, `mode-wait`, `learner-active-session` (continue) | | `?student=<id>` |
+| `start-form`, `task-text`, `photo-input`, `text-mode`, `start-session` | | `?student=<id>` after `mode-self` (`text-mode`: checkbox, session starts with `voice = false`) |
+| `waiting-screen` (`data-learner-id`), `waiting-status`, `text-mode`, `leave-waiting` | | `?wait=<id>` |
+| `teacher-home`, `teacher-list`, `teacher-item` (`data-teacher-id`, `data-teacher-name`), `create-teacher-form`, `create-teacher-name`, `create-teacher-submit` | | `?teacher` |
+| `class-setup` (`data-teacher-id`), `class-form`, `class-goals`, `class-content`, `class-delivery`, `class-document`, `class-document-state`, `online-count` (`data-waiting`, `data-in-session`), `sim-count-range`, `sim-count` (`data-value`), `sim-odd`, `start-class`, `class-running`, `open-dashboard` | | `?teacher=<id>` |
+| `dashboard-screen` (`data-class-session-id`, `data-active`), `class-summary` (`data-version`), `summary-updated` (`data-updated-ms`), `refresh-dashboard`, `refresh-note`, `tab-groups`, `tab-all`, `end-class`, `end-class-confirm`, `class-ended`, `dashboard-error` | | `?class=<id>` |
+| `cluster-grid`, `cluster-row` (`data-sizes`, e.g. `2+2`), `cluster` (`data-size`, `data-slots`), `cluster-name`, `cluster-description`, `ungrouped` | | dashboard |
+| `student-card` (`data-learner-id`, `data-session-id`, `data-cluster`), `student-stage`, `student-chat`, `observe-student` (`data-learner-id`) | | dashboard |
+| `all-sessions`, `all-sessions-row` (`data-learner-id`, `data-session-id`), `observe-student-row` | | dashboard, "All sessions" |
+| `observe-frame` (`data-learner-id`, `data-session-id`), `observe-name`, `observe-prev`, `observe-next`, `observe-stop` | | dashboard while observing (contains `observer-screen`) |
+| `tutor-avatar` | `data-state` = idle / listening / thinking / speaking | session, observer, entry, waiting room |
+| `welcome-start` | | session: voice session without turns, microphone off ("Start talking" / "Join the lesson") |
+| `live-phrase` | | session, inside `mic-state` |
 | `session-screen` / `observer-screen` | `data-session-id`, `data-mode` = voice / typed | |
 | `lesson-canvas` | `data-beats` (rows in play order), `data-shown` (on the canvas) | session, observer (contains `.teaching-canvas`) |
 | `lesson-narration`, `lesson-stage` (`data-stage`), `lesson-thinking`, `agent-status` (`data-online`) | | session, observer |
@@ -106,7 +142,7 @@ Inline markers: the tutor writes `⟦b1⟧` in its text where an item belongs an
 | `debug-panel`, `metrics-table`, `metrics-row` | row: `data-turn`, `data-utterance`, `data-first-audio-ms`, `data-first-playback-ms` (ms after turn end) | |
 | `local-latency` | | tab-local turn end → first audio heard |
 | `event-log` | | |
-| `overview-table`, `overview-row` (`data-session-id`, `data-phase`, `data-turn-state`), `overview-observe` | | overview |
+| `overview-table`, `overview-row` (`data-session-id`, `data-phase`, `data-turn-state`), `overview-observe`, `overview-class` | | overview |
 | `miccheck-screen`, `miccheck-start`, `miccheck-meter`, `miccheck-count-<event>` | | miccheck |
 | `error`, `render-error`, `session-missing`, `session-ended` | | |
 
@@ -126,6 +162,7 @@ window.__tutor = {
     boardItems: {id, idx, kind, visible, utteranceId, sentenceIdx, markerPos, answerState}[],
     lesson: {mode, stage, awaiting, beats, shown, agentOnline},
     observing, flushes,          // observer only
+    dashboard: {classSessionId, active, students, clusters: {name, size, slots}[], rows: number[][], order: string[], observing, summaryVersion},  // dashboard only
   },
   voice,                         // VoiceSession while talking (voice.playback, voice.ctx)
 }
@@ -160,4 +197,4 @@ Event types:
 | `latency.turn_end_to_first_audio` | ms, utteranceId |
 | `observer.flush` | utteranceId |
 | `lesson.beat_shown` / `lesson.beat_error` | key (`utteranceId:idx`), sentenceIdx / error (the canvas resynced to `canvas_state`) |
-| `ui.*` | pick_learner, start_talking, start_failed, photo_failed, render_error, text_turn (intent, chars), interaction_rejected, text_mode_failed |
+| `ui.*` | pick_learner, class_join (waiting room → class session), class_follow (session tab follows to a new class session / the waiting room), class_autostart, start_class, impersonate, start_talking, start_failed, photo_failed, render_error, text_turn (intent, chars), interaction_rejected, text_mode_failed |

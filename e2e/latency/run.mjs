@@ -148,12 +148,15 @@ const main = async () => {
     await page.keyboard.press('Backspace');
     await page.type(sel, text);
   };
+  await page.click(tid('role-student'));
   await fill(tid('create-name'), name);
   await fill(tid('create-age'), '9');
   await fill(tid('create-grade'), '4');
   await page.click(tid('create-submit'));
   await page.waitForSelector(tid('learner-item', `[data-learner-name="${name}"]`), { timeout: 15_000 });
   await page.click(tid('learner-item', `[data-learner-name="${name}"]`));
+  await page.waitForSelector(tid('mode-self'), { timeout: 10_000 });
+  await page.click(tid('mode-self'));
   await page.waitForSelector(tid('start-form'), { timeout: 10_000 });
   await fill(tid('task-text'), 'Expand 2/3 so the denominator is 12.');
   await page.click(tid('start-session'));

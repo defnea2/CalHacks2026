@@ -1,4 +1,4 @@
-// UI flow: create test user -> pick learner -> task text -> start session -> start talking.
+// UI flow: entry (role student) -> create test user -> pick learner -> "Learn by myself" -> task text -> start session -> start talking.
 import type { Page } from 'puppeteer-core';
 import { fill, tid, until } from './browser';
 
@@ -20,6 +20,7 @@ export async function waitConnected(page: Page): Promise<void> {
 export async function createSessionViaUi(page: Page, baseUrl: string, learnerName: string, taskText: string): Promise<string> {
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
   await waitConnected(page);
+  await page.click(tid('role-student'));
   await fill(page, tid('create-name'), learnerName);
   await fill(page, tid('create-age'), '9');
   await fill(page, tid('create-grade'), '4');
@@ -27,6 +28,8 @@ export async function createSessionViaUi(page: Page, baseUrl: string, learnerNam
   const item = tid('learner-item', `[data-learner-name="${learnerName}"]`);
   await page.waitForSelector(item, { timeout: 15_000 });
   await page.click(item);
+  await page.waitForSelector(tid('mode-self'), { timeout: 10_000 });
+  await page.click(tid('mode-self'));
   await page.waitForSelector(tid('start-form'), { timeout: 10_000 });
   await fill(page, tid('task-text'), taskText);
   await page.click(tid('start-session'));
