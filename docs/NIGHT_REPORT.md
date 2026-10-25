@@ -34,9 +34,11 @@ Routes: `/` entry (student or teacher) · `?student` · `?wait=<id>` waiting roo
 | 8 | `night/dashboard-watchdog` | `3ff724a` | Dashboard refresh recovers by itself after a crash (backup job) | `git revert -m 1 3ff724a` |
 | 9 | `night/docs` | `b776f79` | `docs/ARCHITECTURE.md` (diagrams, every table/reducer, why it's SpacetimeDB-idiomatic), `docs/SERVICES.md`, README rewrite, `docs/DEMO.md` | `git revert -m 1 b776f79` |
 | 10 | `night/config-fixes` | `3ec0a70` | STT default = Cartesia batch `ink-whisper` (the local ink-2 proxy can't be reached from procedures); OpenRouter optional; `.env.example` cleaned | `git revert -m 1 3ec0a70` |
-| 11 | `night/lesson-2min` | see below | Can's rigid 2-minute arc, keyframes on the spoken word, topic prefetch + library index, utterance-scoped interrupt, longer E2E timeouts for lesson mode | (added after its final E2E) |
+| 11 | `night/lesson-2min` | `983c230` | Can's rigid 2-minute arc (default `LESSON_ARC=demo2min`): authored lead-in → visualized explanation → formalization (equation on its sentence) → one task → hand back (one repair if needed). Explanation 8–11 s, formalization 21–32 s, task 33–49 s after the click; worst case ~90 s. Topic prefetch + library index (no added latency), `interruptUtterance` (barge-in in the last sentence), E2E lesson-mode timeouts. Its E2E run 1: 8/8 | `git revert -m 1 983c230` (or set `LESSON_ARC=adaptive`) |
 
-Small direct commits on `night/integration`: night plan / contract docs, `164eda5` (e2e smoke typecheck fix).
+Small direct commits on `night/integration`: night plan / contract docs, `164eda5` (e2e smoke typecheck fix), this report.
+
+Test status of the final state (`983c230`): 791 unit tests green (teaching 52, shared 157, module 127, client 131, worker 106, team app 218), typecheck clean, static client build. Final full E2E: see bottom.
 
 ## Decisions I made for you (easy to change)
 - **Architecture of the team integration (approved "A")**: their planner runs in the worker, their compiler/validator in shared code, the module validates every beat against `canvas_state`. Their old tool-based canvas path stays as `REPLY_MODE=tools`.

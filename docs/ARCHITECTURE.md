@@ -344,11 +344,20 @@ the compiler and validators authoritatively, the **client** uses the canvas (`Vi
 
 ## 7. Two-minute lesson arc
 
-<!-- PLACEHOLDER: filled by the lead from the night/lesson-2min report (Can's rigid ~2-minute
-structure: intuitive visual explanation -> formalization -> task, keyframed visuals, topic
-prefetch / library index). -->
+Can's rigid structure for a demonstrable lesson (data: `shared/src/lesson/pack/arcs.ts` → `pack.arcs`; interpreter: `teaching/src/teaching/arc.ts`, carried in `SessionConfig.arc` so the phase policy and `validateTeachingStep` follow it).
 
-_To be completed from the `night/lesson-2min` branch._
+| Stage | Content | Enforced by |
+|---|---|---|
+| Lead-in | authored, ~5–7 s, first audio ~0.5 s after the click; the tutor leads (no opening diagnosis) | worker `LESSON_OPENING=lesson` |
+| Explanation | 4–5 moments, ≤ 115 words, picture first; moment 3 = formalization (equation forced and revealed on the sentence that reads it) | module moment cap, `splitKeyframes` (module) + `keyframeParts` (client) |
+| Task | one choice/number task with different numbers than the homework (a check containing the original question is rejected before anything is spoken) | module + worker early reject |
+| After the task | correct → hand back; unclear / wrong / "I don't know" / interrupted → one repair (3–4 moments, smaller task) → hand back without check | arc policy |
+
+Switches: module env `LESSON_ARC=demo2min` (default) | `adaptive` (previous policy); worker `LESSON_OPENING=lesson|script`, `LESSON_LIBRARY=1|0`.
+
+Measured (seconds of audio after the start click): explanation 8–11 s, formalization 21–32 s, task 33–49 s (E2E voice, 8 scenarios); worst case ("I don't know" twice) whole arc ~90 s in voice, ~84 s in text mode. Topic prefetch (pack keyword cues 50–110 ms; Haiku fallback with the photo) and the library index in the cached system prompt add no measurable latency (first beat 1.8–2.0 s with library vs 2.1–2.5 s without). Barge-in during the last sentence uses `interruptUtterance(sessionId, utteranceId)`.
+
+Known limits: word budgets are prompted (the model often exceeds them: explain 107–150 words); the homework guard is a substring check (paraphrases pass).
 
 ## 8. Memory
 
