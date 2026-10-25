@@ -29,8 +29,9 @@ export interface SentenceBlock<T> {
 
 /**
  * Releases sentence blocks strictly by idx within the current utterance (0, 1, 2, ...),
- * buffering blocks that arrive early. A block of a new utterance switches to it and drops
- * whatever of the old one was still buffered. Flushed utterances are ignored for good.
+ * buffering blocks that arrive early. A block of a newer utterance switches to it and drops
+ * whatever of the old one was still buffered; blocks of older utterances are ignored. Flushed
+ * utterances are ignored for good.
  */
 export class SentenceOrderer<T> {
   current: bigint | null = null;
@@ -44,9 +45,11 @@ export class SentenceOrderer<T> {
 
   receive(block: SentenceBlock<T>, now = 0): SentenceBlock<T>[] {
     if (this.flushed.has(block.utteranceId)) return [];
+    // Utterance ids increase (worker: ms timestamp * 1000 + counter). A late block of an older,
+    // superseded utterance must never take over (that would retire and silence the new reply).
+    if (this.current !== null && block.utteranceId < this.current) return [];
     if (this.current !== block.utteranceId) {
-      // Utterance ids are worker-chosen (not necessarily ordered): retire the old one so late
-      // blocks of it never restart it.
+      // Retire the old one so late blocks of it never restart it.
       if (this.current !== null) this.flushed.add(this.current);
       this.current = block.utteranceId;
       this.nextIdx = 0;

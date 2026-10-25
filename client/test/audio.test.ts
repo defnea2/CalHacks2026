@@ -117,6 +117,16 @@ describe('playback logic', () => {
     expect(o.receive({ utteranceId: 3n, idx: 0, data: 'c0' }).map(b => b.data)).toEqual(['c0']);
   });
 
+  it('a late block of an older (superseded) utterance never takes over the new reply', () => {
+    const o = new SentenceOrderer<string>();
+    expect(o.receive({ utteranceId: 20n, idx: 0, data: 'new0' }).map(b => b.data)).toEqual(['new0']);
+    // First block of the older utterance arrives only now (its TTS finished late).
+    expect(o.receive({ utteranceId: 10n, idx: 0, data: 'old0' })).toEqual([]);
+    expect(o.current).toBe(20n);
+    expect(o.isFlushed(20n)).toBe(false);
+    expect(o.receive({ utteranceId: 20n, idx: 1, data: 'new1' }).map(b => b.data)).toEqual(['new1']);
+  });
+
   it('skips a missing index after the gap timeout or when told', () => {
     const o = new SentenceOrderer<string>(1000);
     o.receive({ utteranceId: 1n, idx: 0, data: 'a' }, 0);
