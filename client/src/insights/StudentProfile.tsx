@@ -6,7 +6,7 @@ import type { DbConnection } from '../module_bindings';
 import type { InsightNote } from '@tutor/shared';
 import { ageGrade, atAGlance, evidenceLine, masteryGroups, nextFocus, noteMeta, noteSections, noteSentence, pastSessions, relativeDate, sessionLabels, sessionsLine } from '../lib/insights';
 import { Initial } from '../screens/StudentHome';
-import { useLearnerInsights } from './useLearnerInsights';
+import { INSIGHTS_KEY_STORAGE, useLearnerInsights } from './useLearnerInsights';
 
 export function StudentProfile({ conn, learnerId, teacherId, fallbackName }: { conn: DbConnection; learnerId: bigint; teacherId: bigint; fallbackName?: string }) {
   const { data, error, errorCode, loading, refresh } = useLearnerInsights(conn, learnerId, teacherId);
@@ -59,6 +59,7 @@ export function StudentProfile({ conn, learnerId, teacherId, fallbackName }: { c
           {data ? ' Showing the last profile that loaded.' : ''}
         </p>
       )}
+      {errorCode === 'locked' && <UnlockKey onSaved={refresh} />}
       {!data && !error && <p className="pr-note">Loading what the tutor knows…</p>}
 
       {data && view && (
@@ -121,7 +122,7 @@ export function StudentProfile({ conn, learnerId, teacherId, fallbackName }: { c
               {view.sessions.map(s => (
                 <li key={s.sessionId} data-testid="profile-session" data-session-id={s.sessionId}>
                   <div className="sp-session-top">
-                    <strong>{s.topicTitle || 'Open practice'}</strong>
+                    <strong>{s.topicTitle || 'Session'}</strong>
                     <small>{relativeDate(now, s.createdMs)}</small>
                   </div>
                   {s.taskText && <p className="sp-task">Task: {s.taskText}</p>}
@@ -134,6 +135,27 @@ export function StudentProfile({ conn, learnerId, teacherId, fallbackName }: { c
         </>
       )}
     </section>
+  );
+}
+
+function UnlockKey({ onSaved }: { onSaved: () => void }) {
+  const [key, setKey] = useState('');
+  return (
+    <form
+      className="sp-unlock"
+      onSubmit={e => {
+        e.preventDefault();
+        try {
+          window.localStorage.setItem(INSIGHTS_KEY_STORAGE, key.trim());
+        } catch {
+          /* storage blocked: nothing to remember */
+        }
+        onSaved();
+      }}
+    >
+      <input className="pr-input" type="password" placeholder="Profile key" aria-label="Profile key" data-testid="profile-key" value={key} onChange={e => setKey(e.target.value)} />
+      <button className="pr-secondary" type="submit">Unlock</button>
+    </form>
   );
 }
 

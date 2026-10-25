@@ -1,6 +1,6 @@
 // Loads a learner's long-term profile through the procedure `learnerInsights` (memory is private;
 // no subscription). Called once on open and on Refresh; no polling. The last good result is kept
-// when a later call fails. `?insightsFixture` (dev) shows a local fixture instead.
+// when a later call fails. `?insightsFixture` shows a local fixture instead (dev, screenshots).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DbConnection } from '../module_bindings';
 import type { LearnerInsights } from '@tutor/shared';
@@ -29,8 +29,6 @@ function fixtureMode(): '' | 'full' | 'empty' {
   }
 }
 
-type Call = (args: { learnerId: bigint; teacherId: bigint; key: string }) => Promise<string>;
-
 export interface LearnerInsightsState {
   data: LearnerInsights | null;
   /** Plain-words error of the latest call ('' when it succeeded). */
@@ -58,13 +56,11 @@ export function useLearnerInsights(conn: DbConnection, learnerId: bigint, teache
     };
     try {
       const mode = fixtureMode();
-      const call = (conn.procedures as unknown as { learnerInsights?: Call }).learnerInsights;
       let json: string;
       if (mode) json = JSON.stringify(mode === 'empty' ? emptyInsightsFixture(Date.now(), learnerId.toString()) : insightsFixture(Date.now(), learnerId.toString()));
-      else if (!call) return fail('unavailable', 'Student profiles are not available on this server yet.');
       else {
         eventLog.log('procedure.call', { name: 'learnerInsights', learnerId: learnerId.toString() });
-        json = await call.call(conn.procedures, { learnerId, teacherId, key: storedKey() });
+        json = await conn.procedures.learnerInsights({ learnerId, teacherId, key: storedKey() });
       }
       const r = parseInsights(json);
       if (my !== seq.current) return;

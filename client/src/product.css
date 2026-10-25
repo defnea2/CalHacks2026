@@ -233,6 +233,8 @@ body:has(.pr-app) { background: var(--pr-bg); }
 .sp-session-top small { font-size: 11px; color: var(--pr-faint); white-space: nowrap; }
 .sp-empty { font-size: 13px; color: var(--pr-muted); padding: 12px 14px; border: 1px dashed var(--pr-rule); margin: 0; }
 .sp-foot { margin-top: 22px; font-size: 11px; color: var(--pr-faint); }
+.sp-unlock { display: flex; gap: 8px; margin: -4px 0 12px; }
+.sp-unlock input { flex: 1; padding: 7px 10px; font-size: 13px; }
 
 /* ---- tutor avatar ---- */
 .tf-avatar { --lv: 0; position: relative; flex-shrink: 0; display: grid; place-items: center; }
