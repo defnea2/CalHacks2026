@@ -6,10 +6,13 @@ import { prompts } from './pack/prompts';
 import { content } from './pack/content';
 
 export * from './types';
+export * from './contract';
+export * from './import';
+export * from './latexMath';
 
 /** The active lesson pack. Swap this export to replace all placeholder content. */
 export const pack: LessonPack = {
-  version: 'placeholder-0.1.0',
+  version: 'placeholder-0.2.0',
   phases,
   initialPhase,
   finalPhase,

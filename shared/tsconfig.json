@@ -1,1 +1,7 @@
-{ "extends": "../tsconfig.base.json", "compilerOptions": { "lib": ["ES2022", "DOM"] }, "include": ["src", "test"] }
+{
+  "extends": "../tsconfig.base.json",
+  // "types": [] keeps Node typings out of src (shared code stays pure TS); tests that need
+  // node:fs opt in with /// <reference types="node" />.
+  "compilerOptions": { "lib": ["ES2022", "DOM"], "types": [] },
+  "include": ["src", "test"]
+}
