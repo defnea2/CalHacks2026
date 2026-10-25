@@ -99,8 +99,19 @@ export function metricsForUtterance(ctx: Ctx, sessionId: bigint, utteranceId: bi
   return undefined;
 }
 
+/** Called after every updateSession with the stored row before and after (classroom: a
+ *  simulated session going back to `listening` schedules the next student message). */
+export type SessionHook = (ctx: Ctx, prev: SessionRow, next: SessionRow) => void;
+const sessionHooks: SessionHook[] = [];
+export function onSessionUpdated(hook: SessionHook): void {
+  if (!sessionHooks.includes(hook)) sessionHooks.push(hook);
+}
+
 export function updateSession(ctx: Ctx, s: SessionRow, patch: Partial<SessionRow>): SessionRow {
-  return ctx.db.session.id.update({ ...s, ...patch });
+  const prev = sessionHooks.length ? (ctx.db.session.id.find(s.id) ?? s) : s;
+  const next = ctx.db.session.id.update({ ...s, ...patch });
+  for (const h of sessionHooks) h(ctx, prev, next);
+  return next;
 }
 
 export function truncate(s: string, max: number): string {
