@@ -10,7 +10,7 @@ import type { ClassSession, ClassSummary, DashboardState, Learner, LessonState, 
 import { callReducer, subscribe } from '../stdb/connection';
 import { useRows } from '../stdb/useRows';
 import { navigate, phaseLabel, routeUrl, tsMs } from '../lib/format';
-import { agoLabel, clusterRows, nextLabel, observeOrder, parseLearnerIds, stepObserve, ungroupedIds, type ClusterBlock } from '../lib/dashboard';
+import { agoLabel, clusterRows, nextLabel, observeOrder, parseLearnerIds, stepObserve, ungroupedIds, type ClusterBlock, refreshResult } from '../lib/dashboard';
 import { eventLog } from '../lib/debug';
 import { parseNotes } from '@tutor/visual/teaching/spacetimeModel';
 import { typedTurnText } from '../components/session';
@@ -37,12 +37,6 @@ function useNow(ms = 1000) {
     return () => clearInterval(t);
   }, [ms]);
   return now;
-}
-
-/** refreshDashboard returns a typed object; a module published before that returned a JSON string. */
-export function refreshResult(out: unknown): { ok: boolean; skipped: string; error: string } {
-  const r = (typeof out === 'string' ? JSON.parse(out || '{}') : (out ?? {})) as { ok?: boolean; skipped?: string; error?: string };
-  return { ok: !!r.ok, skipped: r.skipped ?? '', error: r.error ?? '' };
 }
 
 export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classSessionId: bigint }) {

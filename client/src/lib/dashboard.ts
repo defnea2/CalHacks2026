@@ -107,3 +107,9 @@ export function nextLabel(nowMs: number, r: RefreshInfo): string {
   const s = Math.ceil((r.nextDueMs - nowMs) / 1000);
   return s <= 0 ? 'next update now' : `next in ${s} s`;
 }
+
+/** refreshDashboard returns a typed object; a module published before that returned a JSON string. */
+export function refreshResult(out: unknown): { ok: boolean; skipped: string; error: string } {
+  const r = (typeof out === 'string' ? JSON.parse(out || '{}') : (out ?? {})) as { ok?: boolean; skipped?: string; error?: string };
+  return { ok: !!r.ok, skipped: r.skipped ?? '', error: r.error ?? '' };
+}
