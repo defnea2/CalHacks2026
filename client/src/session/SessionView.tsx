@@ -433,7 +433,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
                       ? 'The tutor is thinking about how to show it.'
                       : mode === 'voice' && active && !listening && session?.turnCount === 0
                         ? 'Press the button to turn on sound and the microphone. The tutor starts.'
-                        : 'Talk or type: the tutor explains with a moving picture.'}
+                        : 'Talk with the tutor: it explains with a moving picture.'}
                 </p>
                 {!readOnly && active && mode === 'voice' && !listening && session?.turnCount === 0 && (
                   <button type="button" className="pr-primary" data-testid="welcome-start" onClick={startTalking} disabled={starting}>
