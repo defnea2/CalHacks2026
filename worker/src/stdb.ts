@@ -131,6 +131,8 @@ export class StdbLink {
       .withUri(this.o.uri)
       .withDatabaseName(this.o.db)
       .withToken(token)
+      // Updates without waiting for durability (~5.5 ms per hop, docs/latency-internal.md).
+      .withConfirmedReads(false)
       .onConnect((conn, identity, newToken) => {
         this.failures = 0;
         this.transport.conn = conn;
@@ -166,7 +168,11 @@ export class StdbLink {
     db.phrase.onUpdate((_c, _old, r) => agent.onPhrase(r));
     db.replySentence.onInsert((_c, r) => agent.onSentence(r));
     db.replySentence.onUpdate((_c, _old, r) => agent.onSentence(r));
-    db.speechActivity.onInsert((_c, r) => agent.onSpeechActivity(r.sessionId));
+    db.speechActivity.onInsert((_c, r) => agent.onSpeechActivity(r.sessionId, r.phraseId));
+    db.boardItem.onInsert((_c, r) => agent.onBoardItem(r.sessionId));
+    db.boardItem.onUpdate((_c, _old, r) => agent.onBoardItem(r.sessionId));
+    db.boardItem.onDelete((_c, r) => agent.onBoardItem(r.sessionId));
+    db.learner.onUpdate(() => agent.onLearner());
     db.playbackFlush.onInsert((_c, r) => agent.onPlaybackFlush(r.sessionId, r.utteranceId));
     conn
       .subscriptionBuilder()

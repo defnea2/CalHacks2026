@@ -3,14 +3,18 @@
 import { pack } from '@tutor/shared';
 import { Agent } from './agent';
 import { loadConfig } from './env';
-import { OpenRouterProvider } from './llm';
+import { createLlm } from './providers';
 import { StdbLink } from './stdb';
 
 const cfg = loadConfig();
 const missing = [
   ['AGENT_SECRET', cfg.agentSecret],
-  ['OPENROUTER_API_KEY', cfg.openrouterApiKey],
-  ['OPENROUTER_MODEL', cfg.openrouterModel],
+  ...(cfg.llmProvider === 'anthropic'
+    ? [['ANTHROPIC_API_KEY', cfg.anthropicApiKey]]
+    : [
+        ['OPENROUTER_API_KEY', cfg.openrouterApiKey],
+        ['OPENROUTER_MODEL', cfg.openrouterModel],
+      ]),
 ].filter(([, v]) => !v);
 if (missing.length) {
   console.error(`worker: missing ${missing.map(([k]) => k).join(', ')} (root .env / .env.local; AGENT_SECRET is created by pnpm stdb:publish)`);
@@ -20,7 +24,7 @@ if (missing.length) {
 const ts = () => new Date().toISOString().slice(11, 23);
 const log = (m: string) => console.log(`${ts()} ${m}`);
 
-const llm = new OpenRouterProvider({ apiKey: cfg.openrouterApiKey, model: cfg.openrouterModel, reasoningEffort: cfg.reasoningEffort });
+const { llm, info: modelInfo } = createLlm(cfg);
 const link = new StdbLink({
   uri: cfg.spacetimeUri,
   db: cfg.spacetimeDb,
@@ -44,7 +48,7 @@ const agent = new Agent({
 });
 
 log(
-  `worker: model ${cfg.openrouterModel}, reasoning ${cfg.reasoningEffort || 'default'}, ` +
+  `worker: ${modelInfo}, ` +
     `preemptive ${cfg.preemptive ? `on (${cfg.preemptiveSilenceMs} ms)` : 'off'}, pack ${pack.version}, ${agent.router.tools.length} tools`
 );
 link.start(agent);

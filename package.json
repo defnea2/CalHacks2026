@@ -28,7 +28,8 @@
     "worker": "pnpm --filter worker start",
     "client": "pnpm --filter client dev",
     "test:voice": "pnpm -r --if-present test",
-    "typecheck:voice": "pnpm -r --if-present typecheck"
+    "typecheck:voice": "pnpm -r --if-present typecheck",
+    "test:e2e": "pnpm --filter e2e test:e2e"
   },
   "dependencies": {
     "katex": "0.19.1",

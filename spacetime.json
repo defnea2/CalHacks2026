@@ -1,5 +1,5 @@
 {
   "module-path": "./spacetimedb",
   "server": "local",
-  "database": "tutor"
+  "database": "voice-tutor"
 }

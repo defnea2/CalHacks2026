@@ -17,6 +17,8 @@ export function useConnection(settings: AppSettings): { conn: DbConnection | nul
     const c = DbConnection.builder()
       .withUri(settings.spacetimeUri)
       .withDatabaseName(settings.spacetimeDb)
+      // No fsync wait before updates reach us (~5.5 ms per hop, docs/latency-internal.md).
+      .withConfirmedReads(false)
       .onConnect((cn, identity) => {
         if (!alive) return;
         eventLog.log('conn.connected', { identity: identity.toHexString().slice(0, 16) });

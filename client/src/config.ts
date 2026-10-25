@@ -13,8 +13,9 @@ export const CLIENT_DEFAULTS = {
   NOISE_FLOOR_MAX_PROB: 0.3,
   /** Wait this long for a missing sentence index before skipping it. */
   PLAYBACK_GAP_TIMEOUT_MS: 6000,
-  /** Lead time when scheduling the first block of a burst. */
-  PLAYBACK_LEAD_MS: 40,
+  /** Lead time when scheduling the first block of a burst. The scheduling path takes ~3 ms
+   *  (docs/latency-internal.md), so 10 ms leaves a safety margin without adding delay. */
+  PLAYBACK_LEAD_MS: 10,
   /** Silero model: v5 (32 ms frames) or legacy (96 ms frames). */
   VAD_MODEL: 'v5' as 'v5' | 'legacy',
 };
@@ -53,6 +54,6 @@ export function loadSettings(search: string, env: Record<string, string | undefi
     playback: overrideNumbers({ ...PLAYBACK_DEFAULTS } as PlaybackSettings, params),
     client: overrideNumbers({ ...CLIENT_DEFAULTS }, params),
     spacetimeUri: params.get('uri') ?? env.VITE_SPACETIME_URI ?? 'ws://127.0.0.1:3000',
-    spacetimeDb: params.get('db') ?? env.VITE_SPACETIME_DB ?? 'tutor',
+    spacetimeDb: params.get('db') ?? env.VITE_SPACETIME_DB ?? 'voice-tutor',
   };
 }
