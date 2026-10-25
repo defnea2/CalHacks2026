@@ -50,11 +50,13 @@ import RegisterAgentReducer from "./register_agent_reducer";
 import RememberReducer from "./remember_reducer";
 import ReportNoiseReducer from "./report_noise_reducer";
 import SetPhaseReducer from "./set_phase_reducer";
+import SetSessionVoiceReducer from "./set_session_voice_reducer";
 import SetTurnStateReducer from "./set_turn_state_reducer";
 import ShowBoardItemReducer from "./show_board_item_reducer";
 import StartConversationReducer from "./start_conversation_reducer";
 import StartSessionReducer from "./start_session_reducer";
 import SubmitGapAnswerReducer from "./submit_gap_answer_reducer";
+import SubmitTextTurnReducer from "./submit_text_turn_reducer";
 import UploadPhotoReducer from "./upload_photo_reducer";
 
 // Import all procedure arg schemas
@@ -311,11 +313,13 @@ const reducersSchema = __reducers(
   __reducerSchema("remember", RememberReducer),
   __reducerSchema("report_noise", ReportNoiseReducer),
   __reducerSchema("set_phase", SetPhaseReducer),
+  __reducerSchema("set_session_voice", SetSessionVoiceReducer),
   __reducerSchema("set_turn_state", SetTurnStateReducer),
   __reducerSchema("show_board_item", ShowBoardItemReducer),
   __reducerSchema("start_conversation", StartConversationReducer),
   __reducerSchema("start_session", StartSessionReducer),
   __reducerSchema("submit_gap_answer", SubmitGapAnswerReducer),
+  __reducerSchema("submit_text_turn", SubmitTextTurnReducer),
   __reducerSchema("upload_photo", UploadPhotoReducer),
 );
 

@@ -7,6 +7,7 @@
 // - List/JSON fields are JSON strings (spec "Content library").
 // - Every lookup column is indexed.
 import { schema, table, t } from 'spacetimedb/server';
+import { textPlayJob, textPlayback } from './schema_pipeline';
 
 // ---------------------------------------------------------------- learners & sessions
 
@@ -44,6 +45,8 @@ export const session = table(
     currentUtteranceId: t.u64(),
     startedAt: t.timestamp(),
     endedAt: t.option(t.timestamp()),
+    /** false = text mode: no STT/TTS; sentences count as played after a reading delay. */
+    voice: t.bool().default(true),
   }
 );
 
@@ -130,6 +133,10 @@ export const turn = table(
     interrupted: t.bool(),
     createdAt: t.timestamp(),
     closedAt: t.option(t.timestamp()),
+    /** 'voice' | 'text' | 'sim' (TURN_SOURCES). */
+    source: t.string().default('voice'),
+    /** '' or a lesson intent of the team UI (TURN_INTENTS). */
+    intent: t.string().default(''),
   }
 );
 
@@ -479,6 +486,8 @@ const spacetimedb = schema(
     explanation,
     task,
     libraryMeta,
+    textPlayJob,
+    textPlayback,
   },
   {
     env: {

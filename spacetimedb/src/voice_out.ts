@@ -1,9 +1,10 @@
 // Voice output: utterances, sentences, TTS jobs, playback state, interrupts, tutor turns.
 import { SenderError } from 'spacetimedb/server';
-import { OPENING_TURN_IDX, type SentenceStatus, type TtsResult, type TurnState, type TurnStatus } from '../../shared/src/types';
+import { OPENING_TURN_IDX, SOURCE_TEXT, SOURCE_VOICE, type SentenceStatus, type TtsResult, type TurnState, type TurnStatus } from '../../shared/src/types';
 import {
   type Ctx,
   type PCtx,
+  type SentenceRow,
   type SessionRow,
   dueIn,
   findSentence,
@@ -17,6 +18,7 @@ import {
   utteranceSentences,
 } from './ctx';
 import { onTurnAppended } from './memory';
+import { queueTextSentence } from './text_mode';
 import { ProviderError, synthesize, ttsRequest } from './providers';
 
 const PENDING: SentenceStatus = 'pending';
@@ -58,7 +60,7 @@ export function beginUtterance(
 export function addSentence(
   ctx: Ctx,
   args: { sessionId: bigint; utteranceId: bigint; idx: number; display: string; speech: string }
-): void {
+): SentenceRow {
   const session = getActiveSession(ctx, args.sessionId);
   if (args.utteranceId === 0n || session.currentUtteranceId !== args.utteranceId) {
     throw new SenderError(`utterance ${args.utteranceId} is not current (stale or interrupted)`);
@@ -74,9 +76,18 @@ export function addSentence(
     idx: args.idx,
     display: truncate(args.display, SENTENCE_MAX),
     speech,
-    status: PENDING,
+    status: session.voice ? PENDING : READY,
     createdAt: ctx.timestamp,
   });
+  if (args.idx === 0) {
+    const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
+    if (m && !m.firstSentenceAt) ctx.db.turnMetrics.id.update({ ...m, firstSentenceAt: ctx.timestamp });
+  }
+  // Text mode: no TTS. The sentence is shown at once and counts as played after its reading time.
+  if (!session.voice) {
+    queueTextSentence(ctx, session, row);
+    return row;
+  }
   ctx.db.ttsJob.insert({
     scheduledId: 0n,
     scheduledAt: dueIn(ctx),
@@ -86,10 +97,7 @@ export function addSentence(
     idx: args.idx,
     speech,
   });
-  if (args.idx === 0) {
-    const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
-    if (m && !m.firstSentenceAt) ctx.db.turnMetrics.id.update({ ...m, firstSentenceAt: ctx.timestamp });
-  }
+  return row;
 }
 
 /** Scheduled: one sentence -> audio_out. Skips sentences dropped by an interrupt.
@@ -159,13 +167,13 @@ export function markPlayed(ctx: Ctx, args: { sessionId: bigint; utteranceId: big
   maybeFinishSpeaking(ctx, args.sessionId, args.utteranceId);
 }
 
-function tutorTurnFor(ctx: Ctx, sessionId: bigint, utteranceId: bigint) {
+export function tutorTurnFor(ctx: Ctx, sessionId: bigint, utteranceId: bigint) {
   for (const t of ctx.db.turn.sessionId.filter(sessionId)) if (t.role === 'tutor' && t.utteranceId === utteranceId) return t;
   return undefined;
 }
 
 /** Tutor turn appended and every sentence played (or dropped) -> listening. */
-function maybeFinishSpeaking(ctx: Ctx, sessionId: bigint, utteranceId: bigint): void {
+export function maybeFinishSpeaking(ctx: Ctx, sessionId: bigint, utteranceId: bigint): void {
   const session = ctx.db.session.id.find(sessionId);
   if (!session || session.currentUtteranceId !== utteranceId) return;
   if (!tutorTurnFor(ctx, sessionId, utteranceId)) return;
@@ -176,6 +184,14 @@ function maybeFinishSpeaking(ctx: Ctx, sessionId: bigint, utteranceId: bigint): 
 function finishUtterance(ctx: Ctx, session: SessionRow): void {
   const turnState = session.turnState === SPEAKING || session.turnState === THINKING || session.turnState === INTERRUPTED ? LISTENING : session.turnState;
   updateSession(ctx, session, { currentUtteranceId: 0n, turnState });
+}
+
+/** What the student actually heard (or read) of an utterance: its played sentences. */
+export function heardText(ctx: Ctx, sessionId: bigint, utteranceId: bigint): string {
+  return utteranceSentences(ctx, sessionId, utteranceId)
+    .filter(s => s.status === PLAYED)
+    .map(s => s.display)
+    .join(' ');
 }
 
 export function interrupt(ctx: Ctx, sessionId: bigint): void {
@@ -190,14 +206,7 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
     // The worker usually appends the tutor turn as soon as the LLM finishes, before playback
     // ends. Then the turn must be corrected to what the student actually heard.
     const tutorTurn = tutorTurnFor(ctx, sessionId, utteranceId);
-    if (tutorTurn) {
-      const heard = sentences
-        .filter(s => s.status === PLAYED)
-        .sort((a, b) => a.idx - b.idx)
-        .map(s => s.display)
-        .join(' ');
-      ctx.db.turn.id.update({ ...tutorTurn, interrupted: true, text: heard });
-    }
+    if (tutorTurn) ctx.db.turn.id.update({ ...tutorTurn, interrupted: true, text: heardText(ctx, sessionId, utteranceId) });
   }
   ctx.db.playbackFlush.insert({ sessionId, utteranceId });
   updateSession(ctx, session, { turnState: INTERRUPTED, currentUtteranceId: 0n });
@@ -214,7 +223,10 @@ export function appendTutorTurn(
 ): void {
   let session = getActiveSession(ctx, args.sessionId);
   if (args.utteranceId === 0n) throw new SenderError('utteranceId must be non-zero');
-  if (tutorTurnFor(ctx, args.sessionId, args.utteranceId)) throw new SenderError(`tutor turn for utterance ${args.utteranceId} exists`);
+  const existing = tutorTurnFor(ctx, args.sessionId, args.utteranceId);
+  // Closed by the module already (a typed turn interrupted this reply): nothing left to record.
+  if (existing?.interrupted) return;
+  if (existing) throw new SenderError(`tutor turn for utterance ${args.utteranceId} exists`);
   const m = metricsForUtterance(ctx, args.sessionId, args.utteranceId);
   // The opening reply (OPENING_TURN_IDX) answers no student turn: it goes before all of them.
   const replyToIdx = m && m.turnIdx !== OPENING_TURN_IDX ? m.turnIdx : -1;
@@ -247,6 +259,8 @@ export function appendTutorTurn(
       interrupted: args.interrupted,
       createdAt: ctx.timestamp,
       closedAt: ctx.timestamp,
+      source: session.voice ? SOURCE_VOICE : SOURCE_TEXT,
+      intent: '',
     });
     session = updateSession(ctx, session, { turnCount: session.turnCount + 1 });
     onTurnAppended(ctx, args.sessionId);

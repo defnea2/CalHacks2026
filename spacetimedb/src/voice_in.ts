@@ -52,7 +52,7 @@ export function liveStudentTurn(ctx: Ctx, sessionId: bigint): TurnRow | undefine
   return undefined;
 }
 
-function openStudentTurn(ctx: Ctx, session: SessionRow): TurnRow {
+export function openStudentTurn(ctx: Ctx, session: SessionRow, source = 'voice', intent = ''): TurnRow {
   const idx = session.turnCount;
   updateSession(ctx, session, { turnCount: idx + 1 });
   return ctx.db.turn.insert({
@@ -67,6 +67,8 @@ function openStudentTurn(ctx: Ctx, session: SessionRow): TurnRow {
     interrupted: false,
     createdAt: ctx.timestamp,
     closedAt: undefined,
+    source,
+    intent,
   });
 }
 
@@ -129,7 +131,7 @@ function turnText(ctx: Ctx, sessionId: bigint, turnIdx: number): string {
 }
 
 /** Student turn complete: ready for the worker, or dropped if it has no text. */
-function completeTurn(ctx: Ctx, turn: TurnRow): void {
+export function completeTurn(ctx: Ctx, turn: TurnRow): void {
   const session = ctx.db.session.id.find(turn.sessionId);
   if (!turn.text.trim()) {
     dropTurn(ctx, turn);

@@ -56,7 +56,11 @@ export function buildMessages(p: PromptInput): ChatMessage[] {
     if (t.role === 'tutor') msgs.push({ role: 'assistant', content: t.interrupted ? `${t.text} [the student interrupted here]` : t.text });
     else msgs.push({ role: 'user', content: t.text });
   }
-  msgs.push({ role: 'user', content: cur.text });
+  // A lesson button of the team UI (turn.intent) travels with the turn text.
+  const intent = p.turns.find(t => t.idx === cur.idx && t.role === 'student')?.intent;
+  msgs.push({ role: 'user', content: intent ? `${cur.text}
+
+[The student pressed the lesson button "${intent}".]` : cur.text });
   if (p.phaseBlock) msgs.push({ role: 'system', content: p.phaseBlock });
   return msgs;
 }
