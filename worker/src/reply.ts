@@ -13,6 +13,9 @@ import { buildMessages } from './prompt';
 import type { ToolResult, ToolRouter } from './router';
 import type { Transport, TurnRow } from './transport';
 
+/** Delays before retrying an LLM round that failed before any output (unstable connections). */
+const LLM_RETRY_DELAYS_MS = [400, 1200];
+
 export interface ReplyDeps {
   transport: Transport;
   llm: LlmProvider;
@@ -233,19 +236,33 @@ export class ReplyRun {
         // chain tool-only rounds and the student hears nothing).
         const last = round >= this.deps.maxToolRounds && round > 0;
         const tools = last ? [] : this.deps.router.specs();
-        const stream = this.deps.llm.stream({ messages: this.history, tools, signal: this.abort.signal });
-        for await (const ev of stream) {
-          if (this.aborted) break;
-          if (ev.type === 'text') {
-            this.markFirstToken();
-            text += ev.delta;
-            for (const s of chunker.push(ev.delta)) this.enqueueSentence(s);
-          } else if (ev.type === 'tool_call') {
-            this.markFirstToken();
-            // A finished sentence before the call belongs before it (board reveal index).
-            for (const s of chunker.flushComplete()) this.enqueueSentence(s);
-            calls.push(ev.call);
-            results.push(this.enqueueTool(ev.call));
+        // A round that fails before any event arrived is retried (flaky network): nothing from it
+        // reached SpacetimeDB yet. Once output has started, a failure ends the reply as before.
+        for (let attempt = 0; ; attempt++) {
+          let gotEvent = false;
+          try {
+            const stream = this.deps.llm.stream({ messages: this.history, tools, signal: this.abort.signal });
+            for await (const ev of stream) {
+              gotEvent = true;
+              if (this.aborted) break;
+              if (ev.type === 'text') {
+                this.markFirstToken();
+                text += ev.delta;
+                for (const s of chunker.push(ev.delta)) this.enqueueSentence(s);
+              } else if (ev.type === 'tool_call') {
+                this.markFirstToken();
+                // A finished sentence before the call belongs before it (board reveal index).
+                for (const s of chunker.flushComplete()) this.enqueueSentence(s);
+                calls.push(ev.call);
+                results.push(this.enqueueTool(ev.call));
+              }
+            }
+            break;
+          } catch (e) {
+            if (gotEvent || this.aborted || attempt >= LLM_RETRY_DELAYS_MS.length) throw e;
+            this.log(`llm round ${round} failed before output (${errText(e)}), retry ${attempt + 1}`);
+            await new Promise(r => setTimeout(r, LLM_RETRY_DELAYS_MS[attempt]));
+            if (this.aborted) return;
           }
         }
         if (this.aborted) return;

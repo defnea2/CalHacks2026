@@ -160,4 +160,36 @@ describe('reply', () => {
     expect(m.transport.of('appendTutorTurn')[0]).toMatchObject({ text: 'We start with the pizza and its slices today.', interrupted: false });
     expect(m.logs.some(l => l.includes('upstream 500'))).toBe(true);
   });
+
+  it('retries a round that fails before any output (flaky network), then speaks', async () => {
+    let calls = 0;
+    const real = new FakeLlm([[...tokens('Good thinking, let us look at the bottom number.'), done]]);
+    const flaky = new FakeLlm([]);
+    flaky.stream = async function* (o) {
+      calls++;
+      if (calls === 1) throw new Error('Connection error.');
+      yield* real.stream(o);
+    };
+    const { transport, logs } = await answer(flaky);
+    expect(calls).toBe(2);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Good thinking, let us look at the bottom number.']);
+    expect(logs.some(l => l.includes('retry 1'))).toBe(true);
+  });
+
+  it('does not retry once output has started', async () => {
+    const real = new FakeLlm([[...tokens('This is the first full sentence here.'), done]]);
+    let calls = 0;
+    const llm = new FakeLlm([[]]);
+    llm.stream = async function* (o) {
+      calls++;
+      for await (const ev of real.stream(o)) {
+        yield ev;
+        throw new Error('Connection error.');
+      }
+    };
+    const { transport } = await answer(llm);
+    expect(calls).toBe(1);
+    expect(transport.of('appendTutorTurn').length).toBe(1);
+  });
 });
+
