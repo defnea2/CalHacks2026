@@ -8,6 +8,7 @@
 // - Every lookup column is indexed.
 import { schema, table, t } from 'spacetimedb/server';
 import { textPlayJob, textPlayback } from './schema_pipeline';
+import { learnerEvent, canvasState, beat, lessonState, agentStatus } from './schema_client_stub'; // TEMP client stub
 
 // ---------------------------------------------------------------- learners & sessions
 
@@ -488,6 +489,7 @@ const spacetimedb = schema(
     libraryMeta,
     textPlayJob,
     textPlayback,
+    learnerEvent, canvasState, beat, lessonState, agentStatus, // TEMP client stub
   },
   {
     env: {
