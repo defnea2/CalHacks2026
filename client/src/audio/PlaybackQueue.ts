@@ -118,7 +118,7 @@ export class PlaybackQueue {
     }
     const samples = applyFades(int16ToFloat(ints.subarray(s, e)), sampleRate, this.cfg.FADE_MS);
     const buffer = this.ctx.createBuffer(1, samples.length, sampleRate || this.cfg.TTS_SAMPLE_RATE);
-    buffer.copyToChannel(samples, 0);
+    buffer.copyToChannel(new Float32Array(samples), 0);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(this.gain);

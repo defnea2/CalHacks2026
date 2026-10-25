@@ -57,6 +57,7 @@ export function App({ settings }: { settings: AppSettings }) {
             {APP_CONFIG.pageTitle}
           </a>
           <nav className="flex items-center gap-3 text-sm">
+            <a href="?canvasPreview" className="text-muted-foreground hover:text-foreground">Test canvas</a>
             <a
               data-testid="nav-overview"
               href={homeUrl('overview')}

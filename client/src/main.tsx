@@ -1,9 +1,12 @@
-import { StrictMode } from 'react';
+import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { App } from './App';
 import { loadSettings } from './config';
 import { installDebug } from './lib/debug';
+
+const CanvasPreview = lazy(() => import('./board/CanvasPreview').then(m => ({ default: m.CanvasPreview })));
+const canvasPreview = new URLSearchParams(window.location.search).has('canvasPreview');
 
 const settings = loadSettings(window.location.search, import.meta.env as Record<string, string | undefined>);
 installDebug(settings);
@@ -14,6 +17,6 @@ if (new URLSearchParams(window.location.search).get('theme') === 'dark' || (wind
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App settings={settings} />
+    <Suspense fallback={<p>Opening the canvas…</p>}>{canvasPreview ? <CanvasPreview /> : <App settings={settings} />}</Suspense>
   </StrictMode>
 );
