@@ -14,6 +14,7 @@ import * as LearnerInsightsProcedure from "../learner_insights_procedure";
 import * as PrefetchTopicProcedure from "../prefetch_topic_procedure";
 import * as RefreshDashboardProcedure from "../refresh_dashboard_procedure";
 import * as SetTopicProcedure from "../set_topic_procedure";
+import * as TakeDispatchProcedure from "../take_dispatch_procedure";
 
 export type BuildContextArgs = __Infer<typeof BuildContextProcedure.params>;
 export type BuildContextResult = __Infer<typeof BuildContextProcedure.returnType>;
@@ -31,4 +32,6 @@ export type RefreshDashboardArgs = __Infer<typeof RefreshDashboardProcedure.para
 export type RefreshDashboardResult = __Infer<typeof RefreshDashboardProcedure.returnType>;
 export type SetTopicArgs = __Infer<typeof SetTopicProcedure.params>;
 export type SetTopicResult = __Infer<typeof SetTopicProcedure.returnType>;
+export type TakeDispatchArgs = __Infer<typeof TakeDispatchProcedure.params>;
+export type TakeDispatchResult = __Infer<typeof TakeDispatchProcedure.returnType>;
 
