@@ -298,17 +298,3 @@ export const summarizeSession = spacetimedb.procedure(
     return {};
   }
 );
-
-// ---------------------------------------------------------------- TEMPORARY client stub (night/client-static)
-import * as clientStub from './client_stub';
-export const submitInteraction = spacetimedb.reducer({ sessionId: t.u64(), kind: t.string(), payload: t.string() }, (ctx, a) => clientStub.submitInteraction(ctx, a));
-export const addBeat = spacetimedb.reducer(
-  { sessionId: t.u64(), utteranceId: t.u64(), idx: t.u32(), visual: t.string(), narration: t.string() },
-  (ctx, a) => clientStub.addBeat(ctx, a)
-);
-export const stubFinishUtterance = spacetimedb.reducer({ sessionId: t.u64(), utteranceId: t.u64() }, (ctx, a) => clientStub.stubFinishUtterance(ctx, a));
-export const stubLessonState = spacetimedb.reducer(
-  { sessionId: t.u64(), stage: t.string(), awaitingResponse: t.bool(), checkPrompt: t.string(), notes: t.string() },
-  (ctx, a) => clientStub.stubLessonState(ctx, a)
-);
-export const stubAgentStatus = spacetimedb.reducer({ model: t.string() }, (ctx, a) => clientStub.stubAgentStatus(ctx, a));
