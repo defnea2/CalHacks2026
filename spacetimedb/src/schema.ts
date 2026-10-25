@@ -8,6 +8,7 @@
 // - Every lookup column is indexed.
 import { schema, table, t } from 'spacetimedb/server';
 import { textPlayJob, textPlayback, canvasState, beat, learnerEvent, lessonState, lessonRecord, lessonPlan, agentStatus, tutorRequest, tutorResult } from './schema_pipeline';
+import * as classroom from './schema_classroom';
 
 // ---------------------------------------------------------------- learners & sessions
 
@@ -21,6 +22,10 @@ export const learner = table(
     /** e.g. "short hints, visuals first" */
     style: t.string(),
     createdAt: t.timestamp(),
+    /** Classroom simulation user (night/classroom-core). */
+    isSimulated: t.bool().default(false),
+    /** Seed order 1..20 of a simulation user; 0 = real learner. */
+    simRank: t.u32().default(0),
   }
 );
 
@@ -45,6 +50,8 @@ export const session = table(
     currentUtteranceId: t.u64(),
     startedAt: t.timestamp(),
     endedAt: t.option(t.timestamp()),
+    /** Linked class session (0 = ad-hoc). */
+    classSessionId: t.u64().default(0n),
     /** false = text mode: no STT/TTS; sentences count as played after a reading delay. */
     voice: t.bool().default(true),
   }
@@ -372,6 +379,9 @@ export const extractionCursor = table(
     sessionId: t.u64().primaryKey(),
     /** First turn idx not yet processed. */
     nextIdx: t.u32(),
+    /** Unix micros when an extractMemory run took the window (0 = idle). While set, no new
+     *  window is scheduled (the job row is gone during the LLM call). */
+    runningSinceMicros: t.u64().default(0n),
   }
 );
 
@@ -486,6 +496,7 @@ const spacetimedb = schema(
     explanation,
     task,
     libraryMeta,
+    ...classroom,
     textPlayJob,
     textPlayback,
     canvasState,
@@ -519,6 +530,10 @@ const spacetimedb = schema(
       ANTHROPIC_EXTRACTION_MODEL: t.option(t.string()),
       /** anthropic | openrouter (default: anthropic when ANTHROPIC_API_KEY is set). */
       MEMORY_PROVIDER: t.option(t.string()),
+      /** Classroom simulation: max simulated student turns per session per run (default 8). */
+      SIM_MAX_TURNS: t.option(t.string()),
+      /** Teacher dashboard refresh interval in seconds (default 30). */
+      DASHBOARD_INTERVAL_S: t.option(t.string()),
     },
   }
 );

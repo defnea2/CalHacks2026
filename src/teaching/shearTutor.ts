@@ -51,18 +51,10 @@ export function offlineShearReply(request: ShearTutorRequest): z.infer<typeof Sh
   };
 }
 
-type Ask = (request: ShearTutorRequest, signal: AbortSignal) => Promise<unknown>;
-export function httpShearTutor(endpoint = "/api/teaching/shear-feedback", fetcher: typeof fetch = fetch): Ask {
-  return async (request, signal) => {
-    const response = await fetcher(endpoint, { method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
-    if (!response.ok) {
-      let detail = "";
-      try { const value = (await response.json()) as { error?: unknown }; if (typeof value.error === "string") detail = value.error.slice(0, 600); } catch { /* non-JSON proxy */ }
-      throw new Error(detail || `Tutor endpoint returned HTTP ${response.status}.`);
-    }
-    return response.json();
-  };
-}
+export type Ask = (request: ShearTutorRequest, signal: AbortSignal) => Promise<unknown>;
+/** No tutor transport connected: every turn uses the clearly labeled offline reply.
+ *  (The HTTP endpoint is gone; the SpacetimeDB tutor_request/tutor_result rows replace it.) */
+export const offlineShearTutor: Ask = async () => { throw new Error("No tutor connected."); };
 
 export interface ShearTutorState { messages: ShearTutorMessage[]; pending: ShearTurn | null; error: string | null; turn: ShearTurn | null }
 
@@ -72,7 +64,7 @@ export class ShearTutorConversation {
   private listeners = new Set<() => void>();
   private controller: AbortController | null = null;
   private latest: string | null = null;
-  constructor(private ask: Ask = httpShearTutor()) {}
+  constructor(private ask: Ask = offlineShearTutor) {}
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   getSnapshot = () => this.state;
   private set(patch: Partial<ShearTutorState>) { this.state = { ...this.state, ...patch }; this.listeners.forEach(l => l()); }

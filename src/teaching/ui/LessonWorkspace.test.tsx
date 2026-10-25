@@ -33,15 +33,24 @@ describe("integrated lesson experience", () => {
     expect(screen.getByRole("button", { name: /2 \+ 3/ })).toBeInTheDocument();
   });
   it("shows a model error without silently substituting a sample and lets the learner leave", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
-    render(<LessonWorkspace />);
+    // Live lessons run over the host's planner (the client: SpacetimeDB); here it fails.
+    const planning = { status: "Connected to test", online: true,
+      start: vi.fn().mockResolvedValue({ sessionId: "live", model: vi.fn().mockRejectedValue(new Error("The tutor did not answer.")) }) };
+    render(<LessonWorkspace planning={planning} />);
     fireEvent.change(screen.getByLabelText("What would you like to understand?"), { target: { value: "How do shadows work?" } });
     fireEvent.click(screen.getByRole("button", { name: /^Start/ }));
     await screen.findByRole("alert");
     expect(screen.getByRole("button", { name: /Try again/ })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /rows of/ })).not.toBeInTheDocument();
+    expect(planning.start).toHaveBeenCalledWith({ topic: "How do shadows work?", originalQuestion: "", age: 9 });
     fireEvent.click(screen.getByRole("button", { name: "← All topics" }));
     await waitFor(() => expect(screen.getByRole("heading", { name: /What are you.*wondering about\?/ })).toBeInTheDocument());
+  });
+  it("needs a connected planner for live lessons and says so", async () => {
+    render(<LessonWorkspace />);
+    fireEvent.change(screen.getByLabelText("What would you like to understand?"), { target: { value: "How do shadows work?" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Start/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/tutor connection/);
   });
 });
 

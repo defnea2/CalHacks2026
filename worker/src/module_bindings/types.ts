@@ -92,6 +92,37 @@ export const Category = __t.object("Category", {
 });
 export type Category = __Infer<typeof Category>;
 
+export const ClassDocument = __t.object("ClassDocument", {
+  classSessionId: __t.u64(),
+  data: __t.byteArray(),
+});
+export type ClassDocument = __Infer<typeof ClassDocument>;
+
+export const ClassSession = __t.object("ClassSession", {
+  id: __t.u64(),
+  teacherId: __t.u64(),
+  goals: __t.string(),
+  content: __t.string(),
+  delivery: __t.string(),
+  documentName: __t.string(),
+  documentMime: __t.string(),
+  documentText: __t.string(),
+  active: __t.bool(),
+  simulation: __t.bool(),
+  simulatedCount: __t.u32(),
+  startedAt: __t.timestamp(),
+  endedAt: __t.option(__t.timestamp()),
+});
+export type ClassSession = __Infer<typeof ClassSession>;
+
+export const ClassSummary = __t.object("ClassSummary", {
+  classSessionId: __t.u64(),
+  summary: __t.string(),
+  updatedAt: __t.timestamp(),
+  version: __t.u32(),
+});
+export type ClassSummary = __Infer<typeof ClassSummary>;
+
 export const Concept = __t.object("Concept", {
   key: __t.string(),
   category: __t.string(),
@@ -113,6 +144,24 @@ export const ConceptState = __t.object("ConceptState", {
 });
 export type ConceptState = __Infer<typeof ConceptState>;
 
+export const DashboardJob = __t.object("DashboardJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  classSessionId: __t.u64(),
+});
+export type DashboardJob = __Infer<typeof DashboardJob>;
+
+export const DashboardState = __t.object("DashboardState", {
+  classSessionId: __t.u64(),
+  impersonatingLearnerId: __t.u64(),
+  lastRunAt: __t.option(__t.timestamp()),
+  nextDueAt: __t.timestamp(),
+  running: __t.bool(),
+  runStartedAt: __t.option(__t.timestamp()),
+  lastError: __t.string(),
+});
+export type DashboardState = __Infer<typeof DashboardState>;
+
 export const Explanation = __t.object("Explanation", {
   id: __t.string(),
   concept: __t.string(),
@@ -126,6 +175,7 @@ export type Explanation = __Infer<typeof Explanation>;
 export const ExtractionCursor = __t.object("ExtractionCursor", {
   sessionId: __t.u64(),
   nextIdx: __t.u32(),
+  runningSinceMicros: __t.u64(),
 });
 export type ExtractionCursor = __Infer<typeof ExtractionCursor>;
 
@@ -147,6 +197,8 @@ export const Learner = __t.object("Learner", {
   grade: __t.u32(),
   style: __t.string(),
   createdAt: __t.timestamp(),
+  isSimulated: __t.bool(),
+  simRank: __t.u32(),
 });
 export type Learner = __Infer<typeof Learner>;
 
@@ -242,6 +294,14 @@ export const PlaybackFlush = __t.object("PlaybackFlush", {
 });
 export type PlaybackFlush = __Infer<typeof PlaybackFlush>;
 
+export const Presence = __t.object("Presence", {
+  learnerId: __t.u64(),
+  status: __t.string(),
+  connectionId: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type Presence = __Infer<typeof Presence>;
+
 export const ReplySentence = __t.object("ReplySentence", {
   id: __t.u64(),
   sessionId: __t.u64(),
@@ -276,6 +336,7 @@ export const Session = __t.object("Session", {
   currentUtteranceId: __t.u64(),
   startedAt: __t.timestamp(),
   endedAt: __t.option(__t.timestamp()),
+  classSessionId: __t.u64(),
   voice: __t.bool(),
 });
 export type Session = __Infer<typeof Session>;
@@ -295,6 +356,33 @@ export const SessionSummary = __t.object("SessionSummary", {
   createdAt: __t.timestamp(),
 });
 export type SessionSummary = __Infer<typeof SessionSummary>;
+
+export const SimProfile = __t.object("SimProfile", {
+  rank: __t.u32(),
+  name: __t.string(),
+  age: __t.u32(),
+  grade: __t.u32(),
+  style: __t.string(),
+  persona: __t.string(),
+  misconceptions: __t.string(),
+  memory: __t.string(),
+});
+export type SimProfile = __Infer<typeof SimProfile>;
+
+export const SimRunning = __t.object("SimRunning", {
+  sessionId: __t.u64(),
+  startedAt: __t.timestamp(),
+});
+export type SimRunning = __Infer<typeof SimRunning>;
+
+export const SimTurnJob = __t.object("SimTurnJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  sessionId: __t.u64(),
+  turnCount: __t.u32(),
+  attempt: __t.u32(),
+});
+export type SimTurnJob = __Infer<typeof SimTurnJob>;
 
 export const Skill = __t.object("Skill", {
   key: __t.string(),
@@ -325,6 +413,16 @@ export const SttJob = __t.object("SttJob", {
 });
 export type SttJob = __Infer<typeof SttJob>;
 
+export const StudentCluster = __t.object("StudentCluster", {
+  id: __t.u64(),
+  classSessionId: __t.u64(),
+  position: __t.u32(),
+  name: __t.string(),
+  description: __t.string(),
+  learnerIds: __t.string(),
+});
+export type StudentCluster = __Infer<typeof StudentCluster>;
+
 export const SummaryJob = __t.object("SummaryJob", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
@@ -347,6 +445,13 @@ export const Task = __t.object("Task", {
   wrongStepIndex: __t.i32(),
 });
 export type Task = __Infer<typeof Task>;
+
+export const Teacher = __t.object("Teacher", {
+  id: __t.u64(),
+  name: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type Teacher = __Infer<typeof Teacher>;
 
 export const TextPlayJob = __t.object("TextPlayJob", {
   scheduledId: __t.u64(),

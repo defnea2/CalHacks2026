@@ -79,6 +79,21 @@ export function SessionTitle({ data, suffix }: { data: SessionData; suffix?: str
 
 // ---------------------------------------------------------------- captions
 
+/** Lesson buttons as the learner sees them (turn.intent, docs/CONTRACT-night.md). */
+export const INTENT_LABELS: Record<string, string> = {
+  another_way: 'Show another way',
+  smaller_step: 'Smaller step',
+  continue: 'Continue',
+  demonstrate: 'Show me',
+};
+
+/** Caption text of a typed turn: its text, or the button label for an intent-only turn. */
+export function typedTurnText(text: string, intent: string): string {
+  const t = text.trim();
+  if (t && !/^\[[a-z_]+\]$/.test(t)) return t;
+  return INTENT_LABELS[intent] ?? t;
+}
+
 interface CaptionEntry {
   key: string;
   role: 'student' | 'tutor';
@@ -103,6 +118,13 @@ export function Captions({
       e.parts.push({ id: String(p.phraseId), text: p.text, status: p.status });
       byTurn.set(p.turnIdx, e);
     }
+    // Typed turns and lesson buttons (submitTextTurn) have no phrases.
+    for (const t of data.turns) {
+      if (t.role !== 'student' || byTurn.has(t.idx)) continue;
+      const text = typedTurnText(t.text, t.intent);
+      if (!text) continue;
+      byTurn.set(t.idx, { key: `s${t.idx}`, role: 'student', at: tsMs(t.createdAt) ?? 0, parts: [{ id: `t${t.idx}`, text, status: t.status }], ref: String(t.idx) });
+    }
     const byUtt = new Map<string, CaptionEntry>();
     for (const s of [...data.sentences].sort((a, b) => a.idx - b.idx)) {
       if (!tutorShown(s)) continue;
@@ -112,7 +134,7 @@ export function Captions({
       byUtt.set(k, e);
     }
     return [...byTurn.values(), ...byUtt.values()].sort((a, b) => a.at - b.at);
-  }, [data.phrases, data.sentences, tutorShown]);
+  }, [data.phrases, data.turns, data.sentences, tutorShown]);
 
   const transcript = useRef<HTMLDivElement>(null);
   const follow = useRef(true);

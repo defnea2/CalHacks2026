@@ -1,11 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { createServer } from "vite";
 import { createAnthropicPlanner } from "./anthropicModel";
-import { teachingPlugin } from "./teachingPlugin";
 import { TeachingPlanner } from "../teaching/TeachingPlanner";
-import { TeachingSession } from "../teaching/TeachingSession";
-import { createStreamingPlanningModel } from "../teaching/modelAdapter";
 import { emptyCanvas } from "../presentation/contracts";
 import { parseModelRequest } from "./planning";
 import type { PlanningProgress } from "../teaching/streaming";
@@ -84,25 +80,5 @@ describe("Anthropic streaming planner", () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     controller.abort(); await assertion;
     expect(cancelled).toHaveBeenCalledOnce();
-  });
-  it("connects the actual HTTP stream to the voice session and preserves JSON clients", async () => {
-    const server = await createServer({ configFile: false, logLevel: "silent", appType: "custom",
-      plugins: [teachingPlugin({ apiKey: "key", fetcher: vi.fn().mockImplementation(async () => providerResponse()) })],
-      server: { host: "127.0.0.1", port: 0, watch: null, hmr: false },
-    });
-    await server.listen();
-    try {
-      const address = server.httpServer!.address();
-      if (!address || typeof address === "string") throw new Error("Missing test server address");
-      const endpoint = `http://127.0.0.1:${address.port}/api/teaching/plan`;
-      const s = new TeachingSession({ sessionId: "voice-http", topic: "Groups" }, createStreamingPlanningModel(endpoint), { playback: "voice" });
-      expect(await s.plan(), s.getSnapshot().error ?? "").toBe(true);
-      expect(s.getPreparedSpeech()!.narration).toContain(lesson.meta.check.prompt);
-      expect(s.director.getSnapshot().canvas.math).toBeNull();
-      const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request()) });
-      expect(response.ok).toBe(true);
-      expect((await response.json()).phase).toBe("diagnose");
-      s.cancel();
-    } finally { await server.close(); }
   });
 });

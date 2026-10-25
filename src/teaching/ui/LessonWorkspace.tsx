@@ -4,12 +4,21 @@ import { MathStudio } from "../../presentation/math/MathStudio";
 import { TeachingCanvas } from "../../presentation/TeachingCanvas";
 import { TeachingSession } from "../TeachingSession";
 import type { TeachingPhase, LearnerResponse } from "../contracts";
-import { createStreamingPlanningModel } from "../modelAdapter";
+import type { PlanningModel } from "../TeachingPlanner";
 import { demoPlanningModel, demoTopics } from "../dev/demoModel";
 import { SlantLesson } from "./SlantLesson";
 import { preparedLessons, preparedPlanningModel } from "../preparedLessons";
 
 type LessonSource = "sample" | "model" | "prepared";
+
+/** Live lessons: the host connects a planner (the client: SpacetimeDB session + adapter). */
+export interface LessonPlanning {
+  /** Connection line (the client reads the worker heartbeat row `agent_status`). */
+  status: string;
+  online: boolean;
+  /** Without `model` the host shows the lesson itself: the workspace opens `link`. */
+  start(input: { topic: string; originalQuestion: string; age: number }): Promise<{ model?: PlanningModel; sessionId: string; link?: string; close?(): void }>;
+}
 
 const subjects = [
   { title: "Equal groups", area: "Multiplication", detail: "Why multiplying is more than adding two numbers.", kind: "groups" },
@@ -31,7 +40,7 @@ function Sketch({ kind }: { kind: string }) {
   </svg>;
 }
 
-export function LessonWorkspace() {
+export function LessonWorkspace({ planning }: { planning?: LessonPlanning } = {}) {
   const [studio, setStudio] = useState(false);
   const [slant, setSlant] = useState(false);
   const [session, setSession] = useState<TeachingSession | null>(null);
@@ -39,26 +48,37 @@ export function LessonWorkspace() {
   const [age, setAge] = useState(9);
   const [topic, setTopic] = useState("");
   const [homework, setHomework] = useState("");
-  const [endpoint, setEndpoint] = useState("/api/teaching/plan");
   const [setupError, setSetupError] = useState("");
-  const [bridge, setBridge] = useState("Checking connection…");
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetch("/api/teaching/status", { signal: controller.signal })
-      .then(async response => { if (!response.ok) throw new Error(); return response.json(); })
-      .then(status => { if (!controller.signal.aborted) setBridge(!status.configured ? "Add ANTHROPIC_API_KEY to the server settings to connect." : `Connected to ${status.model ?? "the planning model"}`); })
-      .catch(() => { if (!controller.signal.aborted) setBridge("Start npm run dev to connect the local model bridge."); });
-    return () => controller.abort();
-  }, []);
+  const [starting, setStarting] = useState(false);
+  const [live, setLive] = useState<{ link?: string; close?(): void } | null>(null);
+  const bridge = planning?.status ?? "Live lessons need the tutor connection; prepared and sample lessons work offline.";
   useEffect(() => () => session?.cancel(), [session]);
-  function start(index?: number) {
+  useEffect(() => () => live?.close?.(), [live]);
+  async function start(index?: number) {
+    const fixture = index === undefined ? null : demoTopics[index];
+    const config = {
+      age, ...(!fixture ? { lessonStyle: "mini_lesson" as const } : {}),
+      topic: fixture?.label ?? topic.trim(), originalQuestion: fixture?.homework ?? homework.trim(),
+    };
+    if (!config.topic) { setSetupError("Add a topic or question before starting."); return; }
+    let model: PlanningModel = demoPlanningModel, sessionId: string = crypto.randomUUID(), connection: { link?: string; close?(): void } | null = null;
+    if (!fixture) {
+      if (!planning) { setSetupError(bridge); return; }
+      setStarting(true);
+      try {
+        const opened = await planning.start({ topic: config.topic, originalQuestion: config.originalQuestion, age });
+        if (!opened.model) { if (opened.link) window.location.assign(opened.link); return; }
+        ({ model, sessionId } = opened as { model: PlanningModel; sessionId: string });
+        connection = { link: opened.link, close: opened.close };
+      } catch (error) {
+        setSetupError(error instanceof Error ? error.message : "Could not start the live lesson.");
+        return;
+      } finally { setStarting(false); }
+    }
     try {
-      const fixture = index === undefined ? null : demoTopics[index];
-      const next = new TeachingSession({
-        sessionId: crypto.randomUUID(), age, ...(!fixture ? { lessonStyle: "mini_lesson" } : {}),
-        topic: fixture?.label ?? topic.trim(), originalQuestion: fixture?.homework ?? homework.trim(),
-      }, fixture ? demoPlanningModel : createStreamingPlanningModel(endpoint));
+      const next = new TeachingSession({ sessionId, ...config }, model);
       session?.cancel();
+      setLive(connection);
       setSource(fixture ? "sample" : "model");
       setSession(next);
       window.scrollTo?.({ top: 0 });
@@ -73,18 +93,17 @@ export function LessonWorkspace() {
     void next.plan();
   }
   return <section className="lesson-workspace" aria-label="Learning session">
-    {slant ? <SlantLesson onExit={() => setSlant(false)} /> : studio ? <MathStudio onExit={() => setStudio(false)} /> : session ? <Lesson key={session.planner.getSnapshot().config.sessionId} session={session} source={source} onExit={() => { session.cancel(); setSession(null); }} />
+    {slant ? <SlantLesson onExit={() => setSlant(false)} /> : studio ? <MathStudio onExit={() => setStudio(false)} /> : session ? <Lesson key={session.planner.getSnapshot().config.sessionId} session={session} source={source} link={source === "model" ? live?.link : undefined} onExit={() => { session.cancel(); setSession(null); }} />
       : <div className="lesson-welcome">
         <div className="lesson-intro"><span className="lesson-eyebrow">SEE IT. UNDERSTAND IT. TRY IT.</span><h1>What are you <br />wondering about?</h1><p>A little lesson. A moving picture. Then a turn for you.</p></div>
-        <form className="lesson-topic-entry" onSubmit={e => { e.preventDefault(); start(); }}>
+        <form className="lesson-topic-entry" onSubmit={e => { e.preventDefault(); void start(); }}>
           <label htmlFor="topic-question">What would you like to understand?</label>
-          <div className="lesson-topic-row"><input id="topic-question" required maxLength={1200} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Why does a bigger rectangle have more area?" /><button className="lesson-primary" type="submit">Start <span aria-hidden="true">→</span></button></div>
-          <small>Questions and answers are sent to your configured AI provider.</small>
+          <div className="lesson-topic-row"><input id="topic-question" required maxLength={1200} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Why does a bigger rectangle have more area?" /><button className="lesson-primary" type="submit" disabled={starting}>{starting ? "Starting…" : "Start"} <span aria-hidden="true">→</span></button></div>
+          <small>Questions and answers are sent to the tutor through SpacetimeDB.</small>
           <details className="lesson-model-setup"><summary>Homework and settings</summary>
-            <p className="lesson-connection" role="status">{bridge}</p>
+            <p className="lesson-connection" role="status" data-online={planning?.online ?? false}>{bridge}</p>
             <label>Your original homework question (optional)<input maxLength={2000} value={homework} onChange={e => setHomework(e.target.value)} /></label>
             <label>Learner age<select value={age} onChange={e => setAge(Number(e.target.value))}>{Array.from({ length: 14 }, (_, i) => i + 5).map(value => <option key={value} value={value}>{value} years</option>)}</select></label>
-            <label>Planning endpoint<input required value={endpoint} onChange={e => setEndpoint(e.target.value)} /></label>
           </details>
           {setupError && <p role="alert">{setupError}</p>}
         </form>
@@ -104,18 +123,18 @@ export function LessonWorkspace() {
         <div className="studio-invitation"><div><h2>Try the pictures</h2><p>Change shapes, split groups, or compare fractions.</p></div><button type="button" className="lesson-primary" onClick={() => setStudio(true)}>Open math studio →</button></div>
         <div className="lesson-samples-heading"><h2>Try a sample lesson</h2><span>Works offline</span></div>
         <div className="lesson-catalog" aria-label="Sample lessons">
-          {subjects.map((subject, i) => <button className="lesson-card" key={subject.kind} onClick={() => start(i)}>
+          {subjects.map((subject, i) => <button className="lesson-card" key={subject.kind} onClick={() => void start(i)}>
             <span className="lesson-card-top"><span>{subject.area}</span><span>0{i + 1}</span></span>
             <Sketch kind={subject.kind} /><h2>{subject.title}</h2><p>{subject.detail}</p><span className="lesson-card-link">Start lesson <span aria-hidden="true">↗</span></span>
           </button>)}
         </div>
-        <p className="lesson-sample-note">This tutor works with typed answers. {import.meta.env.DEV && <a href={import.meta.env.VITE_VOICE_TUTOR_URL || "http://127.0.0.1:5175/"}>Open the voice tutor</a>}</p>
+        <p className="lesson-sample-note">This tutor works with typed answers. <a href="./">Open the voice tutor</a></p>
 
       </div>}
   </section>;
 }
 
-export function Lesson({ session, source, onExit }: { session: TeachingSession; source: LessonSource; onExit(): void }) {
+export function Lesson({ session, source, onExit, link }: { session: TeachingSession; source: LessonSource; onExit(): void; link?: string }) {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const teaching = useSyncExternalStore(session.planner.subscribe, session.planner.getSnapshot);
   const visual = useSyncExternalStore(session.director.subscribe, session.director.getSnapshot);
@@ -152,7 +171,7 @@ export function Lesson({ session, source, onExit }: { session: TeachingSession; 
     void session.respond(response);
   };
   return <>
-    <div className="lesson-topline"><button className="lesson-back" onClick={onExit}>← All topics</button><span>{source === "sample" ? "Offline sample" : source === "prepared" ? "Prepared lesson · works offline" : "Live AI lesson"}</span></div>
+    <div className="lesson-topline"><button className="lesson-back" onClick={onExit}>← All topics</button><span>{source === "sample" ? "Offline sample" : source === "prepared" ? "Prepared lesson · works offline" : "Live AI lesson"}{link && <> · <a href={link}>Talk instead</a></>}</span></div>
     <div className="lesson-title"><h1>{teaching.config.topic}</h1>{outline && <p>{outline.learningGoal}</p>}</div>
     {source !== "sample" && <ol className="lesson-journey" aria-label="Lesson journey"><li aria-current={!waiting && !complete ? "step" : undefined}>1 <span>See the idea</span></li><li aria-current={waiting ? "step" : undefined}>2 <span>Try it yourself</span></li><li aria-current={complete ? "step" : undefined}>3 <span>Take it with you</span></li></ol>}
     <div className="lesson-stage">

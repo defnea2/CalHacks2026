@@ -62,13 +62,15 @@ function vadAssets(): Plugin {
 
 export default defineConfig({
   envDir: '..',
-  resolve: { dedupe: ['react', 'react-dom'] },
+  // The team's UI (repo-root src/: app, teaching, presentation, visuals, interactions, visual-math)
+  // is part of this one static build under the alias @tutor/visual (folder names unchanged).
+  resolve: { dedupe: ['react', 'react-dom', 'zod', 'motion', 'mafs', 'katex'], alias: { '@tutor/visual': join(here, '..', 'src') } },
   plugins: [vadAssets(), react(), tailwindcss()],
   // Team canvas deps pre-bundled too: a mid-session re-optimisation reloads the page (E2E flake).
   optimizeDeps: { include: ['@ricky0123/vad-web', 'onnxruntime-web/wasm', 'katex', 'mafs', 'motion/react'] },
   // the Smart Turn worker imports ONNX Runtime, which code-splits (needs ES module workers)
   worker: { format: 'es' },
-  // 5175: the team's root app (src/) keeps 5173
+  // 5175: the one client (the team's src/ UI is part of this build, see @tutor/visual above)
   server: { host: '127.0.0.1', port: 5175, strictPort: true },
   preview: { host: '127.0.0.1' },
   test: { include: ['test/**/*.test.ts', 'test/**/*.test.tsx'], environment: 'node' },
