@@ -16,3 +16,6 @@ recordings/
 
 # agent worktrees
 .claude/
+
+# generated E2E speech (regenerate with pnpm --filter e2e gen-speech)
+e2e/fixtures/

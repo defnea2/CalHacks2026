@@ -1,7 +1,8 @@
 // Generates test-student speech for the E2E tests with Cartesia TTS (young "Daisy" voice,
 // different from the tutor's), inserts silences to trigger phrase/turn ends, optionally mixes
 // in background noise, and writes 16-bit mono WAVs for Chrome's fake microphone
-// (--use-file-for-fake-audio-capture). Output: e2e/fixtures/*.wav (+ .json with source text).
+// (--use-file-for-fake-audio-capture; needs --no-sandbox on macOS, and Chrome loops the file).
+// Output: e2e/fixtures/*.wav (+ .json with source text). Fixtures are generated, not committed.
 //
 // Usage: pnpm --filter e2e gen-speech
 import fs from 'node:fs';
@@ -13,6 +14,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const OUT = path.join(HERE, 'fixtures');
 const RATE = 48000; // Chrome's fake capture resamples; 48 kHz avoids artifacts
+/** Chrome loops the fake-capture file; trailing silence keeps a test from hearing speech twice. */
+const TRAILING_SILENCE_MS = 60_000;
 
 function loadEnv(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -162,8 +165,10 @@ async function main(): Promise<void> {
       all.set(p, o);
       o += p.length;
     }
-    if (sc.noiseDbfs !== undefined) mixNoise(all, sc.noiseDbfs);
-    fs.writeFileSync(path.join(OUT, `${sc.name}.wav`), wav(all, RATE));
+    const padded = new Int16Array(all.length + Math.round((TRAILING_SILENCE_MS / 1000) * RATE));
+    padded.set(all);
+    if (sc.noiseDbfs !== undefined) mixNoise(padded, sc.noiseDbfs);
+    fs.writeFileSync(path.join(OUT, `${sc.name}.wav`), wav(padded, RATE));
     fs.writeFileSync(
       path.join(OUT, `${sc.name}.json`),
       JSON.stringify({ name: sc.name, description: sc.description, noiseDbfs: sc.noiseDbfs ?? null, durationMs: Math.round(ms), timeline }, null, 2)
