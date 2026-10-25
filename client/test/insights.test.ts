@@ -91,7 +91,7 @@ describe('sections in teacher language', () => {
     expect(evidenceLine(x.notes[1]!, labels)).toBeNull();
     const partial = sessionLabels(NOW, { ...x, learner: { ...x.learner, sessionCount: 12 } });
     expect(evidenceLine(x.notes[2]!, partial)!.where).toBe('said 3 days ago');
-    expect(evidenceLine({ ...x.notes[0]!, evidence: [{ sessionId: '999', fromTurn: 0, toTurn: 1, quote: '"hi"' }] }, labels)).toEqual({ quote: 'hi', where: 'said in an earlier session' });
+    expect(evidenceLine({ ...x.notes[0]!, evidence: [{ sessionId: '999', fromTurn: 0, toTurn: 1, quote: '"hi"' }] }, labels)).toEqual({ quote: 'hi', where: 'said in a session' });
   });
 });
 
@@ -109,14 +109,26 @@ describe('mastery', () => {
 
 describe('at a glance + next focus', () => {
   it('builds the summary deterministically from the data', () => {
-    expect(atAGlance(fx())).toBe('Mia has mastered multiplication as equal groups, is secure with what a fraction is and still mixes up adding fractions with the same denominator. Wants a picture before any numbers.');
+    expect(atAGlance(fx())).toBe('Mia has mastered multiplication as equal groups and is secure with what a fraction is, but still mixes up adding fractions with the same denominator. Wants a picture before any numbers.');
     expect(atAGlance(fx())).toBe(atAGlance(fx()));
+  });
+
+  it('never calls the same concept strong and mixed up', () => {
+    const x = fx();
+    // adding fractions is now secure; the other misconception (comparing) is named instead
+    const y = { ...x, mastery: x.mastery.map(m => (m.concept === 'fractions-add-same' ? { ...m, mastery: 80 } : m)) };
+    const g = atAGlance(y);
+    expect(g).toMatch(/still mixes up comparing fractions/);
+    expect(g.split('still mixes up')[0]).toMatch(/adding fractions with the same denominator/);
+    // only one misconception, on a strong concept: it is named, and not listed as a strength
+    const z = { ...y, notes: y.notes.filter(n => n.id !== 'n2') };
+    expect(atAGlance(z).split('still mixes up')[0]).not.toMatch(/adding fractions/);
   });
 
   it('secure wording, misconception-only and empty learners', () => {
     const x = fx();
     const secure = { ...x, mastery: x.mastery.filter(m => m.mastery < 85) };
-    expect(atAGlance(secure)).toMatch(/^Mia is secure with what a fraction is and still mixes up adding fractions/);
+    expect(atAGlance(secure)).toMatch(/^Mia is secure with what a fraction is, but still mixes up adding fractions/);
     const onlyMix = { ...x, mastery: [], notes: x.notes.filter(n => n.kind === 'misconception') };
     expect(atAGlance(onlyMix)).toBe('Mia still mixes up adding fractions with the same denominator.');
     expect(atAGlance(emptyInsightsFixture(NOW))).toBe('Ava has not practised with the tutor yet.');

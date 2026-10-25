@@ -106,9 +106,9 @@ const SECTIONS: { key: SectionKey; title: string; hint: string; match: (n: Insig
   { key: 'words', title: 'In their own words', hint: 'Things they said', match: n => n.kind === 'quote' },
 ];
 
-/** Strongest first: confidence × sightings, then most recent. */
+/** Strongest first: confidence × sightings (observed in a session beats seeded), then most recent. */
 function noteWeight(n: InsightNote): number {
-  return (n.confidence || 0) * (1 + Math.max(0, n.reinforced || 0));
+  return (n.confidence || 0) * (1 + Math.max(0, n.reinforced || 0)) * (n.seeded ? 1 : 1.25);
 }
 export function sortNotes(notes: InsightNote[]): InsightNote[] {
   return [...notes].sort((a, b) => noteWeight(b) - noteWeight(a) || (b.updatedMs || 0) - (a.updatedMs || 0));
@@ -156,11 +156,11 @@ export interface EvidenceLine {
   where: string;
 }
 
-/** The note's newest evidence quote with its source label ("said in an earlier session" if unknown). */
+/** The note's newest evidence quote with its source label ("said in a session" when that session has no summary yet). */
 export function evidenceLine(n: InsightNote, labels: Map<string, string>): EvidenceLine | null {
   const e = n.evidence?.find(x => x.quote?.trim());
   if (!e) return null;
-  return { quote: e.quote.trim().replace(/^["“]|["”]$/g, ''), where: labels.get(String(e.sessionId)) ?? 'said in an earlier session' };
+  return { quote: e.quote.trim().replace(/^["“]|["”]$/g, ''), where: labels.get(String(e.sessionId)) ?? 'said in a session' };
 }
 
 // ------------------------------------------------------------------ mastery
@@ -206,14 +206,18 @@ export function firstName(name: string): string {
   return (name || 'This student').trim().split(/\s+/)[0]!;
 }
 
-/** 1-2 plain sentences from the data, e.g. "Mia is secure with what a fraction is and still
+/** 1-2 plain sentences from the data, e.g. "Mia is secure with what a fraction is, but still
  *  mixes up adding fractions with the same denominator. Wants a picture before any numbers." */
 export function atAGlance(x: LearnerInsights): string {
   const who = firstName(x.learner.name);
   const strong = [...x.mastery].filter(m => m.mastery >= 60).sort((a, b) => b.mastery - a.mastery);
   const can = sortNotes(x.notes.filter(n => n.kind === 'understood' && n.conceptTitle));
+  // the misconception to name: prefer one whose concept is not already strong (no contradiction)
+  const mix = sortNotes(x.notes.filter(n => n.kind === 'misconception'));
+  const strongTitles = new Set(strong.map(m => m.title));
+  const mixTitle = (mix.find(n => n.conceptTitle && !strongTitles.has(n.conceptTitle)) ?? mix.find(n => n.conceptTitle))?.conceptTitle;
   // up to two strengths: mastery ≥ 60 (strongest first), then concepts noted as understood
-  const seen = new Set<string>();
+  const seen = new Set<string>(mixTitle ? [mixTitle] : []);
   const top: { title: string; mastered: boolean }[] = [];
   for (const s of [...strong.map(m => ({ title: m.title, mastered: m.mastery >= 85 })), ...can.map(n => ({ title: n.conceptTitle, mastered: false }))]) {
     if (!s.title || seen.has(s.title) || top.length >= 2) continue;
@@ -222,13 +226,13 @@ export function atAGlance(x: LearnerInsights): string {
   }
   const mastered = top.filter(s => s.mastered).map(s => lc(s.title));
   const secure = top.filter(s => !s.mastered).map(s => lc(s.title));
-  const parts = [mastered.length ? `has mastered ${joinAnd(mastered)}` : '', secure.length ? `is secure with ${joinAnd(secure)}` : ''].filter(Boolean);
-  const mix = sortNotes(x.notes.filter(n => n.kind === 'misconception'));
-  const mixTitle = mix.find(n => n.conceptTitle)?.conceptTitle;
-  if (mixTitle) parts.push(`still mixes up ${lc(mixTitle)}`);
+  const strengths = [mastered.length ? `has mastered ${joinAnd(mastered)}` : '', secure.length ? `is secure with ${joinAnd(secure)}` : ''].filter(Boolean);
+  const strengthText = strengths.join(' and ');
+  const mixText = mixTitle ? `still mixes up ${lc(mixTitle)}` : '';
 
   let first = '';
-  if (parts.length) first = `${who} ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]}.`;
+  if (strengthText && mixText) first = `${who} ${strengthText}, but ${mixText}.`;
+  else if (strengthText || mixText) first = `${who} ${strengthText || mixText}.`;
   else if (mix[0]) first = `${who} still has a misconception: ${noteSentence(mix[0]).replace(/\.$/, '')}.`;
   else if (x.mastery.length) {
     const top = [...x.mastery].sort((a, b) => b.mastery - a.mastery)[0]!;
