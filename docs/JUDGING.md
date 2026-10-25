@@ -176,6 +176,8 @@ Conflicts between the judging brief and what is on `main`:
    true for audio, photos, memory and answer keys. Transcripts (`phrase`, `turn`, `reply_sentence`)
    are public and there is no auth. Say this if asked.
 
+9. **Cloud.** Everything runs locally. The plan for Maincloud plus a per-turn Cloudflare Worker (steps, effort, risks, open questions) is in [CLOUD_PLAN.md](CLOUD_PLAN.md); nothing is deployed.
+
 Open TODOs for humans: real quote (parent/teacher/tutor), demo video, Devpost team members and
 prize opt-ins (all four tracks), final screenshot choice (avoid `13-dashboard-clusters*.png`, see
 PITCH.md).

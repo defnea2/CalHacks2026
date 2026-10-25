@@ -125,6 +125,7 @@ inventory: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §2–3, §10–11.
 
 - Not tested with real children, on real devices or with loudspeakers (headphones recommended; echo can trigger barge-in).
 - All numbers were measured on one laptop against a **local** SpacetimeDB 2.13. Maincloud is supported by the publish script but not migrated or measured.
+- Cloud plan (not started): Maincloud migration, then a per-turn Cloudflare Worker replacing the Node LLM worker, in [docs/CLOUD_PLAN.md](docs/CLOUD_PLAN.md).
 - Procedure slots: the local server runs ~10 procedures at once and an HTTP wait holds a slot; with 4 parallel voice sessions TTS jobs waited up to 0.7 s. Simulated-student calls are capped at 4 in flight.
 - STT defaults to `ink-whisper`; `ink-2` needs the proxy on a public host.
 - Word budgets, tone, staying on topic and not asking for personal data are prompted, not enforced; explanations often run over budget (107–150 words). The spoken math in the narration is not formally checked.
