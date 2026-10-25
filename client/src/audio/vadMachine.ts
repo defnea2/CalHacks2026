@@ -14,6 +14,17 @@
 //
 // While the tutor speaks the start threshold is BARGE_IN_THRESHOLD and the min speech
 // BARGE_IN_MIN_MS; confirming such a start emits `barge_in` before the phrase opens.
+//
+// Soft onsets (children after a thinking pause; Chrome mic processing on): Silero often stays at
+// 0.01-0.45 for the first ~0.6 s of a loud word, so the phrase starts late (or the turn ends
+// first). Three rules handle that:
+// - Re-entry: between phrases of an open turn (tutor not speaking) the start threshold is
+//   VAD_REENTRY_THRESHOLD (+ noisy boost); the energy gate and min speech still apply.
+// - Hold: in an open turn every speech-like frame (candidate frames, incl. ones that end as a
+//   misfire) restarts the turn-end wait; capped at VAD_TURN_HOLD_MAX_MS beyond the normal wait,
+//   counted from the end of speech, so noise bursts cannot keep a turn open forever.
+// - Onset pre-roll: a non-barge-in phrase gets VAD_PREROLL_MS before the energy onset (frames
+//   >= floor + NOISE_SNR_DB right before the start), at most VAD_PREROLL_MAX_MS.
 import { NoiseMonitor, type NoiseConfig, type NoiseState } from './noise';
 import { ChunkAccumulator, concatFloat, rmsDbfs } from './pcm';
 
@@ -32,6 +43,9 @@ export interface VadMachineConfig extends NoiseConfig {
   NOISY_MIN_SPEECH_MS: number;
   VAD_CANDIDATE_GAP_MS: number;
   VAD_HYSTERESIS: number;
+  VAD_REENTRY_THRESHOLD: number;
+  VAD_TURN_HOLD_MAX_MS: number;
+  VAD_PREROLL_MAX_MS: number;
   SMART_TURN: number;
   SMART_TURN_THRESHOLD: number;
   SMART_TURN_MIN_SILENCE_MS: number;
@@ -54,9 +68,17 @@ export type VadEvent =
   | { type: 'misfire'; speechMs: number }
   | { type: 'noise_state'; state: NoiseState; floorDb: number | null };
 
+/** Upper bound for the first chunk (pre-roll + candidate): the module rejects chunks > 2 s. */
+const MAX_FIRST_CHUNK_MS = 1900;
+
+interface RingFrame {
+  pcm: Float32Array;
+  db: number;
+}
+
 interface Candidate {
-  frames: Float32Array[];
-  preroll: Float32Array[];
+  frames: RingFrame[];
+  preroll: RingFrame[];
   speechMs: number;
   gapMs: number;
 }
@@ -80,12 +102,15 @@ export class VadMachine {
   /** Set by the client while tutor audio plays (or the session is `speaking`). */
   tutorSpeaking = false;
   private nextPhraseId: number;
-  private ring: Float32Array[] = [];
+  private ring: RingFrame[] = [];
   private ringMs = 0;
   private candidate: Candidate | null = null;
   private phrase: OpenPhrase | null = null;
   private turnOpen = false;
+  /** Turn-end wait: silence since the last speech-like frame (reset by activity). */
   private silenceMs = 0;
+  /** Time since the end of the last phrase's speech (not reset by activity; caps the hold). */
+  private gapMs = 0;
   private lastNoiseState: NoiseState | null = null;
   /** Audio of the open turn (pre-roll, phrases and pauses), trimmed to SMART_TURN_WINDOW_MS. */
   private turnAudio: Float32Array[] = [];
@@ -133,6 +158,10 @@ export class VadMachine {
         bargeIn: true,
       };
     }
+    if (this.turnOpen && !this.phrase) {
+      // between phrases of an open turn: soft re-entry (see header)
+      return { threshold: Math.min(threshold, this.cfg.VAD_REENTRY_THRESHOLD + boost), minSpeechMs, bargeIn: false };
+    }
     return { threshold, minSpeechMs, bargeIn: false };
   }
 
@@ -157,19 +186,24 @@ export class VadMachine {
 
     const eff = this.effective();
     const speechy = prob >= eff.threshold && this.noise.passesGate(levelDb);
-    if (this.turnOpen) this.silenceMs += frameMs;
+    if (this.turnOpen) {
+      this.gapMs += frameMs;
+      // hold: speech-like sound means the child is not done (capped in turnWaitOver)
+      this.silenceMs = speechy ? 0 : this.silenceMs + frameMs;
+    }
+    const rf: RingFrame = { pcm: frame, db: levelDb };
 
     if (!this.candidate) {
       if (speechy) {
-        this.candidate = { frames: [frame], preroll: this.ring, speechMs: frameMs, gapMs: 0 };
+        this.candidate = { frames: [rf], preroll: this.ring, speechMs: frameMs, gapMs: 0 };
         this.ring = [];
         this.ringMs = 0;
       } else {
-        this.pushRing(frame, frameMs);
+        this.pushRing(rf);
       }
     } else {
       const c = this.candidate;
-      c.frames.push(frame);
+      c.frames.push(rf);
       // Hysteresis: between threshold - VAD_HYSTERESIS and threshold a frame neither adds speech
       // nor counts as a gap (Silero-style positive/negative thresholds).
       if (speechy) {
@@ -183,7 +217,7 @@ export class VadMachine {
         this.candidate = null;
         this.ring = [];
         this.ringMs = 0;
-        for (const f of [...c.preroll, ...c.frames]) this.pushRing(f, (f.length * 1000) / this.cfg.INPUT_SAMPLE_RATE);
+        for (const f of [...c.preroll, ...c.frames]) this.pushRing(f);
       }
     }
 
@@ -193,11 +227,18 @@ export class VadMachine {
       return events;
     }
 
-    if (!this.candidate && this.turnOpen) {
-      if (this.smartComplete && this.silenceMs >= this.cfg.SMART_TURN_MIN_SILENCE_MS) this.endTurn('smart_turn', events);
-      else if (this.silenceMs >= this.cfg.VAD_TURN_MS) this.endTurn('silence', events);
+    if (this.turnOpen) {
+      if (this.smartComplete && this.turnWaitOver(this.cfg.SMART_TURN_MIN_SILENCE_MS)) this.endTurn('smart_turn', events);
+      else if (this.turnWaitOver(this.cfg.VAD_TURN_MS)) this.endTurn('silence', events);
     }
     return events;
+  }
+
+  /** Turn-end wait of `waitMs` over: silence since the last activity (no candidate pending),
+   *  or the hold cap (waitMs + VAD_TURN_HOLD_MAX_MS since the end of speech). */
+  private turnWaitOver(waitMs: number): boolean {
+    if (this.gapMs >= waitMs + Math.max(0, this.cfg.VAD_TURN_HOLD_MAX_MS)) return true;
+    return !this.candidate && this.silenceMs >= waitMs;
   }
 
   /** Smart Turn verdict for a `smart_turn_request`. Returns the resulting events (maybe turn_end). */
@@ -205,22 +246,23 @@ export class VadMachine {
     const events: VadEvent[] = [];
     const live = requestId === this.smartPending && this.turnOpen && !this.phrase;
     if (!live) {
-      events.push({ type: 'smart_turn', requestId, prob, decision: 'stale', silenceMs: this.silenceMs, ended: false });
+      events.push({ type: 'smart_turn', requestId, prob, decision: 'stale', silenceMs: this.gapMs, ended: false });
       return events;
     }
     this.smartPending = 0;
     this.smartComplete = prob >= this.cfg.SMART_TURN_THRESHOLD;
-    const silenceMs = this.silenceMs;
-    const endNow = this.smartComplete && !this.candidate && silenceMs >= this.cfg.SMART_TURN_MIN_SILENCE_MS;
+    const silenceMs = this.gapMs;
+    const endNow = this.smartComplete && this.turnWaitOver(this.cfg.SMART_TURN_MIN_SILENCE_MS);
     events.push({ type: 'smart_turn', requestId, prob, decision: this.smartComplete ? 'complete' : 'incomplete', silenceMs, ended: endNow });
     if (endNow) this.endTurn('smart_turn', events);
     return events;
   }
 
   private endTurn(reason: TurnEndReason, events: VadEvent[]): void {
-    events.push({ type: 'turn_end', noiseDb: this.noise.floorDb, reason, silenceMs: this.silenceMs });
+    events.push({ type: 'turn_end', noiseDb: this.noise.floorDb, reason, silenceMs: this.gapMs });
     this.turnOpen = false;
     this.silenceMs = 0;
+    this.gapMs = 0;
     this.resetSmartTurn();
   }
 
@@ -248,19 +290,54 @@ export class VadMachine {
     this.candidate = null;
     if (this.turnOpen) this.endTurn('stop', events);
     this.silenceMs = 0;
+    this.gapMs = 0;
     this.resetSmartTurn();
     return events;
   }
 
-  private pushRing(frame: Float32Array, frameMs: number): void {
-    this.ring.push(frame);
-    this.ringMs += frameMs;
+  private ms(samples: number): number {
+    return (samples * 1000) / this.cfg.INPUT_SAMPLE_RATE;
+  }
+
+  /** The ring keeps max(VAD_PREROLL_MS, VAD_PREROLL_MAX_MS); selectPreroll picks the tail. */
+  private pushRing(f: RingFrame): void {
+    this.ring.push(f);
+    this.ringMs += this.ms(f.pcm.length);
+    const keep = Math.max(this.cfg.VAD_PREROLL_MS, this.cfg.VAD_PREROLL_MAX_MS);
     while (this.ring.length > 1) {
-      const firstMs = (this.ring[0]!.length * 1000) / this.cfg.INPUT_SAMPLE_RATE;
-      if (this.ringMs - firstMs < this.cfg.VAD_PREROLL_MS) break;
+      const firstMs = this.ms(this.ring[0]!.pcm.length);
+      if (this.ringMs - firstMs < keep) break;
       this.ring.shift();
       this.ringMs -= firstMs;
     }
+  }
+
+  /** Pre-roll for a phrase start: VAD_PREROLL_MS, or (not for barge-in) VAD_PREROLL_MS before
+   *  the energy onset, capped by VAD_PREROLL_MAX_MS and the first-chunk limit. */
+  private selectPreroll(ring: RingFrame[], bargeIn: boolean, candMs: number): RingFrame[] {
+    let wantMs = this.cfg.VAD_PREROLL_MS;
+    const floor = this.noise.floorDb;
+    if (!bargeIn && floor !== null && this.cfg.VAD_PREROLL_MAX_MS > wantMs) {
+      const gate = floor + this.cfg.NOISE_SNR_DB;
+      let onsetMs = 0;
+      let backMs = 0;
+      let quietMs = 0;
+      for (let i = ring.length - 1; i >= 0; i--) {
+        const fMs = this.ms(ring[i]!.pcm.length);
+        backMs += fMs;
+        if (ring[i]!.db >= gate) {
+          onsetMs = backMs;
+          quietMs = 0;
+        } else if ((quietMs += fMs) > this.cfg.VAD_CANDIDATE_GAP_MS) break;
+      }
+      wantMs = Math.min(this.cfg.VAD_PREROLL_MAX_MS, Math.max(wantMs, onsetMs + this.cfg.VAD_PREROLL_MS));
+    }
+    wantMs = Math.min(wantMs, Math.max(0, MAX_FIRST_CHUNK_MS - candMs));
+    // whole frames from the end until >= wantMs (VAD_PREROLL_MS 300 -> 320 ms)
+    let i = ring.length;
+    let got = 0;
+    while (i > 0 && got < wantMs) got += this.ms(ring[--i]!.pcm.length);
+    return ring.slice(i);
   }
 
   private chunkSamples(): number {
@@ -270,21 +347,23 @@ export class VadMachine {
   private openPhrase(c: Candidate, bargeIn: boolean, events: VadEvent[]): void {
     if (bargeIn) events.push({ type: 'barge_in', speechMs: c.speechMs });
     const phraseId = this.nextPhraseId++;
-    const prerollSamples = c.preroll.reduce((n, f) => n + f.length, 0);
-    const prerollMs = (prerollSamples * 1000) / this.cfg.INPUT_SAMPLE_RATE;
+    const candMs = c.frames.reduce((n, f) => n + this.ms(f.pcm.length), 0);
+    const preroll = this.selectPreroll(c.preroll, bargeIn, candMs).map(f => f.pcm);
+    const prerollMs = this.ms(preroll.reduce((n, f) => n + f.length, 0));
     events.push({ type: 'speech_start', phraseId, bargeIn, prerollMs });
-    const first = concatFloat([...c.preroll, ...c.frames]);
+    const frames = c.frames.map(f => f.pcm);
+    const first = concatFloat([...preroll, ...frames]);
     events.push({ type: 'chunk', phraseId, seq: 0, pcm: first, final: false });
-    const candMs = c.frames.reduce((n, f) => n + (f.length * 1000) / this.cfg.INPUT_SAMPLE_RATE, 0);
     this.phrase = { phraseId, seq: 1, acc: new ChunkAccumulator(this.chunkSamples()), durationMs: candMs, silenceMs: c.gapMs };
     if (!this.turnOpen) {
       // new turn: its audio starts with the pre-roll (in an open turn every frame is already in)
       this.turnAudio = [];
       this.turnAudioSamples = 0;
-      this.pushTurnAudio([...c.preroll, ...c.frames]);
+      this.pushTurnAudio([...preroll, ...frames]);
     }
     this.turnOpen = true;
     this.silenceMs = 0;
+    this.gapMs = 0;
     this.resetSmartTurn(); // speech resumed: any pending verdict is about older audio
   }
 
@@ -300,6 +379,7 @@ export class VadMachine {
       const silence = p.silenceMs;
       this.closePhrase('silence', events);
       this.silenceMs = silence; // silence already elapsed counts toward the turn end
+      this.gapMs = silence;
       if (this.cfg.SMART_TURN) {
         this.smartPending = ++this.smartRequestSeq;
         this.smartComplete = false;

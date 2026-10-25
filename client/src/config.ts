@@ -9,6 +9,15 @@ export const CLIENT_DEFAULTS = {
   VAD_CANDIDATE_GAP_MS: 96,
   /** Once a phrase is open, a frame still counts as speech above threshold - this (hysteresis). */
   VAD_HYSTERESIS: 0.15,
+  /** Start threshold between phrases of an open turn (tutor not speaking): soft onsets after a
+   *  thinking pause reach only ~0.25-0.45 in Silero for the first ~0.6 s (E2E um-pauses). */
+  VAD_REENTRY_THRESHOLD: 0.25,
+  /** Speech-like frames in an open turn restart the turn-end wait, at most this much beyond it
+   *  (counted from the end of speech): noise bursts cannot hold a turn open forever. */
+  VAD_TURN_HOLD_MAX_MS: 1000,
+  /** Pre-roll reaches VAD_PREROLL_MS before the energy onset of a phrase, at most this long
+   *  (Silero lags loud onsets by up to ~0.9 s: E2E noisy lost "I need to"). Not for barge-in. */
+  VAD_PREROLL_MAX_MS: 1200,
   /** Frames below this speech probability feed the noise floor. */
   NOISE_FLOOR_MAX_PROB: 0.3,
   /** Wait this long for a missing sentence index before skipping it. */
