@@ -21,6 +21,9 @@ export const SessionConfigSchema = z
     age: z.number().int().min(5).max(18).default(9),
     topic: z.string().min(1).max(1200),
     originalQuestion: z.string().max(2000).optional(),
+    // Keep older step-at-a-time clients compatible; the learner UI opts into a
+    // complete explanation before its first check.
+    lessonStyle: z.enum(["mini_lesson", "step_by_step"]).optional(),
     context: z
       .array(
         z
@@ -87,6 +90,8 @@ export const CheckSchema = z.discriminatedUnion("kind", [
         "geometry_area",
         "geometry_width",
         "geometry_height",
+        "parallelogram_area",
+        "parallelogram_shear",
         "array_total",
         "array_rows",
         "array_columns",
@@ -132,7 +137,7 @@ export const TeachingStepSchema = z
     ]),
     rationale: short,
     exampleProblem: short.optional(),
-    beats: z.array(VisualBeatSchema).min(1).max(4),
+    beats: z.array(VisualBeatSchema).min(1).max(8),
     check: CheckSchema.nullable(),
     evidenceToObserve: z.array(short).min(1).max(5),
     assessment: z

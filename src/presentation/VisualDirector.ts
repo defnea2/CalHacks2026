@@ -113,7 +113,11 @@ export class VisualDirector {
     )
       return null;
     // Learners can manipulate quantities, but cannot grant themselves controls or reveal equations.
-    if (!["set_array", "set_bar", "move_marker", "set_geometry"].includes(action.change.type))
+    if (!["set_array", "set_bar", "move_marker", "set_geometry", "set_parallelogram"].includes(action.change.type))
+      return null;
+    // A learner may only slant the uncut shape; the tutor owns base, height and the proof stages.
+    if (action.change.type === "set_parallelogram" && (scene.visual.kind !== "parallelogram" || scene.visual.stage !== "slant"
+      || Object.entries(action.change).some(([key, value]) => key !== "type" && key !== "shear" && value !== undefined)))
       return null;
     try {
       const next = {

@@ -15,6 +15,8 @@ const columns = z.number().int().min(1).max(20);
 const parts = z.number().int().min(1).max(12);
 const dimension = z.number().min(1).max(12).multipleOf(0.5);
 const bound = z.number().finite().min(-1000).max(1000);
+const shear = z.number().min(0).max(8).multipleOf(0.5);
+const parallelogramStage = z.enum(["slant", "cut", "reassembled"]);
 const bar = z
   .object({
     id: IdSchema,
@@ -45,6 +47,11 @@ export const MathVisualSchema = z
     z.object({ ...common, kind: z.literal("geometry"),
       shape: z.enum(["rectangle", "right_triangle"]), width: dimension, height: dimension,
     }).strict(),
+    // Fixed base and height with a horizontal shear; stage drives the cut-and-slide area proof.
+    z.object({ ...common, kind: z.literal("parallelogram"),
+      base: dimension.max(8), height: dimension.max(6), shear: shear,
+      stage: parallelogramStage.default("slant"),
+    }).strict(),
     z
       .object({
         ...common,
@@ -72,6 +79,10 @@ export const MathVisualSchema = z
         fail("Split the array before focusing a part.");
     } else if (visual.kind === "geometry") {
       if (visual.focus !== null) fail("Geometry focus must be null.");
+    } else if (visual.kind === "parallelogram") {
+      if (visual.focus !== null) fail("Parallelogram focus must be null.");
+      if (visual.shear > visual.base) fail("Shear cannot exceed the base.");
+      if (visual.stage !== "slant" && visual.shear === 0) fail("A rectangle with no shear has no triangle to cut; set shear above 0 first.");
     } else {
       const items = visual.kind === "bars" ? visual.bars : visual.markers;
       if (new Set(items.map((x) => x.id)).size !== items.length)
@@ -96,6 +107,8 @@ export type MathVisual = z.infer<typeof MathVisualSchema>;
 export type MathVisualInput = z.input<typeof MathVisualSchema>;
 export const MathChangeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("set_geometry"), width: dimension.optional(), height: dimension.optional() }).strict(),
+  z.object({ type: z.literal("set_parallelogram"), base: dimension.max(8).optional(), height: dimension.max(6).optional(),
+    shear: shear.optional(), stage: parallelogramStage.optional() }).strict(),
   z
     .object({
       type: z.literal("set_array"),
@@ -163,6 +176,12 @@ export function updateMathVisual(
       if (change.height !== undefined) next.height = change.height;
       break;
     }
+    case "set_parallelogram": {
+      if (next.kind !== "parallelogram") return mismatch();
+      const { type: _type, ...patch } = change;
+      Object.assign(next, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
+      break;
+    }
     case "set_array": {
       if (next.kind !== "array") return mismatch();
       const { type: _type, ...patch } = change;
@@ -205,6 +224,7 @@ export function updateMathVisual(
 /** Values come from the model, never a second model-generated answer string. */
 export function mathSummary(visual: MathVisual): string {
   if (visual.kind === "geometry") return `Area = ${visual.width} × ${visual.height}${visual.shape === "right_triangle" ? " ÷ 2" : ""} = ${geometryArea(visual)} square units`;
+  if (visual.kind === "parallelogram") return `Area = base × height = ${visual.base} × ${visual.height} = ${visual.base * visual.height} square units`;
   if (visual.kind === "array") {
     const { rows: r, columns: c, splitAt: s } = visual;
     return s === null
@@ -225,7 +245,7 @@ export function mathActivity(
   enabled: boolean,
 ): SceneState | null {
   const v = scene.visual;
-  if (v.kind === "array" || v.kind === "geometry") return null;
+  if (v.kind === "array" || v.kind === "geometry" || v.kind === "parallelogram") return null;
   const result = createScene(
     {
       id: v.id,

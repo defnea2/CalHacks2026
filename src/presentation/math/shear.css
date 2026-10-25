@@ -1,0 +1,29 @@
+.shear-proof { margin: 0; background: #fffefa; border: 1px solid #d9ded6; border-radius: 3px; padding: 18px 18px 8px; }
+.shear-proof svg { display: block; width: 100%; height: auto; max-height: 420px; touch-action: pan-y; user-select: none; }
+.shear-caption { font-size: 14px; color: #24382f; min-height: 1.5em; margin-bottom: 6px; }
+.shear-grid line { stroke: #e7eae3; stroke-width: 1; }
+.shear-ghost { fill: none; stroke: #9aa79d; stroke-width: 1.5; stroke-dasharray: 5 6; }
+/* One continuous fill: the proof is about pieces of the same shape, not counting tiles. */
+.shear-shape { fill: #d3e2d9; stroke: #24594b; stroke-width: 2.5; stroke-linejoin: round; }
+.shear-wedge { stroke: #b8723f; stroke-width: 3; }
+.shear-slot { fill: none; stroke: #b8723f; stroke-width: 1.5; stroke-dasharray: 3 5; }
+.shear-seam { stroke: #b8723f; stroke-width: 3; stroke-dasharray: 9 6; animation: shear-seam-in .5s ease-out both; }
+@keyframes shear-seam-in { from { stroke-dashoffset: 60; opacity: 0; } }
+.shear-base { stroke: #24594b; stroke-width: 5; stroke-linecap: round; }
+.shear-height line, .shear-height path { stroke: #9b5b30; stroke-width: 1.8; stroke-dasharray: 4 4; }
+.shear-height path { stroke-dasharray: none; }
+.shear-measure { font-size: 17px; font-weight: 600; fill: #24594b; }
+.shear-side-label { font-size: 14px; fill: #9b5b30; paint-order: stroke; stroke: #fffefa; stroke-width: 6px; stroke-linejoin: round; }
+.shear-result polygon { fill: none; stroke: #24594b; stroke-width: 4; animation: shear-result-in .45s ease-out both; }
+.shear-result text { font-family: Georgia, 'Times New Roman', serif; font-size: 34px; fill: #194336; paint-order: stroke; stroke: #d3e2d9; stroke-width: 10px; stroke-linejoin: round; animation: shear-result-in .6s ease-out both; }
+@keyframes shear-result-in { from { opacity: 0; } }
+.shear-handle { cursor: ew-resize; touch-action: none; outline: none; }
+.shear-handle-hit { fill: transparent; }
+.shear-handle-pill { fill: #24594b; stroke: #fffefa; stroke-width: 2; }
+.shear-handle path { fill: #fffefa; }
+.shear-handle:focus-visible .shear-handle-pill { stroke: #b8723f; stroke-width: 4; }
+.shear-handle:hover .shear-handle-pill { fill: #194336; }
+.shear-handle.is-locked { cursor: default; opacity: .35; }
+/* SVG text scales with the figure; enlarge it so phone labels stay readable. */
+@media (max-width: 700px) { .shear-proof { padding: 12px 8px 4px; } .shear-measure { font-size: 30px; } .shear-side-label { font-size: 24px; } .shear-result text { font-size: 52px; } .shear-handle-hit { transform-box: fill-box; transform-origin: center; transform: scale(1.8); } }
+@media (prefers-reduced-motion: reduce) { .shear-seam, .shear-result polygon, .shear-result text { animation: none; } }

@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { lazy, Suspense, useEffect, useRef } from "react";
 const MathStatement = lazy(() => import("./MathStatement").then(m => ({ default: m.MathStatement })));
 const GeometryPicture = lazy(() => import("./GeometryPicture").then(m => ({ default: m.GeometryPicture })));
+import { ShearProof } from "./ShearProof";
 import { LearningWorkspace } from "../../visuals/LearningWorkspace";
 import {
   mathActivity,
@@ -131,7 +132,16 @@ export function MathWorkspace({
       className={`math-workspace ${canChange ? "" : "math-observe"}`}
       data-visual-id={visual.id}
     >
-      {visual.kind === "geometry" ? <Suspense fallback={<div className="math-geometry-loading" role="status">Opening the geometry tools…</div>}><GeometryPicture visual={visual} enabled={canChange} onChange={emit} animateChanges={animateChanges} /></Suspense> : visual.kind === "array" ? (
+      {visual.kind === "parallelogram" ? <>
+        <ShearProof shape={{ base: visual.base, height: visual.height, shear: visual.shear }} stage={visual.stage}
+          draggable={canChange} animate={animateChanges} showArea={visual.showEquation}
+          onShear={shear => emit({ type: "set_parallelogram", shear })} />
+        {visual.interactive && visual.stage === "slant" && <fieldset className="math-controls" disabled={!canChange}>
+          <legend>Drag the top edge, or use the slider</legend>
+          <label>Slant<input aria-label="Parallelogram slant" type="range" min="0" max={visual.base} step="0.5" value={visual.shear}
+            onChange={e => emit({ type: "set_parallelogram", shear: Number(e.target.value) })} /><output>{visual.shear}</output></label>
+        </fieldset>}
+      </> : visual.kind === "geometry" ? <Suspense fallback={<div className="math-geometry-loading" role="status">Opening the geometry tools…</div>}><GeometryPicture visual={visual} enabled={canChange} onChange={emit} animateChanges={animateChanges} /></Suspense> : visual.kind === "array" ? (
         <>
           <ArrayPicture visual={visual} animateChanges={animateChanges} />
           {visual.interactive && (

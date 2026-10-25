@@ -1,5 +1,7 @@
 # Real model, no API key
 
+**Legacy opt-in:** Anthropic is now the default. See [current setup and voice integration](VOICE.md). Set `TUTOR_PROVIDER=codex` to use this ChatGPT-login bridge. Historical timings below are not Anthropic measurements.
+
 The development server now implements `POST /api/teaching/plan` using the machine's signed-in Codex CLI. It generates new teaching steps and compact mathematical commands for the learner's topic. [Compact math architecture and current verification](../COMPACT_MATH.md) describe the latest path. This is real model inference, not a lookup in the offline fixtures. Voice remains optional and is not connected.
 
 ## Run on your machine

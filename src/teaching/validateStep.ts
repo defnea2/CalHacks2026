@@ -51,10 +51,27 @@ export function validateTeachingStep(
             : "unclear";
       latest.observation = step.assessment.observation;
     }
-    if (!allowedPhases(state.step, latest).includes(step.phase))
+    if (!allowedPhases(state.step, latest, state.config).includes(step.phase))
       throw new Error(
         "Phase is not supported by the current learner evidence: " + step.phase,
       );
+    if (state.config.lessonStyle === "mini_lesson") {
+      const opening = !state.step;
+      const reteaching = latest?.outcome === "incorrect" || (
+        latest?.response.kind === "help" &&
+        ["explain", "simpler", "another_way"].includes(latest.response.request)
+      );
+      if (opening || reteaching) {
+        const minimum = opening ? 4 : 3;
+        if (step.beats.length < minimum || !step.check)
+          throw new Error(`Teach before testing: this ${opening ? "opening lesson" : "reteaching lesson"} needs at least ${minimum} connected beats followed by one check.`);
+        const visualExplanations = step.beats.slice(0, -1).filter(beat =>
+          beat.cues.some(cue => cue.commands.some(command => !["note", "clear"].includes(command.type))),
+        );
+        if (visualExplanations.length < (opening ? 2 : 1))
+          throw new Error("Teach with the picture before asking: include visual commands in the explanation beats, then the check in the final beat.");
+      }
+    }
     if (step.exampleProblem) {
       const problem = normalized(step.exampleProblem);
       if (
@@ -90,7 +107,7 @@ export function validateTeachingStep(
       representation(planned) === representation(actualCanvas)
     )
       throw new Error(
-        "A representation change must change the rendered representation family.",
+        "A representation change must change the rendered representation family. Either switch to a different visual kind (for example array to bars or number_line) or use approach continue or simplify with the same picture.",
       );
     if (
       ["solo", "transfer"].includes(step.phase) &&

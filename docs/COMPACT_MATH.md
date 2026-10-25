@@ -34,6 +34,7 @@ Start/finish this token immediately only in text mode. In LiveKit, use actual Ca
 | `bars` | 1–4 `bars` with unique `id`, `label`, `parts` 1–12, `shaded` 0–parts | Equal wholes, partitions, exact comparison of first two bars |
 | `number_line` | `min < max` within −1000…1000, 1–6 markers with `id`, `label`, `value` | Shared scale, one rail per marker, keyboard/pointer updates |
 | `geometry` | `shape`: `rectangle` or `right_triangle`; `width`, `height` 1–12 in 0.5 increments | Mafs drawing, constrained corner, area and dimension labels |
+| `parallelogram` | `base` 1–8, `height` 1–6, `shear` 0–base, all in 0.5 increments; `stage` `slant`, `cut` or `reassembled` | Cut-and-slide area proof (`ShearProof`): the left triangle is cut along the height and the same piece slides across by the base |
 | `update` | `changes`: 1–6 existing `MathChangeSchema` values | Updates current visual without resetting unrelated learner quantities |
 | `keep` | No other fields | Keeps current picture; applies supplied interaction/equation permissions |
 
@@ -50,6 +51,12 @@ Examples:
 ```
 
 A geometry `MathAction` changes dimensions with `set_geometry`. Assessment fields `geometry_area`, `geometry_width`, and `geometry_height` read the actual state when the learner submits their work. Merely moving a control does not imply mastery. Learner events cannot reveal an equation or grant interaction permissions.
+
+A parallelogram uses `set_parallelogram` (`base`, `height`, `shear`, `stage`, each optional). `cut` and `reassembled` require `shear > 0`. Moving to `reassembled` animates the slide unless reduced motion is on. Learners may only send `shear`, and only on stage `slant`. Assessment fields: `parallelogram_area`, `parallelogram_shear`. The planner is told to teach it as predict-then-prove: a diagnose step with a choice check on `slant`, then an intuition step that updates the same scene to `cut` and then `reassembled`, revealing the equation only at the end. The learner's choice reaches the next request as ordinary choice evidence.
+
+```json
+{"kind":"update","changes":[{"type":"set_parallelogram","stage":"reassembled"}]}
+```
 
 ## Compact lesson generation
 

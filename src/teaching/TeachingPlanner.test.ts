@@ -49,7 +49,77 @@ function answer(planner: TeachingPlanner, text: string, id = "answer") {
     emptyCanvas(),
   );
 }
+function miniLesson(id = "mini-lesson"): StepInput {
+  const prompt = "How many are two groups of four?";
+  return {
+    ...base(id), phase: "intuition",
+    check: { kind: "number", prompt, rule: { operation: "product", left: 2, right: 4 } },
+    beats: [
+      { id: `${id}-picture`, narration: "Imagine two shelves. Each shelf holds three books. We can draw the books as two rows, so every row means one shelf.", cues: [
+        { id: `${id}-show`, atMs: 0, commands: [{ type: "show_math", visual: { id: "books", kind: "array", title: "Equal groups", rows: 2, columns: 3, showEquation: false } }] },
+      ] },
+      { id: `${id}-group`, narration: "Here is one book on each shelf, and here are the other two. Both shelves have the same number. That is what equal groups means.", cues: [
+        { id: `${id}-split`, atMs: 0, commands: [{ type: "update_math", id: "books", change: { type: "set_array", splitAt: 1 } }] },
+      ] },
+      { id: `${id}-connect`, narration: "Counting three books and three more gives six. Two times three is a short way to say two groups of three.", cues: [
+        { id: `${id}-equation`, atMs: 0, commands: [{ type: "update_math", id: "books", change: { type: "set_equation", visible: true } }] },
+      ] },
+      { id: `${id}-explain`, narration: "The first number tells us how many groups we have. The second tells us how many objects belong in each group. Multiplying counts all the objects.", cues: [] },
+      { id: `${id}-check`, narration: `Now try two shelves with four books each. ${prompt}`, cues: [
+        { id: `${id}-practice`, atMs: 0, commands: [{ type: "show_math", visual: { id: "practice-books", kind: "array", title: "Two groups of four", rows: 2, columns: 4, showEquation: false } }] },
+      ] },
+    ],
+  };
+}
 describe("teaching planner", () => {
+  it("teaches a complete visual mini lesson before opening its first check", () => {
+    const p = new TeachingPlanner({ ...config, lessonStyle: "mini_lesson" });
+    const request = p.request(emptyCanvas());
+    expect(request.context.allowedPhases).toEqual(["intuition"]);
+    expect(() => p.accept(request.requestId, base(), emptyCanvas())).toThrow("Phase is not supported");
+    const lesson = miniLesson();
+    p.accept(request.requestId, lesson, emptyCanvas());
+    expect(p.getSnapshot().step?.beats).toHaveLength(5);
+    expect(() => answer(p, "8")).toThrow("unfinished");
+    p.presented(lesson.id);
+    expect(answer(p, "8").outcome).toBe("correct");
+    expect(p.request(emptyCanvas()).context.allowedPhases).toContain("solo");
+  });
+  it("rejects a quiz-sized opening and an explanation without visual development", () => {
+    const p = new TeachingPlanner({ ...config, lessonStyle: "mini_lesson" });
+    const request = p.request(emptyCanvas());
+    expect(() => p.accept(request.requestId, { ...base(), phase: "intuition" }, emptyCanvas())).toThrow("Teach before testing");
+    const noVisuals = miniLesson();
+    noVisuals.beats = noVisuals.beats.map(beat => ({ ...beat, cues: [] }));
+    expect(() => p.accept(request.requestId, noVisuals, emptyCanvas())).toThrow("Teach with the picture");
+    expect(p.getSnapshot().history).toHaveLength(0);
+  });
+  it("requires a visual reteaching sequence after a mistake instead of another immediate quiz", () => {
+    const p = new TeachingPlanner({ ...config, lessonStyle: "mini_lesson" });
+    present(p, miniLesson());
+    answer(p, "6");
+    const request = p.request(emptyCanvas());
+    expect(request.context.allowedPhases).not.toContain("solo");
+    expect(() => p.accept(request.requestId, { ...base("retry"), phase: "repair" }, emptyCanvas())).toThrow("at least 3 connected beats");
+    const repair = miniLesson("repair");
+    repair.phase = "repair";
+    repair.approach = "simplify";
+    repair.beats = [repair.beats[0], repair.beats[1], repair.beats[4]];
+    p.accept(request.requestId, repair, emptyCanvas());
+    expect(p.getSnapshot().step?.beats).toHaveLength(3);
+  });
+  it("routes a request for a smaller step back to teaching and keeps ambiguous answers unscored", () => {
+    const p = new TeachingPlanner({ ...config, lessonStyle: "mini_lesson" });
+    present(p, miniLesson());
+    p.respond({ eventId: "help", stepId: "mini-lesson", response: { kind: "help", request: "simpler" } }, emptyCanvas());
+    const request = p.request(emptyCanvas());
+    expect(request.context.allowedPhases).toEqual(["intuition", "repair"]);
+    expect(() => p.accept(request.requestId, { ...base("too-short"), phase: "intuition" }, emptyCanvas())).toThrow("Teach before testing");
+    const unclear = new TeachingPlanner({ ...config, lessonStyle: "mini_lesson" });
+    present(unclear, miniLesson());
+    expect(answer(unclear, "Maybe, I am not sure").outcome).toBe("unclear");
+    expect(unclear.request(emptyCanvas()).context.allowedPhases).toEqual(["intuition"]);
+  });
   it("starts with diagnosis, waits for presentation, and distinguishes wrong from unclear", () => {
     const p = new TeachingPlanner(config);
     const r = p.request(emptyCanvas());

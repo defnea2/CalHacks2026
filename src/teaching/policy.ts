@@ -1,10 +1,16 @@
-import type { Evidence, TeachingPhase, TeachingStep } from "./contracts";
+import type { Evidence, SessionConfig, TeachingPhase, TeachingStep } from "./contracts";
 
 export function allowedPhases(
   current: TeachingStep | null,
   evidence: Evidence | undefined,
+  config?: Pick<SessionConfig, "lessonStyle">,
 ): TeachingPhase[] {
-  if (!current) return ["diagnose"];
+  if (!current) return config?.lessonStyle === "mini_lesson" ? ["intuition"] : ["diagnose"];
+  if (
+    config?.lessonStyle === "mini_lesson" &&
+    evidence?.response.kind === "help" &&
+    ["explain", "simpler", "another_way"].includes(evidence.response.request)
+  ) return ["intuition", "repair"];
   if (evidence?.response.kind === "help")
     return current.phase === "return_to_problem"
       ? ["diagnose", "intuition"]
