@@ -3,7 +3,8 @@
 import { spawnSync } from 'node:child_process';
 import { loadEnv, ROOT } from './env.mjs';
 
-const env = loadEnv();
+// Shell variables override .env (e.g. STT_BASE_URL=https://host/stt-proxy.php node scripts/publish.mjs).
+const env = { ...loadEnv(), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(CARTESIA_|OPENROUTER_|STT_|TTS_|MEMORY_|SPACETIME_DB)/.test(k))) };
 const required = ['CARTESIA_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL'];
 for (const k of required) if (!env[k]) { console.error(`missing ${k} in .env`); process.exit(1); }
 

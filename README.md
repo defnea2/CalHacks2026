@@ -67,6 +67,18 @@ Cartesia API version: `2026-08-14`. Tutor voice "Parker" (`30894953-…`), test-
 - answers with Cartesia's batch response shape (`{type: "transcript", text, language, duration, request_id}`);
 - keeps two warm websockets per key and format, so the ~0.7 s connect time is hidden.
 
+**SpacetimeDB refuses private addresses.** SpacetimeDB 2.13 blocks procedure HTTP to loopback and private IPs (`refusing to connect to private or special-purpose addresses`). This is built in; `config.toml` only has `[module-http] enabled`. So the proxy must run on a **public HTTPS host**. For that there is `stt-proxy/stt-proxy.php`: the same contract as `server.ts`, one dependency-free PHP file (PHP ≥ 7.4 + openssl), with a minimal TLS websocket client. It has no warm socket pool, because PHP runs per request, so each call pays the websocket connect time (~0.5–0.8 s).
+
+Deploy:
+1. Upload `stt-proxy/stt-proxy.php` to the webhost.
+2. Check it: `curl https://your.host/stt-proxy.php/health` → `{"ok":true}`.
+3. Publish with `STT_BASE_URL=https://your.host/stt-proxy.php CARTESIA_STT_MODEL=ink-2 pnpm stdb:publish`, or put both in `.env`. The module calls `${STT_BASE_URL}/stt`, which reaches the file via `PATH_INFO`.
+4. If the host strips the `Authorization` header (some Apache/CGI setups), add to `.htaccess`: `RewriteEngine On` and `RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]`.
+
+The proxy uses the caller's own Cartesia key from the `Authorization` header and stores nothing, so a public URL doesn't expose our key. Verified locally in `php:8.3-cli` against `stt-proxy/test/fake-cartesia.mjs` (`STT_PROXY_UPSTREAM=tcp://…`): handshake with forwarded key and query, 85 masked 100 ms frames (all bytes), ping/pong, non-final deltas skipped, a 70 KB frame (64-bit length), `flush_done`, and the batch response shape. The real Cartesia hop could not be tested from the container (no outbound network in the local VM).
+
+**Until the PHP proxy is online**, publish with `STT_BASE_URL=https://api.cartesia.ai CARTESIA_STT_MODEL=ink-whisper` (Cartesia's own batch endpoint, older model). First live voice turn with this setup (2026-10-25), measured from turn end: STT done +0.45 s, LLM first token +1.74 s, first sentence +1.99 s, first audio +2.77 s, playback +2.83 s.
+
 The module only knows a base URL (`STT_BASE_URL`, default `http://127.0.0.1:8787`). The API key stays in the module env and passes through in the `Authorization` header. When SpacetimeDB gets websockets or async procedures (issue #4697), or Cartesia offers `ink-2` in batch, set `STT_BASE_URL=https://api.cartesia.ai` and delete `stt-proxy/`. Nothing else changes.
 
 **Why not stream from the worker?** That was the spec's fallback. It works (385 ms after `finalize`), but it moves a SpacetimeDB responsibility into the worker. The proxy keeps the architecture as close as possible to what SpacetimeDB would do natively. Phrases are transcribed while the student is still talking, so only the last phrase's transcription falls inside the turn-end wait.
