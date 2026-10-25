@@ -34,7 +34,11 @@ createTeacher(name: string)
 setPresence(learnerId: u64, status: 'offline' | 'waiting' | 'in_session')   // remembers the caller's connection
 startClassSession(teacherId: u64, goals: string, content: string, delivery: string,
                   documentName: string, documentMime: string, documentText: string,
-                  documentData: bytes, simulatedCount: u32)
+                  documentData: bytes, simulatedCount: u32)          // = startClassSessionWith(..., resetSimulated = true)
+startClassSessionWith(teacherId: u64, goals: string, content: string, delivery: string,
+                  documentName: string, documentMime: string, documentText: string,
+                  documentData: bytes, simulatedCount: u32, resetSimulated: bool)
+resetSimulatedStudents(count: u32)                                          // 1..count back to seed state, 0 = all 20
 endClassSession(classSessionId: u64)
 setImpersonation(classSessionId: u64, learnerId: u64)                       // 0 = stop observing
 procedure refreshDashboard(classSessionId: u64) -> string                    // JSON {ok, skipped?, error?, repaired?, repairs?, clusters?}
@@ -74,13 +78,22 @@ procedure refreshDashboard(classSessionId: u64) -> string                    // 
 
 ## Simulation
 
-- `startClassSession(..., simulatedCount = n)` (n ≤ 20): simulation users with rank > n leave
-  (session ended, `offline`). Users 1..n, in seed order, are reset: the old learner row and
-  everything hanging off it is deleted (sessions, turns, phrases, sentences, board items +
-  answers, metrics, jobs, canvas/beat/lesson state, memory notes + evidence, concept states,
-  session summaries, presence) and the learner is recreated from `sim_profile` with its 3-6 seed
-  memory notes. Each gets a linked text-mode session (`voice=false`), presence `in_session`, and
-  `startConversation`: the tutor speaks first (worker opening), the simulated student answers.
+- `startClassSessionWith(..., simulatedCount = n, resetSimulated)` (n ≤ 20): simulation users
+  with rank > n leave (session ended, `offline`). With `resetSimulated = true` (the UI checkbox
+  "Reset simulated students (fresh memories)", default on; also the old `startClassSession`)
+  users 1..n, in seed order, are reset: the old learner row and everything hanging off it is
+  deleted (sessions, turns, phrases, sentences, board items + answers, metrics, jobs,
+  canvas/beat/lesson state, memory notes + evidence, concept states, session summaries, presence)
+  and the learner is recreated from `sim_profile` with its 3-6 seed memory notes. With
+  `resetSimulated = false` they keep their learner id, memory (notes, mastery, summaries) and old
+  sessions from earlier runs, so the tutor remembers the previous class; a rank that does not exist
+  yet is created from the seed. Either way each gets a new linked text-mode session
+  (`voice=false`), presence `in_session`, and `startConversation`: the tutor speaks first (worker
+  opening), the simulated student answers.
+- `resetSimulatedStudents(count)` (button "Reset simulated students" on the class setup, or
+  `node scripts/simulate.mjs --reset-only`): the same reset for ranks 1..count (0 = all 20) without
+  starting a class; refused while one of them is in a running class session. Like the other
+  classroom reducers it needs no role (teachers have no accounts).
 - **Turn loop.** Whenever a simulated session's `turnState` returns to `listening` (a hook on
   `updateSession`: the text-mode reading delay of the tutor's last sentence ended) and no student
   turn is pending, a `sim_turn_job` is scheduled 2-5 s later. `simStudentTurn` calls Haiku 5.5
