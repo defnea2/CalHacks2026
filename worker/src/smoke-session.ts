@@ -36,7 +36,7 @@ async function main() {
   const session = [...conn.db.session.iter()].filter(s => s.learnerId === learner.id && s.active)[0]!;
   if (!voice) await conn.reducers.setSessionVoice({ sessionId: session.id, voice: false });
   const status = [...conn.db.agentStatus.iter()][0];
-  console.log(`session ${session.id} (${voice ? 'voice' : 'text'}), agent ${status ? `${status.model} seen ${new Date(ms(status.lastSeen)).toISOString()}` : 'no heartbeat'}`);
+  console.log(`session ${session.id} (${voice ? 'voice' : 'text mode'}), agent ${status ? `${status.model} seen ${new Date(ms(status.lastSeen)).toISOString()}` : 'no heartbeat'}`);
   for (const text of turns) {
     const intent = text === 'show me another way' ? 'another_way' : '';
     await conn.reducers.submitTextTurn({ sessionId: session.id, text: intent ? '' : text, intent });
