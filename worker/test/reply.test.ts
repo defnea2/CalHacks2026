@@ -18,6 +18,23 @@ async function answer(llm: FakeLlm, prep?: (t: ReturnType<typeof makeAgent>['tra
 }
 
 describe('reply', () => {
+  it('narrates all canvas moments after a spoken preamble and board tool call', async () => {
+    const content = { title: 'Move the triangle', moments: [
+      { sentenceOffset: 0, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2, stage: 'slant' } },
+      { sentenceOffset: 1, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+      { sentenceOffset: 2, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'reassembled' }] } },
+    ] };
+    const llm = new FakeLlm([
+      [text('Let us move the pieces. '), tool(TOOL_NAMES.showBoardItem, { kind: 'math_canvas', content }), done],
+      [text('Here is our slanted shape. Cut the triangle from the left. Slide it to the right.'), done],
+    ]);
+    const { transport } = await answer(llm);
+    expect(llm.calls).toHaveLength(2);
+    expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(1);
+    expect(transport.of('addSentence').map(s => s.idx)).toEqual([0, 1, 2, 3]);
+    expect(transport.of('appendTutorTurn')[0]!.text).toContain('Slide it to the right.');
+  });
+
   it('streams sentences, normalizes speech, appends the tutor turn and records metrics', async () => {
     const llm = new FakeLlm([[...tokens('Let us look at 3/4 of a pizza together. It is 3.5 times bigger than you think!'), done]]);
     const { transport, agent } = await answer(llm);
@@ -87,11 +104,12 @@ describe('reply', () => {
         ...tokens('Each slice is the same size as the others.'),
         done,
       ],
+      [done],
     ]);
     const { transport } = await answer(llm);
     expect(transport.names()).toEqual(['buildContext', 'beginUtterance', 'addSentence', 'setPhase', 'addSentence', 'showBoardItem', 'addSentence', 'appendTutorTurn']);
     expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(2);
-    expect(llm.calls).toHaveLength(1); // actions with spoken text: no extra LLM call
+    expect(llm.calls).toHaveLength(2); // board result returns so its narration can follow
   });
 
   it('board item before any text points at sentence 0', async () => {

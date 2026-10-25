@@ -137,7 +137,11 @@ export function buildToolSpecs(pack: LessonPack): ToolSpec[] {
         type: 'object',
         properties: {
           kind: { type: 'string', enum: pack.boardKinds.map(k => k.name) },
-          content: { type: 'object', description: 'Content object for the kind (see kind descriptions).' },
+          content: {
+            type: 'object',
+            description: 'Use the exact content schema for the selected kind. Updates use changes:[{type:..., ...fields}].',
+            anyOf: pack.boardKinds.map(k => k.contentSchema),
+          },
           taskKey: { type: 'string', description: 'Key of a library task to show instead of content.' },
           expectedAnswer: {
             type: 'object',

@@ -11,7 +11,9 @@ const json = (v: unknown): string => {
  *  the item when that sentence starts playing. */
 export const showBoardItem: ToolModule = {
   name: TOOL_NAMES.showBoardItem,
-  kind: 'action',
+  // The board is revealed by FUTURE speech. Return to the model after the tool so
+  // a preamble followed by a tool call cannot silently finish the utterance.
+  kind: 'query',
   async handler(args, ctx) {
     await ctx.transport.showBoardItem({
       sessionId: ctx.sessionId,
@@ -22,6 +24,6 @@ export const showBoardItem: ToolModule = {
       taskKey: str(args.taskKey),
       expectedAnswer: json(args.expectedAnswer),
     });
-    return 'ok';
+    return 'Board accepted. Now refer to it in your next short spoken sentence. If it has moments, speak one sentence per moment in sentenceOffset order, describing that exact change. The first sentence reveals moment zero. Do not call another board tool before narrating this one.';
   },
 };

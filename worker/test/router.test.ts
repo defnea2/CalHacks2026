@@ -15,7 +15,8 @@ describe('tool registry', () => {
     const defs = createToolDefs(pack);
     expect(defs.map(d => d.name)).toEqual(buildToolSpecs(pack).map(s => s.name));
     expect(defs.find(d => d.name === TOOL_NAMES.setTopic)!.kind).toBe('query');
-    for (const n of [TOOL_NAMES.setPhase, TOOL_NAMES.showBoardItem, TOOL_NAMES.clearBoard, TOOL_NAMES.remember]) {
+    expect(defs.find(d => d.name === TOOL_NAMES.showBoardItem)!.kind).toBe('query');
+    for (const n of [TOOL_NAMES.setPhase, TOOL_NAMES.clearBoard, TOOL_NAMES.remember]) {
       expect(defs.find(d => d.name === n)!.kind).toBe('action');
     }
   });
@@ -67,6 +68,19 @@ describe('ToolRouter', () => {
     const badEnum = await router.run(call(TOOL_NAMES.setPhase, { phase: 'not-a-phase', reason: 'x' }), ctx(tr));
     expect(badEnum.result).toMatch(/^error: invalid arguments: .*must be one of/);
     expect(tr.of('setPhase')).toEqual([]);
+  });
+
+  it('rejects a malformed math update before publishing a board', async () => {
+    const tr = t();
+    const r = await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, {
+      kind: 'math_canvas', content: { title: 'Cut', moments: [
+        { sentenceOffset: 0, visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2 } },
+        { sentenceOffset: 1, visual: { kind: 'update', stage: 'cut' } },
+      ] },
+    }), ctx(tr));
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe('query'); // error goes back for repair, even after a preamble
+    expect(tr.of('showBoardItem')).toEqual([]);
   });
 
   it('errors never throw: reducer error, bad JSON, unknown tool, timeout', async () => {

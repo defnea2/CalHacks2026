@@ -228,7 +228,9 @@ export class ReplyRun {
       });
       let spoken = false;
       for (let round = 0; ; round++) {
-        const chunker = new SentenceChunker();
+        // Canvas offsets count grammatical sentences. Merging short sentences or
+        // splitting long ones shifts every later visual cue away from its speech.
+        const chunker = new SentenceChunker({ minWords: 1, maxWords: Number.POSITIVE_INFINITY });
         let text = '';
         let raw: unknown;
         const calls: ToolResult['call'][] = [];

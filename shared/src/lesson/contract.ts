@@ -449,7 +449,7 @@ export function checkToolSpecs(pack: LessonPack): string[] {
   if (validateJson(phase, { phase: pack.finalPhase, reason: 'done' }).length) errs.push('set_phase rejects a valid phase');
   if (!validateJson(phase, { phase: '__not_a_phase__', reason: 'x' }).length) errs.push('set_phase accepts an unknown phase');
   const kind = pack.boardKinds[0];
-  if (kind && validateJson(board, { kind: kind.name, content: {} }).length) errs.push('show_board_item rejects a valid kind');
+  if (kind && validateJson(board, { kind: kind.name }).length) errs.push('show_board_item rejects a valid kind');
   if (!validateJson(board, { kind: '__not_a_kind__' }).length) errs.push('show_board_item accepts an unknown kind');
   const cat = pack.taxonomy[0];
   if (cat && validateJson(topic, { category: cat.key, ...(cat.concepts[0] ? { concept: cat.concepts[0].key } : {}) }).length)
