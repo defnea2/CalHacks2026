@@ -534,6 +534,8 @@ const spacetimedb = schema(
       SIM_MAX_TURNS: t.option(t.string()),
       /** Teacher dashboard refresh interval in seconds (default 30). */
       DASHBOARD_INTERVAL_S: t.option(t.string()),
+      /** Teacher dashboard LLM thinking effort: low | medium | high (default low). */
+      DASHBOARD_EFFORT: t.option(t.string()),
     },
   }
 );
