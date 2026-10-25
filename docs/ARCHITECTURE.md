@@ -152,7 +152,7 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 | Table | Runs | When | Notes |
 | --- | --- | --- | --- |
 | `stt_job` | procedure `transcribePhrase` | now, on a phrase's final chunk | one retry after 0.3 s, then the phrase is discarded |
-| `tts_job` | procedure `synthesizeSentence` | now, per sentence (voice mode) | retried, then the sentence is `dropped` so playback skips it |
+| `tts_job` | procedure `synthesizeSentence` | now, per sentence (voice mode) | a failed call schedules one retry row (`attempt` 1, after 0.2 s, only while the sentence is pending), then the sentence is `dropped` so playback skips it; barge-in deletes pending rows |
 | `text_play_job` | reducer `finishTextSentence` | after the reading time of a text-mode sentence: `max(700 ms, 280 ms × words)`, sentences one after another | scheduler-only (checks `ctx.sender == ctx.identity`) |
 | `extraction_job` | procedure `extractMemory` | every `MEMORY_EVERY_N_TURNS` (6) turns, and once at session end | retries after 10 / 30 / 90 s |
 | `summary_job` | procedure `summarizeSession` | at session end | |
@@ -548,8 +548,9 @@ Procedures are the module's only way out: STT, TTS and all non-streaming LLM cal
 - **Scheduled tables instead of external queues.** STT, TTS, reading delays, memory windows, simulated
   students and the 30 s dashboard are rows with `scheduleAt`; cancellation is a delete of the
   pending job row (barge-in, supersede and `endSession` delete the reply's `tts_job`s) plus a status
-  check in the job's commit transaction for a call already in flight. Retries: STT schedules a new
-  row; TTS retries once inside the same procedure call.
+  check in the job's commit transaction for a call already in flight. Retries are new rows: STT,
+  TTS (`tts_job.attempt`, one retry after 0.2 s, only while the sentence is still pending) and
+  memory windows schedule the next attempt instead of looping inside the procedure.
 - **Procedures for side effects, reducers stay pure and fast.** Reducers make no network calls; every
   outbound call is a procedure that commits its result in its own transaction.
 - **One identity model, for the worker.** The worker authenticates as `agent` via a shared secret

@@ -317,6 +317,8 @@ export const ttsJob = table(
     utteranceId: t.u64().index('btree'),
     idx: t.u32(),
     speech: t.string(),
+    /** 0 = first try; a failed call schedules attempt + 1 (TTS_RETRIES). */
+    attempt: t.u32().default(0),
   }
 );
 

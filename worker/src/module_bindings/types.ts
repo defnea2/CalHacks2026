@@ -501,6 +501,7 @@ export const TtsJob = __t.object("TtsJob", {
   utteranceId: __t.u64(),
   idx: __t.u32(),
   speech: __t.string(),
+  attempt: __t.u32(),
 });
 export type TtsJob = __Infer<typeof TtsJob>;
 

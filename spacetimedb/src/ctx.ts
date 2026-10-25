@@ -78,10 +78,13 @@ export function utteranceSentences(ctx: Ctx, sessionId: bigint, utteranceId: big
 
 /** Deletes the not-yet-started tts_job rows of a session (all, or one utterance), so a cancelled
  *  reply (barge-in, supersede, end of session) makes no further Cartesia calls and holds no
- *  procedure slots. A job already running is unaffected; its commit re-checks `pending`.
- *  tts_job holds only the few in-flight sentences, so a scan is cheap (no index needed). */
+ *  procedure slots. A job already running is unaffected; its commit re-checks `pending`
+ *  (and a retry it schedules is only inserted while the sentence is still pending). */
 export function cancelTtsJobs(ctx: Ctx, sessionId: bigint, utteranceId?: bigint): number {
-  const doomed = [...ctx.db.ttsJob.iter()].filter(j => j.sessionId === sessionId && (utteranceId === undefined || j.utteranceId === utteranceId));
+  const doomed =
+    utteranceId === undefined
+      ? [...ctx.db.ttsJob.sessionId.filter(sessionId)]
+      : [...ctx.db.ttsJob.utteranceId.filter(utteranceId)].filter(j => j.sessionId === sessionId);
   for (const j of doomed) ctx.db.ttsJob.scheduledId.delete(j.scheduledId);
   return doomed.length;
 }

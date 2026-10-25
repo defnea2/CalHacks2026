@@ -35,7 +35,7 @@ describe('deleteSessionData (reset of a simulation user)', () => {
       db.sessionOwner.insert({ sessionId: sid, owner: ctx.sender });
       db.textPlayback.insert({ sessionId: sid, utteranceId: 5n, endsAtMicros: 1n });
       db.textPlayJob.insert({ scheduledId: 0n, scheduledAt: later, sessionId: sid, sentenceId: 1n, utteranceId: 5n, idx: 0 });
-      db.ttsJob.insert({ scheduledId: 0n, scheduledAt: later, sessionId: sid, sentenceId: 1n, utteranceId: 5n, idx: 0, speech: 'a' });
+      db.ttsJob.insert({ scheduledId: 0n, scheduledAt: later, sessionId: sid, sentenceId: 1n, utteranceId: 5n, idx: 0, speech: 'a', attempt: 0 });
       db.sttJob.insert({ scheduledId: 0n, scheduledAt: later, sessionId: sid, phraseId: 1, attempt: 0 });
       db.extractionJob.insert({ scheduledId: 0n, scheduledAt: later, sessionId: sid, learnerId: s.learnerId, fromIdx: 0, toIdx: 1, attempt: 0 });
       db.summaryJob.insert({ scheduledId: 0n, scheduledAt: later, sessionId: sid, learnerId: s.learnerId, attempt: 0 });
