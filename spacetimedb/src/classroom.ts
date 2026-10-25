@@ -4,6 +4,7 @@ import { SenderError } from 'spacetimedb/server';
 import { CLASSROOM_DEFAULTS as C } from '../../shared/src/config';
 import { SIM_STUDENTS, type SimMemoryNote } from '../../shared/src/classroom/simStudents';
 import { repairClusters, sizeRuleText, type Cluster, type ClusterStudent } from '../../shared/src/classroom/clusters';
+import { stripLearnerIds } from '../../shared/src/classroom/dashboardText';
 import { pack } from '../../shared/src/lesson/index';
 import { getPhase } from '../../shared/src/lesson/api';
 import { SOURCE_SIM, type TurnState, type TurnStatus } from '../../shared/src/types';
@@ -591,8 +592,10 @@ export function classSnapshot(ctx: Ctx, classSessionId: bigint): StudentSnapshot
     const turns = sessionTurns(ctx, s.id);
     const lesson = lessonStateText(ctx, s.id);
     const canvas = canvasText(ctx, s.id, 800);
+    // The id stays out of the prose input (it appears only in the roster for learnerIds), so the
+    // LLM does not echo "Jonas (16)" into the summary.
     const text = [
-      `Student ${l.id} — ${l.name}, age ${l.age}, grade ${l.grade}. Style: ${l.style || '-'}`,
+      `${l.name}, age ${l.age}, grade ${l.grade}. Style: ${l.style || '-'}`,
       `Phase: ${phase ? `${phase.id} (${phase.label})` : s.phase}. Topic: ${topic || 'not set'}. Tutor state: ${s.turnState}. Turns so far: ${turns.length}.`,
       lesson ? `Lesson state: ${lesson}` : '',
       `Board: ${truncate(describeBoard(ctx, s.id).replace(/\n/g, ' '), 900)}`,
@@ -635,7 +638,8 @@ const DASHBOARD_SYSTEM = [
   'You support a teacher who supervises a class of children (ages 8-12). Each child learns maths one-on-one with an AI tutor at the same time; the teacher sees a dashboard.',
   'Return:',
   '- classSummary: 2-4 short, concrete sentences about the learning state of the whole class: what most are working on, how far they got, common difficulties or misconceptions, and who (by first name) needs the teacher now. No fluff.',
-  '- clusters: group EVERY student into exactly one cluster by similarity of their learning state (same lesson phase, same problem or misconception, similar progress). name: 1-3 words (e.g. "Adding bottoms", "Ready to practise"). description: one short sentence on their shared status. learnerIds: the student ids exactly as given.',
+  'In classSummary, cluster names and descriptions refer to students by first name only. Never write learner ids or any number in brackets after a name (write "Jonas", not "Jonas (16)"); ids go ONLY into learnerIds.',
+  '- clusters: group EVERY student into exactly one cluster by similarity of their learning state (same lesson phase, same problem or misconception, similar progress). name: 1-3 words (e.g. "Adding bottoms", "Ready to practise"). description: one short sentence on their shared status. learnerIds: the learnerIds from the roster, exactly as given.',
   'Check the maths yourself before calling an answer wrong (e.g. 5/8 + 3/8 = 8/8 = 1 is correct). Describe what students actually said, not what the tutor repeated.',
   'Cluster sizes are strict; follow the size rule in the message. Never return a cluster of 1 unless the class has exactly 1 student.',
 ].join('\n');
@@ -647,9 +651,10 @@ function dashboardUser(cls: ClassRow, students: StudentSnapshot[]): string {
     `Delivery instructions: ${cls.delivery || '-'}`,
     '',
     `Size rule: ${sizeRuleText(students.length)} Clusters of 4 are fine when four students are in the same situation.`,
-    `Student ids: ${students.map(s => s.learnerId).join(', ')}`,
+    `Roster (learnerId: name), for learnerIds only: ${students.map(s => `${s.learnerId}: ${s.name}`).join('; ')}`,
     '',
-    ...students.map(s => `=== ${s.text}`),
+    // Same name twice (real students can share one): only then the block names the id.
+    ...students.map(s => `=== ${students.filter(o => o.name === s.name).length > 1 ? `[learnerId ${s.learnerId}] ` : ''}${s.text}`),
   ].join('\n');
 }
 
@@ -704,8 +709,9 @@ export function refreshDashboard(ctx: PCtx, classSessionId: bigint, scheduled: b
         effort: C.DASHBOARD_EFFORT,
         maxTokens: C.DASHBOARD_MAX_TOKENS,
       });
-      summary = typeof r.value?.classSummary === 'string' ? truncate(r.value.classSummary.trim(), 1500) : '';
-      const raw = normalizeClusters(r.value?.clusters);
+      const named = students.map(s => ({ id: s.learnerId, name: s.name }));
+      summary = typeof r.value?.classSummary === 'string' ? truncate(stripLearnerIds(r.value.classSummary.trim(), named), 1500) : '';
+      const raw = normalizeClusters(r.value?.clusters).map(c => ({ ...c, name: stripLearnerIds(c.name, named), description: stripLearnerIds(c.description, named) }));
       const fixed = repairClusters(raw, students.map<ClusterStudent>(s => ({ id: s.learnerId, phase: s.phase, topic: s.topic })));
       clusters = fixed.clusters;
       repairs = fixed.repairs;

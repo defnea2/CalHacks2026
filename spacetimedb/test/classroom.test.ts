@@ -475,6 +475,36 @@ describe('dashboard', () => {
     expect(at(jobs[0])).toBe(st.nextDueAt.microsSinceUnixEpoch);
   });
 
+  it('prompt passes names (ids only in the roster); ids the LLM writes into prose are stripped', () => {
+    const { h, env, cls, ids } = classWithSims(4);
+    const names = SIM_STUDENTS.slice(0, 4).map(s => s.name);
+    const first = names.map(n => n.split(' ')[0]!);
+    let req: Req | undefined;
+    (mod.refreshDashboard as any)(
+      proc(h, env.client, r => {
+        req = r;
+        return anthropicResponse({
+          classSummary: `${first[0]} (${ids[0]}) and ${first[1]} (id ${ids[1]}) add the bottoms; student ${ids[2]} is done.`,
+          clusters: [
+            { name: 'Adding bottoms', description: `${first[0]} (${ids[0]}) and ${first[1]} [#${ids[1]}] add the denominators.`, learnerIds: ids.slice(0, 2) },
+            { name: 'On track', description: `${names[2]} (${ids[2]}) and ${first[3]} got 8/8 (= 1).`, learnerIds: ids.slice(2) },
+          ],
+        });
+      }),
+      { classSessionId: cls.id }
+    );
+    const body = JSON.parse(req!.text);
+    const user = body.messages[0].content as string;
+    expect(user).toContain(`Roster (learnerId: name), for learnerIds only: ${ids[0]}: ${names[0]}`);
+    expect(user).not.toMatch(/Student \d+ —/);
+    for (const n of names) expect(user).toContain(`=== ${n}, age`);
+    expect(JSON.stringify(body.system)).toContain('Never write learner ids');
+    expect(h.db.classSummary.classSessionId.find(cls.id)!.summary).toBe(`${first[0]} and ${first[1]} add the bottoms; ${first[2]} is done.`);
+    const descs = [...h.db.studentCluster.classSessionId.filter(cls.id)].sort((a, b) => a.position - b.position).map(c => c.description);
+    expect(descs).toEqual([`${first[0]} and ${first[1]} add the denominators.`, `${names[2]} and ${first[3]} got 8/8 (= 1).`]);
+    expect(clustersOf(h, cls.id).map(c => c.ids)).toEqual([ids.slice(0, 2), ids.slice(2)]);
+  });
+
   it('repairs invalid LLM clusters (sizes, duplicates, unknown and missing students)', () => {
     const { h, cls, ids } = classWithSims(6);
     advance(h, C.DASHBOARD_INTERVAL_S);
