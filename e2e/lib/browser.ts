@@ -26,11 +26,17 @@ export function withLeadIn(src: string, dst: string, leadMs: number): void {
   }
   const rate = buf.readUInt32LE(24);
   const data = buf.subarray(44);
-  const leadBytes = Math.min(data.length, Math.round((leadMs / 1000) * rate) * 2);
+  const leadBytes = Math.round((leadMs / 1000) * rate) * 2;
+  // The tail silence is TRAILING_SILENCE_MS (60 s) long; a longer lead (lesson opening, ~75 s)
+  // repeats the last 20 s of it instead of reaching into the speech.
+  const tail = data.subarray(data.length - Math.min(data.length, Math.round(20 * rate) * 2));
+  const parts: Buffer[] = [];
+  for (let n = 0; n < leadBytes; n += tail.length) parts.push(tail.subarray(0, Math.min(tail.length, leadBytes - n)));
+  const lead = Buffer.concat(parts);
   const head = Buffer.from(buf.subarray(0, 44));
-  head.writeUInt32LE(36 + data.length + leadBytes, 4);
-  head.writeUInt32LE(data.length + leadBytes, 40);
-  fs.writeFileSync(dst, Buffer.concat([head, data.subarray(data.length - leadBytes), data]));
+  head.writeUInt32LE(36 + data.length + lead.length, 4);
+  head.writeUInt32LE(data.length + lead.length, 40);
+  fs.writeFileSync(dst, Buffer.concat([head, lead, data]));
 }
 
 export async function launch(wav: string | null, leadMs = 0): Promise<MicBrowser> {
