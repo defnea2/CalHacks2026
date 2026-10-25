@@ -1,7 +1,9 @@
 # Cloud plan: Maincloud + a per-turn Cloudflare Worker
 
-**Status: plan; Part A prepared (scripts, client build, runbook) in `night/maincloud-prep`, see
-[DEPLOY.md](DEPLOY.md).** Nothing is deployed or configured, and no Maincloud or Cloudflare account
+**Status: Part A deployed (`fibonacci-demo`, DEPLOY.md). Part B minimal version implemented in
+`night/cf-dispatch` and running on the separate database `fibonacci-cfdev` with the Cloudflare
+Worker `fibonacci-dispatch`; see [Part B status](#part-b-status-2026-10-25). `fibonacci-demo` still
+uses the Node worker.** Original plan text below: Nothing is deployed or configured, and no Maincloud or Cloudflare account
 was touched. Written 2026-10-25 against `main` (SpacetimeDB
 2.13, worker = `worker/`, module = `spacetimedb/`). The user decides whether and when to start.
 
@@ -26,9 +28,9 @@ Markers used below:
 | --- | --- | --- |
 | F1 | Publish to Maincloud: `spacetime login` (GitHub/Google), then `spacetime publish <db> --server maincloud`; `--delete-data` clears. Republishing hot-swaps the module without disconnecting clients. Clients connect with host `https://maincloud.spacetimedb.com` plus the database name. Free-tier databases pause when inactive and resume on the next connection or request. | Verified ([deploy/maincloud](https://spacetimedb.com/docs/how-to/deploy/maincloud), 2026-10-25) |
 | F2 | HTTP reducer call: `POST /v1/database/:name_or_identity/call/:name`. The body is a **JSON array** of the arguments. Auth is optional `Authorization: Bearer <spacetime token>`. `?confirmed=false` skips the durability wait. **The same endpoint calls procedures** ("The name of the reducer OR procedure"). | Verified ([http/database](https://spacetimedb.com/docs/http/database), 2026-10-25) |
-| F3 | `POST /v1/identity` returns `{identity, token}`. `POST /v1/identity/websocket-token` returns a short-lived JWT. The docs do not state how long the `/v1/identity` token lasts. | Verified ([http/identity](https://spacetimedb.com/docs/http/identity), 2026-10-25). **Token expiry: assumption, verify** |
+| F3 | `POST /v1/identity` returns `{identity, token}`. `POST /v1/identity/websocket-token` returns a short-lived JWT. The docs do not state how long the `/v1/identity` token lasts. | Verified ([http/identity](https://spacetimedb.com/docs/http/identity), 2026-10-25). **Token expiry verified 2026-10-25: the JWT has no `exp` claim** (claims `hex_identity, sub, iss, aud, iat`; decoded on the local 2.13 server; the Maincloud token was not decoded, it is piped straight into the secret) |
 | F4 | Procedures: `ctx.http.fetch` is synchronous. The default timeout is 30 s; a per-call `timeout` is clamped to 180 s. A procedure can't send HTTP while it holds a transaction. Procedures are beta. | Verified ([functions/procedures](https://spacetimedb.com/docs/functions/procedures), 2026-10-25) |
-| F5 | SpacetimeDB 2.13 refuses procedure HTTP to loopback and private addresses. | Observed locally (ARCHITECTURE.md §1, README "STT decision"). **On Maincloud: assumption, verify** (public hosts are expected to work) |
+| F5 | SpacetimeDB 2.13 refuses procedure HTTP to loopback and private addresses. | Observed locally (ARCHITECTURE.md §1, README "STT decision"). **Maincloud → a public `*.workers.dev` host verified 2026-10-25** (`dispatchTurn` on `fibonacci-cfdev`) |
 | F6 | Module env (`schema(..., { env })`, `ctx.env`, passed by `scripts/publish.mjs` as process env at publish time) works on the local server. **No public doc for this was found.** A feature request still asks for a secrets table. | **Verified on Maincloud 2026-10-25** (database `fibonacci-demo`: `register_agent`, STT, TTS, sims and dashboard all read `ctx.env`; see DEPLOY.md "Current deployment") |
 | F7 | Maincloud pricing: Free is $0 with 2,500 TeV/month (about 3M function calls, about 12.5 GB egress). Pro is $25 with 100,000 TeV, and usage beyond the credit is billed at 2,592 TeV per $. Free databases pause after 1 week of inactivity. The pricing page does not meter procedures or outbound HTTP separately; they show up as function calls, CPU and egress. | Verified ([pricing](https://spacetimedb.com/pricing), [blog](https://spacetimedb.com/blog/all-new-spacetimedb-pricing), 2026-10-25). The 90%-off launch sale on [/maincloud](https://spacetimedb.com/maincloud) may have ended: unverified |
 | F8 | Maincloud region, data-centre location, procedure concurrency (pool size) and outbound-HTTP rate limits are not published. [/limits](https://spacetimedb.com/limits) lists only storage (24 GB per database on Free) and 8 GB module memory. | **Assumption, measure (step A6)** |
@@ -130,6 +132,45 @@ The local stack is untouched. Rollback means pointing the client back (`?uri=ws:
 ---
 
 ## Part B: Cloudflare Worker per turn
+
+### Part B status (2026-10-25)
+
+**Implemented (minimal version, branch `night/cf-dispatch`)**, deployed as Worker
+`fibonacci-dispatch` + Maincloud database `fibonacci-cfdev` (runbook and numbers: DEPLOY.md
+"Cloudflare dispatch"). The Node worker stays the default (`LLM_DISPATCH=worker`) and the local dev
+path; with `worker` the module writes no dispatch rows.
+
+| Plan item | State |
+| --- | --- |
+| `llm_dispatch`, `dispatch_job` → procedure `dispatchTurn`, `dispatch_watch_job` → reducer `dispatchWatch` (`spacetimedb/src/dispatch.ts`) | Done. Statuses `pending → sent → running → done / failed / superseded`; timings `createdAt, sentAt, acceptedAt, firstBeatAt, lastBeatAt` live in `llm_dispatch` (no new `turn_metrics` columns). Watch: nothing spoken after 12 s → one retry (new utteranceId, the silent old utterance is released), then the authored fallback line; a reply silent for 20 s without a tutor turn is closed by the module |
+| Hooks | `completeTurn` (voice, text, sim, interaction) and `startConversation`. The opening without a task is the authored script, spoken by the module itself (no dispatch) |
+| One answerer / duplicate delivery | With `cloudflare`, `beginUtterance` / `beginOpening` accept only a dispatched, not yet started utteranceId (`assertDispatched`); a Node worker left running and a replayed dispatch are rejected (`not current (dispatch running)`). Verified with a replay against `wrangler dev` |
+| HMAC | Pure-TS SHA-256 / HMAC in the module (`spacetimedb/src/hmac.ts`, checked against `node:crypto`), WebCrypto in the Worker. Signature `HMAC(CF_DISPATCH_SECRET, ts + "." + nonce + "." + body)`, nonce `dispatchId:attempt`, ±60 s window. Env name is `CF_DISPATCH_SECRET` (the plan said `DISPATCH_HMAC_KEY`) |
+| Scheduler-only guards | `dispatchTurn` checks `ctx.sender == ctx.databaseIdentity`, `dispatchWatch` `ctx.sender == ctx.identity` (as `finishTextSentence`); unit-tested |
+| `agent_status` | The module writes row 0 (`provider = cloudflare`) on every 202; the client counts `provider = cloudflare` as online (no heartbeat) |
+| Barge-in | The run notices at its next reducer call (HTTP 530 `not current`) and aborts the stream, no repair round. **Added:** `interrupt` / `interruptUtterance` record the heard tutor turn at once for a dispatched utterance, because the late `appendTutorTurn` landed after the student's next turn in the first Maincloud smoke run |
+| Cloudflare Worker `cf-worker/` | `LessonRun` (worker/src/lesson.ts) **unchanged**, behind `HttpTransport` (cf-worker/src/http_transport.ts): planner request, photos and topic prefetch come from the body; a topic classification (opening) calls `set_topic` and then `build_lesson_request` over HTTP. Total deadline 24 s (recap path), hard stop 28 s |
+| Agent identity | `scripts/cf-agent-token.mjs` (`/v1/identity` + `register_agent`, token piped into `wrangler secret put STDB_TOKEN`) |
+| Local test path | `LLM_DISPATCH=manual` + agent procedure `takeDispatch` + `cf-worker/scripts/replay-local.mjs` against `wrangler dev`. The Cloudflare quick tunnel (7.2) was not tried |
+| Not in v1 | Preemptive planning (dropped: B-v1 of 6.2), `tutor_request` (still needs the Node worker), tool reply mode, Durable Object runner, `recordMetrics` batching |
+
+**B1 spike results (HTTP API, local 2.13 and Maincloud):**
+
+- Names are the snake_case export names: `/call/add_beat` works, `/call/addBeat` is a 404 `No such procedure`.
+- `u64` must be a JSON **number**; a string is a 400 (`invalid type: string "1", expected u64`). JSON numbers are parsed exactly (2^64−1 is accepted), so the Worker writes bigints as raw digits; `JSON.stringify` of a JS number would lose precision above 2^53.
+- The body is a positional array; an object in an argument position is a 400 (`invalid type: map`).
+- `bytes` (`t.byteArray()`) accepts a hex string or an array of numbers. No agent reducer takes an `option` argument; options in SQL results come back as `[0, value]` (some) / `[1, []]` (none).
+- A reducer `SenderError` is **HTTP 530** with the message as plain text; argument errors are 400. A procedure's `string` result is a JSON string.
+- Local RTT for a reducer call 3–17 ms; Worker → Maincloud 14–65 ms (see DEPLOY.md).
+
+**B2:** `LessonRun` + `@tutor/teaching` + `@tutor/shared` + `@anthropic-ai/sdk` bundle for workerd without `nodejs_compat` (2.0 MiB, 348 KiB gzip, startup 75 ms). CPU per dispatch 27–188 ms (`wrangler tail`), i.e. above the Free plan's 10 ms; every invocation ended `ok`.
+
+**B6 partial:** voice smoke (`smoke:deployed`, n=4), typed turns (n=10), duplicate delivery, barge-in after the first beat, forced failure (wrong URL → retry → fallback line in 0.99 s). Turn end → first audio p50 3.2 s against the Node worker's 2.8 s. Not run yet: a class with sims on `fibonacci-cfdev`, `tutor_request`, the full E2E harness against the cloud.
+
+**Open for the lead/user:** switching `fibonacci-demo` (DEPLOY.md "Switch … and roll back"), a
+`tutor_request` path (module procedure or Cloudflare), and whether the ~0.4 s p50 cost is worth
+B-v2 preemptive dispatch (6.2).
+
 
 ### 2. Target design
 

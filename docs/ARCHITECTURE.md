@@ -52,6 +52,41 @@ response, so it can't consume a token-by-token LLM stream (async procedures: Spa
 Streaming is the one thing that decides time-to-first-audio, so it lives in the worker; non-streaming
 LLM work (memory, session summaries, dashboard, simulated students) stays in module procedures.
 
+**Optional: Cloudflare dispatch instead of the Node worker (`LLM_DISPATCH=cloudflare`, module env;
+default `worker`).** The module starts every LLM step itself: a ready student turn (`completeTurn`:
+voice, text, sim, interaction) or `startConversation` inserts an `llm_dispatch` row with a
+module-allocated `utteranceId`; the scheduled procedure `dispatchTurn` builds the body in one
+transaction (`buildLessonRequest`, session photo once, turn photo, topic prefetch, opening lead-in)
+and POSTs it, HMAC-signed, to the Cloudflare Worker (`cf-worker/`), which answers 202 and runs the
+unchanged `LessonRun` over SpacetimeDB's HTTP API. Code: `spacetimedb/src/dispatch.ts`,
+`cf-worker/src/`; runbook: DEPLOY.md "Cloudflare dispatch"; design: CLOUD_PLAN.md Part B.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as SpacetimeDB module
+    participant CF as Cloudflare Worker (fibonacci-dispatch)
+    participant A as Claude Haiku 5.5
+    B->>S: endTurn / submitTextTurn / startConversation
+    S->>S: completeTurn -> llm_dispatch (utteranceId) + dispatch_job (now) + dispatch_watch_job (+12 s)
+    S->>CF: dispatchTurn: POST /dispatch (body = planner request, photos; HMAC ts.nonce.body)
+    CF-->>S: 202 (dispatch sent)
+    CF->>A: messages.stream (same planner prompt + parser as the Node worker)
+    CF->>S: HTTP call begin_utterance / begin_opening (only a dispatched utteranceId is accepted)
+    loop each complete moment, strictly sequential
+        CF->>S: HTTP call begin_lesson, add_beat (validated as always)
+        S-->>B: beat, reply_sentence, audio_out
+    end
+    CF->>S: HTTP call append_tutor_turn
+    Note over S,CF: barge-in: interrupt records the heard tutor turn at once; the run's next call<br/>gets "not current" (HTTP 530) and aborts the stream (no repair round)
+    Note over S: dispatchWatch: nothing spoken after 12 s -> retry once (new utteranceId),<br/>then the fallback line; no new sentence for 20 s -> the module closes the reply
+```
+
+Not on this path (v1): preemptive planning (the LLM starts at turn `ready`, not 200 ms after speech
+ends), the tool reply mode (`REPLY_MODE=tools`), and `tutor_request` (slant feedback still needs the
+Node worker). Simulated students still write their messages in the module (`simStudentTurn`); the
+tutor's answers to them are dispatched like any other turn.
+
 **Why an STT proxy.** Cartesia's newest STT model `ink-2` is websocket-only; procedures can't open
 websockets. The proxy keeps STT a module procedure (`transcribePhrase` POSTs one phrase in one batch
 request, exactly as it would to a batch `ink-2` endpoint) and translates to the websocket. SpacetimeDB
@@ -157,6 +192,8 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 | `extraction_job` | procedure `extractMemory` | every `MEMORY_EVERY_N_TURNS` (6) turns, and once at session end | retries after 10 / 30 / 90 s |
 | `summary_job` | procedure `summarizeSession` | at session end | |
 | `sim_turn_job` | procedure `simStudentTurn` | 2–5 s after the tutor finished speaking to a simulated student | busy re-check every 1.5 s (max 40), failures retried after 5 s twice; stale jobs do nothing |
+| `dispatch_job` | procedure `dispatchTurn` | now (retry: 0.5 s), only with `LLM_DISPATCH=cloudflare` | POSTs one `llm_dispatch` to the Cloudflare Worker; scheduler-only |
+| `dispatch_watch_job` | reducer `dispatchWatch` | 12 s after a dispatch, re-armed every 6 s while a reply speaks | retry once, then the fallback line; closes a reply silent for 20 s; scheduler-only |
 | `dashboard_job` | procedure `dashboardTick` | `DASHBOARD_INTERVAL_S` (30 s) after the previous refresh finished | failed run retried in 10 s; skipped while the teacher observes |
 
 ## 3. Reducers and procedures
@@ -190,7 +227,7 @@ checks the caller's identity in the private `role` table.
 | `requestTutor` | client | `pipeline.ts` | Slant-lesson feedback request row (`tutor_request`). No UI calls it today; the worker (`tutorRequests.ts`) serves the rows if one appears |
 | `registerAgent(secret)` | worker | `index.ts` | Registers the worker identity as `agent` |
 | `agentHeartbeat`, `submitTutorResult` | agent | `pipeline.ts` | Heartbeat row 0; result of a `tutor_request` |
-| `beginUtterance`, `beginOpening` | agent | `voice_out.ts`, `opening.ts` | Start a tutor reply (or the opening) with a worker-chosen unique utterance id |
+| `beginUtterance`, `beginOpening` | agent | `voice_out.ts`, `opening.ts` | Start a tutor reply (or the opening) with a worker-chosen unique utterance id (with `LLM_DISPATCH=cloudflare`: only the module-allocated id of a dispatch that has not started) |
 | `beginLesson(sessionId, utteranceId, meta)` | agent | `pipeline.ts` | Lesson meta, validated with the team schema + phase policy + "no repeated check" before anything is spoken |
 | `addBeat(sessionId, utteranceId, idx, visual, narration)` | agent | `pipeline.ts` | One moment: compiled against `canvas_state`, `beat` + `reply_sentence`s (+ `tts_job`s) or `SenderError` with the validator message |
 | `addSentence` | agent | `voice_out.ts` | A free sentence (opening script, tool mode) + `tts_job` |
@@ -207,6 +244,9 @@ checks the caller's identity in the private `role` table.
 | `synthesizeSentence` | scheduled (`tts_job`) | `voice_out.ts` | Cartesia `/tts/sse` → `audio_out` event + sentence `ready` |
 | `finishTextSentence` | scheduled (`text_play_job`) | `text_mode.ts` | Text mode: sentence counts as played |
 | `extractMemory`, `summarizeSession` | scheduled | `memory.ts` | Haiku 5.5 structured JSON → memory tables |
+| `dispatchTurn` | scheduled (`dispatch_job`), `LLM_DISPATCH=cloudflare` | `dispatch.ts` | Builds the planner body in one transaction, POSTs it HMAC-signed to `CF_DISPATCH_URL` (202 within 5 s), else one retry / the fallback line |
+| `dispatchWatch` | scheduled (`dispatch_watch_job`) | `dispatch.ts` | Liveness of a dispatch: retry once, then the fallback line; closes a reply that stopped |
+| `takeDispatch(sessionId) → string` | agent (procedure), `LLM_DISPATCH=manual` | `dispatch.ts` | Local testing only: the pending dispatch body for a replay to `wrangler dev` |
 | `createTeacher` | client | `classroom.ts` | |
 | `setPresence(learnerId, status)` | client | `classroom.ts` | offline / waiting / in_session; `waiting` during an active class joins it at once (late joiner) |
 | `startClassSession(teacherId, goals, content, delivery, documentName, documentMime, documentText, documentData, simulatedCount)` | client | `classroom.ts` | Ends the teacher's previous class, links every online student into a new session, starts the simulation |

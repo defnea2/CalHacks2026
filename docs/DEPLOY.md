@@ -310,6 +310,87 @@ at a time (about 100 ms each); no errors. One outlier: a turn whose STT returned
 first audio (stall watchdog path). The module log shows one benign `begin_lesson: utterance … is
 not current` after a barge-in.
 
+## Cloudflare dispatch (CLOUD_PLAN Part B, `LLM_DISPATCH=cloudflare`)
+
+**Status 2026-10-25: running on the separate database `fibonacci-cfdev` only.** `fibonacci-demo`
+still uses the Node worker (`LLM_DISPATCH` unset = `worker`); switching it is the user's decision.
+
+| Piece | Value |
+| --- | --- |
+| Cloudflare Worker | `fibonacci-dispatch` (`cf-worker/`), <https://fibonacci-dispatch.ln-77c.workers.dev> (`POST /dispatch`, `GET /health`), account `77c7de2c…` |
+| Worker vars (`cf-worker/wrangler.toml`) | `STDB_URL=https://maincloud.spacetimedb.com`, `STDB_DB=fibonacci-cfdev`, `ANTHROPIC_MODEL=claude-haiku-5-5`, `LESSON_EFFORT=low`, `LESSON_LIBRARY=true` |
+| Worker secrets (`wrangler secret put`) | `ANTHROPIC_API_KEY`, `CF_DISPATCH_SECRET`, `STDB_TOKEN` (agent token of `fibonacci-cfdev`) |
+| Database | `fibonacci-cfdev` on Maincloud, module env `LLM_DISPATCH=cloudflare`, `CF_DISPATCH_URL`, `CF_DISPATCH_SECRET` |
+| Secrets on disk | `/Users/leanderneubronner/Desktop/CalHacks2026/.env.cfdev` (mode 600, ignored via `.env.*`): `AGENT_SECRET`, `INSIGHTS_KEY`, `CF_DISPATCH_SECRET`, `CF_DISPATCH_URL`, `LLM_DISPATCH`, STT vars. API keys from `.env` |
+
+### Deploy from scratch (another database name: replace `fibonacci-cfdev`)
+
+```bash
+# 0. secrets file (once): fresh AGENT_SECRET / INSIGHTS_KEY / CF_DISPATCH_SECRET, LLM_DISPATCH=cloudflare,
+#    STT_BASE_URL + CARTESIA_STT_MODEL as for fibonacci-demo; chmod 600 .env.cfdev
+# 1. the Worker (set STDB_DB in cf-worker/wrangler.toml first)
+cd cf-worker && npx wrangler deploy && cd ..          # prints https://fibonacci-dispatch.<sub>.workers.dev
+echo "CF_DISPATCH_URL=https://fibonacci-dispatch.<sub>.workers.dev/dispatch" >> .env.cfdev
+set -a; source .env; source .env.cfdev; set +a
+printf '%s' "$CF_DISPATCH_SECRET" | npx wrangler secret put CF_DISPATCH_SECRET --cwd cf-worker
+printf '%s' "$ANTHROPIC_API_KEY"  | npx wrangler secret put ANTHROPIC_API_KEY  --cwd cf-worker
+# 2. the module (publish.mjs refuses LLM_DISPATCH=cloudflare without URL + secret)
+SPACETIME_SERVER=maincloud SPACETIME_DB=fibonacci-cfdev node scripts/publish.mjs --yes-remote
+# 3. the Worker's agent identity (token goes straight into the secret, never printed)
+SPACETIME_SERVER=maincloud SPACETIME_DB=fibonacci-cfdev node scripts/cf-agent-token.mjs --yes-remote \
+  | npx wrangler secret put STDB_TOKEN --cwd cf-worker
+# 4. checks
+curl https://fibonacci-dispatch.<sub>.workers.dev/health                     # ok
+STDB=https://maincloud.spacetimedb.com DB=fibonacci-cfdev node cf-worker/scripts/measure-turns.mjs 4
+(cd cf-worker && npx wrangler tail fibonacci-dispatch)                     # one line per dispatch
+```
+
+Do **not** run the Node worker against a `cloudflare` database: its `beginUtterance` is rejected
+(`not dispatched`), but it would still spend an LLM call per turn. `tutor_request` (slant feedback)
+is not served on this path.
+
+### Switch an existing database (e.g. `fibonacci-demo`) and roll back
+
+Switch: steps 1–3 above with the database's own `AGENT_SECRET` (`.env.maincloud`) and
+`STDB_DB=fibonacci-demo`, then stop the laptop worker. Republishing hot-swaps the module; clients
+stay connected. Rollback: republish without `LLM_DISPATCH` (or `LLM_DISPATCH=worker`) and start the
+Node worker as in section 5. The `llm_dispatch` rows stay and are harmless. The agent token has no
+`exp` claim (checked 2026-10-25): it stays valid until the identity is removed from `role` or the
+database is recreated; rotate with step 3.
+
+### Local testing (no public URL)
+
+Procedures cannot reach loopback, so the module never POSTs locally. `LLM_DISPATCH=manual` creates
+the dispatches without POSTing; `cf-worker/scripts/replay-local.mjs` takes one (`take_dispatch`,
+agent), signs it like `dispatchTurn` and POSTs it to `wrangler dev` (`cf-worker/.dev.vars`, ignored:
+`STDB_URL=http://127.0.0.1:3000`, `STDB_DB`, `STDB_TOKEN` from `cf-agent-token.mjs --out`,
+`ANTHROPIC_API_KEY`, `CF_DISPATCH_SECRET`). `--duplicate` replays the same body (must add nothing),
+`--barge-in` interrupts after the first beat.
+
+### Measured on `fibonacci-cfdev` (2026-10-25, Maincloud + Cloudflare, server timestamps)
+
+| Metric | Cloudflare dispatch | Node worker on the laptop (above) |
+| --- | --- | --- |
+| Turn ready → dispatch sent (module) | 4–10 ms (one 138 ms) | n/a |
+| Dispatch sent → 202 back in the module (`ctx.http.fetch` round trip, n=17) | p50 about 210 ms, range 190–640 ms | n/a |
+| Turn ready → Worker received (Worker log, includes clock skew) | 166–305 ms | about 10 ms + one `buildLessonRequest` RTT |
+| Reducer RTT Worker → Maincloud (`add_beat`, `begin_utterance`) | 14–65 ms, outliers 214 / 632 ms | laptop 67–117 ms TCP connect |
+| Voice turn end → first audio (`smoke:deployed`, n=4) | p50 3.2 s (2.62, 3.22, 3.31, 3.43 s) | p50 2.8 s (n=6, 4 preemptive) |
+| Voice turn end → first playback (n=4) | 3.08–4.67 s | p50 3.2 s |
+| Session start → opening audio (lead-in, n=4) | 0.69–0.87 s | p50 0.80 s |
+| Text turn end → first sentence (n=10) | p50 about 0.5 s when an authored line leads, 2.0–3.7 s when the lesson's first beat leads | sim p50 1.54 s |
+| Beat-to-beat gap (two text runs) | p50 280–300 ms, p90 400–540 ms | (not measured) |
+| Worker CPU per dispatch (`wrangler tail` `cpuTime`) | 27–188 ms, outcome `ok` | n/a |
+
+The extra ~0.4 s at p50 is the dispatch hop (~0.2–0.3 s Maincloud → Cloudflare, mostly the
+procedure's TLS round trip) plus the dropped preemptive planning (CLOUD_PLAN 6.2). CPU per dispatch
+is above the Free plan's 10 ms and every invocation still ended `ok`, so the account behaves like
+Workers Paid (not checked in the dashboard). Forced failure (module republished with a wrong `CF_DISPATCH_URL`, 404): attempt 0 failed, the
+retry 0.5 s later failed, and the fallback line ("Which part feels confusing?") was the first
+sentence 0.99 s after the turn ended. In the normal runs no dispatch needed the retry or the fallback line; the
+fallback lines seen in the text runs came from `LessonRun` itself (two validator rejections in a
+row), exactly as with the Node worker.
+
 ## Env vars at a glance
 
 | Name | Used by | Where to set |
@@ -321,3 +402,5 @@ not current` after a barge-in.
 | `AGENT_TOKEN_FILE` | worker | shell (separate file for cloud) |
 | `VITE_SPACETIME_URI`, `VITE_SPACETIME_DB` | client build | shell at build time |
 | API keys, `STT_BASE_URL`, `INSIGHTS_KEY`, … | module env | `.env` or shell (table in step 3) |
+| `LLM_DISPATCH`, `CF_DISPATCH_URL`, `CF_DISPATCH_SECRET` | module env (Cloudflare dispatch) | `.env.cfdev` / shell |
+| `STDB_URL`, `STDB_DB` / `STDB_TOKEN`, `ANTHROPIC_API_KEY`, `CF_DISPATCH_SECRET` | Cloudflare Worker | `wrangler.toml` vars / `wrangler secret put` |
