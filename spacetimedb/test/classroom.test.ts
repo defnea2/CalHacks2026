@@ -1,3 +1,4 @@
+import { ScheduleAt } from 'spacetimedb';
 import { describe, it, expect } from 'vitest';
 import { TimeDuration } from 'spacetimedb';
 import { TestAuth } from 'spacetimedb/server/test-utils';
@@ -211,6 +212,73 @@ describe('startClassSession', () => {
   });
 });
 
+describe('late joiners (class session already active)', () => {
+  it('a real student who goes waiting during an active class is linked at once; voice/text mode kept', () => {
+    const env = setup(ANTHROPIC);
+    const { h, client } = env;
+    const t = teacher(env);
+    const cls = startClass(env, t.id, { simulatedCount: 2 });
+    expect(linked(h, cls.id)).toHaveLength(2);
+
+    const late = makeLearner(h, client, 'Lena');
+    call(h, client, mod.setPresence, { learnerId: late.id, status: 'waiting' });
+    const mine = linked(h, cls.id).filter(s => s.learnerId === late.id);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.voice).toBe(true);
+    expect(mine[0]!.taskText).toBe('Adding fractions with the same denominator');
+    expect(presenceOf(h, late.id)).toBe('in_session');
+
+    // Re-asserting `waiting` (hidden tab becomes visible) does not create another session.
+    call(h, client, mod.setPresence, { learnerId: late.id, status: 'waiting' });
+    expect(linked(h, cls.id).filter(s => s.learnerId === late.id).map(s => s.id)).toEqual([mine[0]!.id]);
+
+    // A typed ad-hoc session that switches to "wait for my teacher" joins in text mode.
+    const typed = makeLearner(h, client, 'Tom');
+    const adhoc = makeSession(h, client, typed.id);
+    call(h, client, mod.setSessionVoice, { sessionId: adhoc.id, voice: false });
+    call(h, client, mod.setPresence, { learnerId: typed.id, status: 'waiting' });
+    expect(session(h, adhoc.id).active).toBe(false);
+    expect(linked(h, cls.id).find(s => s.learnerId === typed.id)!.voice).toBe(false);
+  });
+
+  it('an explicit ad-hoc session ("learn by myself") during an active class stays ad-hoc', () => {
+    const env = setup();
+    const { h, client } = env;
+    const cls = startClass(env, teacher(env).id);
+    const solo = makeLearner(h, client, 'Sol');
+    const adhoc = makeSession(h, client, solo.id);
+    call(h, client, mod.setPresence, { learnerId: solo.id, status: 'in_session' });
+    expect(session(h, adhoc.id)).toMatchObject({ active: true, classSessionId: 0n });
+    expect(linked(h, cls.id)).toHaveLength(0);
+  });
+
+  it('nothing happens without an active class; the newest active class wins; ended class -> waiting stays', () => {
+    const env = setup();
+    const { h, client } = env;
+    const l = makeLearner(h, client, 'Nia');
+    call(h, client, mod.setPresence, { learnerId: l.id, status: 'waiting' });
+    expect([...h.db.session.iter()].some(s => s.learnerId === l.id)).toBe(false);
+    expect(presenceOf(h, l.id)).toBe('waiting');
+
+    const a = startClass(env, teacher(env, 'Mr. A').id); // Nia joins at start
+    expect(linked(h, a.id).map(s => s.learnerId)).toEqual([l.id]);
+    call(h, client, mod.endClassSession, { classSessionId: a.id });
+    expect(presenceOf(h, l.id)).toBe('waiting'); // module-written waiting does not re-link
+    expect([...h.db.session.iter()].filter(s => s.learnerId === l.id && s.active)).toHaveLength(0);
+
+    const other = makeLearner(h, client, 'Oli');
+    const b = startClass(env, teacher(env, 'Ms. B').id); // Nia (waiting) joins b
+    const c = startClass(env, teacher(env, 'Dr. C').id); // Nia moves to c (newest)
+    expect(linked(h, b.id)).toHaveLength(0);
+    call(h, client, mod.setPresence, { learnerId: other.id, status: 'waiting' });
+    expect(linked(h, c.id).map(s => s.learnerId).sort()).toEqual([l.id, other.id].sort());
+    // A student already in an active class is not moved by a repeated `waiting`.
+    const before = linked(h, c.id).find(s => s.learnerId === l.id)!.id;
+    call(h, client, mod.setPresence, { learnerId: l.id, status: 'waiting' });
+    expect(linked(h, c.id).find(s => s.learnerId === l.id)!.id).toBe(before);
+  });
+});
+
 // ---------------------------------------------------------------- simulation
 
 describe('simulation', () => {
@@ -408,6 +476,44 @@ describe('dashboard', () => {
     expect(at(jobs[0])).toBe(st.nextDueAt.microsSinceUnixEpoch);
   });
 
+  it('prompt passes names (ids only in the roster); ids the LLM writes into prose are stripped', () => {
+    const { h, env, cls, ids } = classWithSims(4);
+    const names = SIM_STUDENTS.slice(0, 4).map(s => s.name);
+    const first = names.map(n => n.split(' ')[0]!);
+    let req: Req | undefined;
+    (mod.refreshDashboard as any)(
+      proc(h, env.client, r => {
+        req = r;
+        return anthropicResponse({
+          classSummary: `${first[0]} (${ids[0]}) and ${first[1]} (id ${ids[1]}) add the bottoms; student ${ids[2]} is done.`,
+          clusters: [
+            { name: 'Adding bottoms', description: `${first[0]} (${ids[0]}) and ${first[1]} [#${ids[1]}] add the denominators.`, learnerIds: ids.slice(0, 2) },
+            { name: 'On track', description: `${names[2]} (${ids[2]}) and ${first[3]} got 8/8 (= 1).`, learnerIds: ids.slice(2) },
+          ],
+        });
+      }),
+      { classSessionId: cls.id }
+    );
+    const body = JSON.parse(req!.text);
+    const user = body.messages[0].content as string;
+    expect(user).toContain(`Roster (learnerId: name), for learnerIds only: ${ids[0]}: ${names[0]}`);
+    expect(user).not.toMatch(/Student \d+ —/);
+    for (const n of names) expect(user).toContain(`=== ${n}, age`);
+    expect(JSON.stringify(body.system)).toContain('Never write learner ids');
+    expect(body.output_config.effort).toBe(C.DASHBOARD_EFFORT);
+    expect(h.db.classSummary.classSessionId.find(cls.id)!.summary).toBe(`${first[0]} and ${first[1]} add the bottoms; ${first[2]} is done.`);
+    const descs = [...h.db.studentCluster.classSessionId.filter(cls.id)].sort((a, b) => a.position - b.position).map(c => c.description);
+    expect(descs).toEqual([`${first[0]} and ${first[1]} add the denominators.`, `${names[2]} and ${first[3]} got 8/8 (= 1).`]);
+    expect(clustersOf(h, cls.id).map(c => c.ids)).toEqual([ids.slice(0, 2), ids.slice(2)]);
+  });
+
+  it('DASHBOARD_EFFORT env overrides the dashboard thinking effort', () => {
+    const { h, env, cls } = classWithSims(2, setup({ ...ANTHROPIC, DASHBOARD_EFFORT: 'medium' }));
+    let req: Req | undefined;
+    (mod.refreshDashboard as any)(proc(h, env.client, r => ((req = r), anthropicResponse({ classSummary: 'ok', clusters: [] }))), { classSessionId: cls.id });
+    expect(JSON.parse(req!.text).output_config.effort).toBe('medium');
+  });
+
   it('repairs invalid LLM clusters (sizes, duplicates, unknown and missing students)', () => {
     const { h, cls, ids } = classWithSims(6);
     advance(h, C.DASHBOARD_INTERVAL_S);
@@ -487,6 +593,31 @@ describe('dashboard', () => {
     runDashboardJobs(h); // no responder: would throw on HTTP
     expect(before).toBe(2);
     expect(h.db.classSummary.classSessionId.find(cls.id)!.version).toBe(1);
+  });
+
+  it('watchdog: a run that dies without finishing is taken over by the backup job after the stale limit', () => {
+    const { h, env, cls, ids } = classWithSims(2);
+    // While a run is in flight, a backup job sits just past the stale limit.
+    let backupAt = 0n;
+    (mod.refreshDashboard as any)(
+      proc(h, env.client, (r, hh) => {
+        backupAt = [...hh.db.dashboardJob.classSessionId.filter(cls.id)].map(at).reduce((a, b) => (a > b ? a : b), 0n);
+        return dashboardAnswer('first', [{ name: 'P', ids }])(r, hh);
+      }),
+      { classSessionId: cls.id }
+    );
+    expect(backupAt - now(h)).toBeGreaterThanOrEqual(120_000_000n);
+    // Simulate a fatal crash mid-run: running stays set, only the backup job is queued.
+    h.withReducerTx(TestAuth.internal(), ctx => {
+      const st = ctx.db.dashboardState.classSessionId.find(cls.id)!;
+      ctx.db.dashboardState.classSessionId.update({ ...st, running: true, runStartedAt: ctx.timestamp });
+      for (const j of [...ctx.db.dashboardJob.classSessionId.filter(cls.id)]) ctx.db.dashboardJob.scheduledId.delete(j.scheduledId);
+      ctx.db.dashboardJob.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.time(ctx.timestamp.microsSinceUnixEpoch + 121_000_000n), classSessionId: cls.id });
+    });
+    advance(h, 125);
+    expect(runDashboardJobs(h, dashboardAnswer('recovered', [{ name: 'P', ids }]))).toBeGreaterThan(0);
+    expect(h.db.classSummary.classSessionId.find(cls.id)!.summary).toBe('recovered');
+    expect(h.db.dashboardState.classSessionId.find(cls.id)!.running).toBe(false);
   });
 
   it('no students: summary without an LLM call, clusters cleared', () => {

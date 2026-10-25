@@ -19,6 +19,7 @@ export type EnvName =
   | 'MEMORY_EVERY_N_TURNS'
   | 'SIM_MAX_TURNS'
   | 'DASHBOARD_INTERVAL_S'
+  | 'DASHBOARD_EFFORT'
   | 'LESSON_ARC';
 
 let override: Partial<Record<EnvName, string>> | null = null;
@@ -67,4 +68,9 @@ export const settings = {
   agentSecret: (ctx: { env: unknown }) => readEnv(ctx, 'AGENT_SECRET') ?? '',
   simMaxTurns: (ctx: { env: unknown }) => intEnv(ctx, 'SIM_MAX_TURNS', CLASSROOM_DEFAULTS.SIM_MAX_TURNS),
   dashboardIntervalS: (ctx: { env: unknown }) => intEnv(ctx, 'DASHBOARD_INTERVAL_S', CLASSROOM_DEFAULTS.DASHBOARD_INTERVAL_S),
+  /** Thinking effort of the dashboard call (env DASHBOARD_EFFORT = low | medium | high). */
+  dashboardEffort: (ctx: { env: unknown }): 'low' | 'medium' | 'high' => {
+    const v = readEnv(ctx, 'DASHBOARD_EFFORT')?.toLowerCase();
+    return v === 'low' || v === 'medium' || v === 'high' ? v : (CLASSROOM_DEFAULTS.DASHBOARD_EFFORT as 'low' | 'medium' | 'high');
+  },
 };

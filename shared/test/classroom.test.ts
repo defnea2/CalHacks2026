@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SIM_STUDENTS } from '../src/classroom/simStudents';
 import { clusterViolations, repairClusters, sizePartitions, sizeRuleText, type Cluster, type ClusterStudent } from '../src/classroom/clusters';
+import { stripLearnerIds } from '../src/classroom/dashboardText';
 import { pack } from '../src/lesson/index';
 import { conceptBelongsTo, isCategory } from '../src/lesson/api';
 import { MEMORY_KINDS, MEMORY_OUTCOMES } from '../src/types';
@@ -138,5 +139,22 @@ describe('cluster rules', () => {
       expect(clusterViolations(r.clusters, ids(s)), JSON.stringify({ n, raw })).toEqual([]);
       expect(repairClusters(raw, s)).toEqual(r);
     }
+  });
+});
+
+describe('stripLearnerIds (dashboard prose)', () => {
+  const ls = [
+    { id: '16', name: 'Jonas Weber' },
+    { id: '7', name: 'Mia Chen' },
+  ];
+  it('removes id tags after names in their common shapes', () => {
+    expect(stripLearnerIds('Jonas (16) and Mia (7) add the bottoms.', ls)).toBe('Jonas and Mia add the bottoms.');
+    expect(stripLearnerIds('Jonas Weber (id 16), Mia [#7], Jonas #16, Mia (learner id: 7).', ls)).toBe('Jonas Weber, Mia, Jonas, Mia.');
+    expect(stripLearnerIds('Student 16 needs help; learner #7 is done.', ls)).toBe('Jonas needs help; Mia is done.');
+  });
+  it('keeps maths and other parentheses', () => {
+    const t = 'Mia (correctly) got 5/8 + 3/8 = 8/8 (= 1); f(3) and step (2) are fine. Student 99 unknown.';
+    expect(stripLearnerIds(t, ls)).toBe(t);
+    expect(stripLearnerIds('Jonas (3/8) is close.', ls)).toBe('Jonas (3/8) is close.');
   });
 });

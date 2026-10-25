@@ -28,7 +28,7 @@ pnpm --filter client build
 | `/` | Entry: choose a role (student / teacher). No accounts |
 | `?student` | Pick or create a student (simulated classroom students are hidden) |
 | `?student=<id>` | "Learn by myself" (task text + optional photo, compressed to ≤ 1 MB in the browser, optional text mode → own session) or "Wait for my teacher"; "Continue" when the student has an active session |
-| `?wait=<id>` | Waiting room: presence `waiting`; when a teacher's `startClassSession` links a new session for this learner, the tab jumps to it (`?session=<id>&join=1`). Text mode can be chosen here (`setSessionVoice(false)` before the jump) |
+| `?wait=<id>` | Waiting room: presence `waiting`; when a teacher's `startClassSession` links a new session for this learner (or, if a class is already running, `setPresence('waiting')` links one at once: late joiner), the tab jumps to it (`?session=<id>&join=1`). Text mode can be chosen here (`setSessionVoice(false)` before the jump) |
 | `?teacher` | Pick or create a teacher |
 | `?teacher=<id>` | Class setup: learning goals, content to cover, how to teach, optional material (image compressed to ≤ 1 MB, Markdown or .txt ≤ 50 000 chars), number of simulated students (0–20; groups have 2 or 4 students, so even numbers fit best), students online now → `startClassSession` → dashboard. "Open dashboard" when a class is running |
 | `?class=<id>` | Teacher dashboard (below) |
