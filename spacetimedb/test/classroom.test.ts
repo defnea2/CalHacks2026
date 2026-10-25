@@ -554,16 +554,14 @@ describe('dashboard', () => {
 
   it('odd class: an LLM cluster of 3 is cut to 2 and the result names the ungrouped student', () => {
     const { h, env, cls, ids } = classWithSims(5);
-    const out = JSON.parse(
-      (mod.refreshDashboard as any)(proc(h, env.client, dashboardAnswer('x', [{ name: 'A', ids: ids.slice(0, 3) }, { name: 'B', ids: ids.slice(3) }])), { classSessionId: cls.id })
-    );
+    const out = (mod.refreshDashboard as any)(proc(h, env.client, dashboardAnswer('x', [{ name: 'A', ids: ids.slice(0, 3) }, { name: 'B', ids: ids.slice(3) }])), { classSessionId: cls.id });
     expect(out).toMatchObject({ ok: true, repaired: true, clusters: 2, ungrouped: [ids[2]] });
     expect(clustersOf(h, cls.id).map(c => c.ids)).toEqual([ids.slice(0, 2), ids.slice(3)]);
   });
 
   it('odd class: a valid answer that leaves one student out is kept unchanged', () => {
     const { h, env, cls, ids } = classWithSims(3);
-    const out = JSON.parse((mod.refreshDashboard as any)(proc(h, env.client, dashboardAnswer('x', [{ name: 'A', ids: ids.slice(0, 2) }])), { classSessionId: cls.id }));
+    const out = (mod.refreshDashboard as any)(proc(h, env.client, dashboardAnswer('x', [{ name: 'A', ids: ids.slice(0, 2) }])), { classSessionId: cls.id });
     expect(out).toMatchObject({ ok: true, repaired: false, ungrouped: [ids[2]] });
   });
 
@@ -597,7 +595,7 @@ describe('dashboard', () => {
     expect([...h.db.dashboardJob.iter()]).toHaveLength(0);
     expect(h.db.classSummary.classSessionId.find(cls.id)).toBeFalsy();
     const button = ((mod.refreshDashboard as any)(proc(h, env.client), { classSessionId: cls.id }));
-    expect(button).toEqual({ ok: false, skipped: 'impersonating', error: '', repaired: false, repairs: [], clusters: 0 });
+    expect(button).toEqual({ ok: false, skipped: 'impersonating', error: '', repaired: false, repairs: [], clusters: 0, ungrouped: [] });
     expect(() => call(h, env.client, mod.setImpersonation, { classSessionId: cls.id, learnerId: 777n })).toThrow(/not in class session/);
 
     call(h, env.client, mod.setImpersonation, { classSessionId: cls.id, learnerId: 0n });

@@ -310,6 +310,7 @@ export const RefreshDashboardResult = __t.object("RefreshDashboardResult", {
   repaired: __t.bool(),
   repairs: __t.array(__t.string()),
   clusters: __t.u32(),
+  ungrouped: __t.array(__t.string()),
 });
 export type RefreshDashboardResult = __Infer<typeof RefreshDashboardResult>;
 

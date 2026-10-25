@@ -489,6 +489,8 @@ const RefreshDashboardResult = t.object('RefreshDashboardResult', {
   repaired: t.bool(),
   repairs: t.array(t.string()),
   clusters: t.u32(),
+  /** Students in no cluster: exactly one in an odd class (dashboard "Not grouped yet"). */
+  ungrouped: t.array(t.string()),
 });
 
 /** Refresh button: one Haiku call -> class_summary + student_cluster. Skipped while impersonating.
@@ -496,7 +498,7 @@ const RefreshDashboardResult = t.object('RefreshDashboardResult', {
  *  SenderError, because the button shows it as a note. */
 export const refreshDashboard = spacetimedb.procedure({ classSessionId: t.u64() }, RefreshDashboardResult, (ctx, { classSessionId }) => {
   const r = classroom.refreshDashboard(ctx, classSessionId, false);
-  return { ok: r.ok, skipped: r.skipped ?? '', error: r.error ?? '', repaired: r.repaired ?? false, repairs: r.repairs ?? [], clusters: r.clusters ?? 0 };
+  return { ok: r.ok, skipped: r.skipped ?? '', error: r.error ?? '', repaired: r.repaired ?? false, repairs: r.repairs ?? [], clusters: r.clusters ?? 0, ungrouped: r.ungrouped ?? [] };
 });
 
 /** Teacher dashboard student profile (long-term memory, mastery, past sessions). Returns JSON
