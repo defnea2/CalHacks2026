@@ -192,7 +192,7 @@ body:has(.pr-app) { background: var(--pr-bg); }
 
 /* ---- student profile (drawer on the dashboard, or ?profile=<id>&as=<teacher> page) ---- */
 .db-profile-backdrop { position: fixed; inset: 0; z-index: 45; background: #1d2a2333; display: flex; justify-content: flex-end; }
-.db-profile-drawer { width: min(460px, 100vw); height: 100dvh; overflow-y: auto; background: var(--pr-bg); border-left: 1px solid var(--pr-rule); box-shadow: -18px 0 48px #1d2a2326; padding: 0 24px 32px; animation: sp-in .18s ease-out; outline: none; }
+.db-profile-drawer { width: max(50vw, min(460px, 100vw)); height: 100dvh; overflow-y: auto; background: var(--pr-bg); border-left: 1px solid var(--pr-rule); box-shadow: -18px 0 48px #1d2a2326; padding: 0 clamp(24px, 4vw, 56px) 32px; animation: sp-in .18s ease-out; outline: none; }
 .db-profile-bar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 14px 0 10px; background: var(--pr-bg); border-bottom: 1px solid var(--pr-rule); }
 .db-profile-close { background: none; border: 0; font-size: 22px; line-height: 1; color: var(--pr-muted); cursor: pointer; padding: 2px 6px; }
 .db-profile-close:hover { color: var(--pr-ink); }
