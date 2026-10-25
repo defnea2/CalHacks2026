@@ -1,3 +1,4 @@
+import { ScheduleAt } from 'spacetimedb';
 import { describe, it, expect } from 'vitest';
 import { TimeDuration } from 'spacetimedb';
 import { TestAuth } from 'spacetimedb/server/test-utils';
@@ -592,6 +593,31 @@ describe('dashboard', () => {
     runDashboardJobs(h); // no responder: would throw on HTTP
     expect(before).toBe(2);
     expect(h.db.classSummary.classSessionId.find(cls.id)!.version).toBe(1);
+  });
+
+  it('watchdog: a run that dies without finishing is taken over by the backup job after the stale limit', () => {
+    const { h, env, cls, ids } = classWithSims(2);
+    // While a run is in flight, a backup job sits just past the stale limit.
+    let backupAt = 0n;
+    (mod.refreshDashboard as any)(
+      proc(h, env.client, (r, hh) => {
+        backupAt = [...hh.db.dashboardJob.classSessionId.filter(cls.id)].map(at).reduce((a, b) => (a > b ? a : b), 0n);
+        return dashboardAnswer('first', [{ name: 'P', ids }])(r, hh);
+      }),
+      { classSessionId: cls.id }
+    );
+    expect(backupAt - now(h)).toBeGreaterThanOrEqual(120_000_000n);
+    // Simulate a fatal crash mid-run: running stays set, only the backup job is queued.
+    h.withReducerTx(TestAuth.internal(), ctx => {
+      const st = ctx.db.dashboardState.classSessionId.find(cls.id)!;
+      ctx.db.dashboardState.classSessionId.update({ ...st, running: true, runStartedAt: ctx.timestamp });
+      for (const j of [...ctx.db.dashboardJob.classSessionId.filter(cls.id)]) ctx.db.dashboardJob.scheduledId.delete(j.scheduledId);
+      ctx.db.dashboardJob.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.time(ctx.timestamp.microsSinceUnixEpoch + 121_000_000n), classSessionId: cls.id });
+    });
+    advance(h, 125);
+    expect(runDashboardJobs(h, dashboardAnswer('recovered', [{ name: 'P', ids }]))).toBeGreaterThan(0);
+    expect(h.db.classSummary.classSessionId.find(cls.id)!.summary).toBe('recovered');
+    expect(h.db.dashboardState.classSessionId.find(cls.id)!.running).toBe(false);
   });
 
   it('no students: summary without an LLM call, clusters cleared', () => {
