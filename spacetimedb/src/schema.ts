@@ -534,6 +534,8 @@ const spacetimedb = schema(
       SIM_MAX_TURNS: t.option(t.string()),
       /** Teacher dashboard refresh interval in seconds (default 30). */
       DASHBOARD_INTERVAL_S: t.option(t.string()),
+      /** Lesson arc of new sessions: a pack arc id (default demo2min) or `adaptive` (no arc). */
+      LESSON_ARC: t.option(t.string()),
     },
   }
 );

@@ -60,6 +60,9 @@ describe('demo2min arc', () => {
     call(e.h, e.agent, mod.beginUtterance, { sessionId: e.s.id, utteranceId: 100n, replyToIdx: 0, preemptive: false });
     // Diagnosis first is not allowed: the tutor owns the explanation.
     expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify({ ...demoMeta, phase: 'diagnose' }) })).toThrow(/Allowed: intuition/);
+    // The task may not be the homework itself (it is handed back at the end).
+    const homework = { ...demoMeta, check: { kind: 'number', prompt: `${TASK} What is the new top number?`, rule: { operation: 'value', value: 8 } } };
+    expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(homework) })).toThrow(/own homework/);
     call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 100n, meta: JSON.stringify(demoMeta) });
     demoMoments.slice(0, 3).forEach((m, i) => addBeat(e, 100n, i, m, false));
     const formal = JSON.parse(beats(e, 100n)[2]!.visual);

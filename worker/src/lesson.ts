@@ -501,6 +501,9 @@ export class LessonRun {
 /** The validator message for a check that repeats an asked question (same rule as the module's beginLesson). */
 export function repeatedCheck(request: ModelRequest, prompt: string | undefined): string | null {
   if (!prompt) return null;
+  const original = request.context.session.originalQuestion;
+  if (request.context.session.arc && original && normalizePrompt(prompt).includes(normalizePrompt(original)))
+    return `The check asks the learner's own homework ("${original}"). Ask a similar task with different numbers; the homework is handed back at the end.`;
   return recentCheckPrompts(request).some(p => normalizePrompt(p) === normalizePrompt(prompt))
     ? `The check repeats a question the learner was already asked ("${prompt}"). Ask a new question with different words or numbers.`
     : null;

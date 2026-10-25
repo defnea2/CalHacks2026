@@ -243,6 +243,10 @@ export function beginLesson(ctx: Ctx, args: { sessionId: bigint; utteranceId: bi
   // No repeated questions across steps (the team UI re-asking the same check felt like a loop).
   if (meta.check && recentCheckPrompts(request).some(p => normalizePrompt(p) === normalizePrompt(meta.check!.prompt)))
     throw new SenderError(`The check repeats a question the learner was already asked ("${meta.check.prompt}"). Ask a new question with different words or numbers.`);
+  // Under an arc the homework is handed back at the end: a check may not be the original question.
+  const original = request.context.session.originalQuestion;
+  if (request.context.session.arc && meta.check && original && normalizePrompt(meta.check.prompt).includes(normalizePrompt(original)))
+    throw new SenderError(`The check asks the learner's own homework ("${original}"). Ask a similar task with different numbers; the homework is handed back at the end.`);
   if (!allowed.includes(meta.phase)) throw new SenderError(`Phase is not supported by the current learner evidence: ${meta.phase}. Allowed: ${allowed.join(', ') || 'none'}.`);
   ctx.db.lessonPlan.insert({
     utteranceId: args.utteranceId,
