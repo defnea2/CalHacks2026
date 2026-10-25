@@ -33,6 +33,9 @@ export interface PhaseDef {
 }
 
 export interface BoardKindDef {
+  /** When present, this is the stricter model input contract. Historical/library
+   * board kinds remain readable but are not offered for free-form generation. */
+  generationSchema?: JsonSchema;
   name: string;
   /** Tool description for show_board_item. */
   description: string;

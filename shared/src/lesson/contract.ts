@@ -441,7 +441,8 @@ export function checkToolSpecs(pack: LessonPack): string[] {
   const topic = byName.get(TOOL_NAMES.setTopic);
   if (!phase || !board || !topic) return [...errs, 'missing set_phase, show_board_item or set_topic'];
   sameSet('set_phase.phase', phase.properties?.phase?.enum, pack.phases.map(p => p.id));
-  sameSet('show_board_item.kind', board.properties?.kind?.enum, boardKindNames(pack));
+  const generated = pack.boardKinds.filter(k => k.generationSchema).map(k => k.name);
+  sameSet('show_board_item.kind', board.properties?.kind?.enum, generated.length ? generated : boardKindNames(pack));
   sameSet('set_topic.category', topic.properties?.category?.enum, pack.taxonomy.map(c => c.key));
   sameSet('set_topic.concept', topic.properties?.concept?.enum, pack.taxonomy.flatMap(c => c.concepts.map(k => k.key)));
 

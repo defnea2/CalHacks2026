@@ -8,8 +8,9 @@ import { showBoardItem } from './show_board_item';
 import { clearBoard } from './clear_board';
 import { remember } from './remember';
 import { visualUnavailable } from './visual_unavailable';
+import { askLearner } from './ask_learner';
 
-export const TOOL_MODULES: ToolModule[] = [setTopic, setPhase, showBoardItem, clearBoard, remember, visualUnavailable];
+export const TOOL_MODULES: ToolModule[] = [setTopic, setPhase, showBoardItem, clearBoard, remember, visualUnavailable, askLearner];
 
 export function createToolDefs(pack: LessonPack, modules: ToolModule[] = TOOL_MODULES, specs: ToolSpec[] = buildToolSpecs(pack)): ToolDef[] {
   const byName = new Map(modules.map(m => [m.name, m]));

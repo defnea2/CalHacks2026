@@ -8,7 +8,7 @@
 // while the student may still continue: its output is held in memory until release() (turn
 // became ready with the same transcript) or thrown away by discard(). Nothing reaches
 // SpacetimeDB before release(), not even beginUtterance.
-import { SentenceChunker, normalizeForSpeech, TOOL_NAMES, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { SentenceChunker, normalizeForSpeech, TOOL_NAMES, LEARNER_QUESTIONS, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
 import { VISUAL_UNAVAILABLE } from './tools/visual_unavailable';
 import { buildMessages } from './prompt';
 import type { ToolResult, ToolRouter } from './router';
@@ -24,6 +24,7 @@ export interface ReplyDeps {
   system: string;
   maxToolRounds: number;
   recentTurns: number;
+  verifiedSpeech?: boolean;
   log: (msg: string) => void;
   /** Sentence status lookup (from the subscription) to tell what was actually played. */
   isDropped?: (utteranceId: bigint, idx: number) => boolean;
@@ -181,6 +182,9 @@ export class ReplyRun {
   }
 
   private enqueueSentence(display: string): void {
+    // In production, only the verified canvas compiler or an authored question
+    // can speak. This also closes plain-reply and tool-free fallback bypasses.
+    if (this.deps.verifiedSpeech !== false) return;
     void this.enqueue(async () => {
       // A paired canvas owns its spoken explanation. Ignore free text that the
       // model emitted after that tool instead of speaking the explanation twice.
@@ -259,8 +263,9 @@ export class ReplyRun {
         // Last allowed round: offer no tools, so the model has to speak (it otherwise tends to
         // chain tool-only rounds and the student hears nothing).
         const last = round >= toolRoundLimit && round > 0;
-        if (last && this.rejectedVisual) break;
-        const tools = last ? [] : this.deps.router.specs();
+        if (last && (this.rejectedVisual || this.deps.verifiedSpeech !== false)) break;
+        const tools = last ? [] : this.deps.router.specs().filter(tool => !this.rejectedVisual ||
+          tool.name === TOOL_NAMES.showBoardItem || tool.name === TOOL_NAMES.visualUnavailable);
         // A round that fails before any event arrived is retried (flaky network): nothing from it
         // reached SpacetimeDB yet. Once output has started, a failure ends the reply as before.
         for (let attempt = 0; ; attempt++) {
@@ -326,6 +331,8 @@ export class ReplyRun {
       if (!this.aborted && this.rejectedVisual && !this.narratedCanvas) {
         await this.deps.transport.clearBoard({ sessionId: this.sessionId });
         await this.narrateCanvas([VISUAL_UNAVAILABLE]);
+      } else if (!this.aborted && this.deps.verifiedSpeech !== false && !this.sent.length) {
+        await this.narrateCanvas([LEARNER_QUESTIONS.clarify_step]);
       }
       if (!this.aborted) await this.close(false);
     } catch (e) {

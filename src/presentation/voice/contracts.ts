@@ -17,3 +17,6 @@ export const VoiceCanvasContentSchema = z.object({
   }).strict()).min(1).max(4),
 }).strict();
 export type VoiceCanvasContent = z.input<typeof VoiceCanvasContentSchema>;
+export const VoiceCanvasGenerationSchema = VoiceCanvasContentSchema.extend({
+  moments: z.array(VoiceCanvasContentSchema.shape.moments.element.extend({ teaching: TeachingIntentSchema })).min(1).max(4),
+});

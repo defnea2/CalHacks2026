@@ -26,6 +26,7 @@ export function validateVoiceCanvasContent(input: unknown, options: { requireGro
       m.visual = compiled.visual;
       m.narration = compiled.narration;
       m.teaching = compiled.teaching;
+      if (index && m.narration === content.moments[index - 1].narration) throw new Error('Repeated teaching claim: remove the redundant moment.');
       canvas = compiled.after;
     } else canvas = applyCanvasCommands(canvas, compileMathCommand(m.visual, canvas, { ...m, title: content.title }));
   });

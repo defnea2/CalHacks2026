@@ -42,6 +42,14 @@ function pair(v: MathVisual, targets: string[]) {
   if (selected.length !== 2 || selected.some(x => !x) || selected[0]!.id === selected[1]!.id) return fail('two distinct visible targets are required');
   return selected as [typeof items[number], typeof items[number]];
 }
+function selectTargets(v: MathVisual, targets: string[]): MathVisual {
+  if (!targets.length) return v;
+  if (v.kind !== 'bars' && v.kind !== 'number_line') return fail('this representation has no addressable targets');
+  const items = v.kind === 'bars' ? v.bars : v.markers;
+  if (new Set(targets).size !== targets.length || targets.some(id => !items.some(x => x.id === id))) return fail('distinct visible targets are required');
+  return v.kind === 'bars' ? { ...v, bars: targets.map(id => v.bars.find(x => x.id === id)!) }
+    : { ...v, markers: targets.map(id => v.markers.find(x => x.id === id)!) };
+}
 function fraction(n: number, d: number) { return `${n} out of ${d} equal parts`; }
 function structure(v: MathVisual): string {
   switch (v.kind) {
@@ -52,8 +60,8 @@ function structure(v: MathVisual): string {
     case 'number_line': return v.markers.map(m => `${m.label} is at ${number(m.value)}.`).join(' ');
     case 'geometry': return `This ${v.shape === 'rectangle' ? 'rectangle' : 'right triangle'} has base ${v.width} and perpendicular height ${v.height}.`;
     case 'parallelogram': return v.stage === 'cut'
-      ? 'The left triangle is cut along the perpendicular height, without changing the pieces.'
-      : v.stage === 'reassembled' ? `The left triangle slides right to form a rectangle with base ${v.base} and height ${v.height}.`
+      ? 'A perpendicular cut separates the left triangle from the rest of the shape.'
+      : v.stage === 'reassembled' ? `The pieces form a rectangle with base ${v.base} and height ${v.height}.`
       : `The base is ${v.base} and the perpendicular height is ${v.height}.`;
   }
 }
@@ -82,7 +90,7 @@ function result(v: MathVisual, intent: z.infer<typeof TeachingIntentSchema>): st
 function question(v: MathVisual, intent: z.infer<typeof TeachingIntentSchema>): string {
   if (v.kind === 'array') return v.splitAt === null ? 'How many squares are there altogether?' : 'How could you use the two parts to find the total?';
   if (v.kind === 'geometry' || v.kind === 'parallelogram') return 'How could you use the base and perpendicular height to find the area?';
-  if (v.kind === 'bars' && intent.concept === 'fraction_amount') return 'What fraction of bar A is shaded?';
+  if (v.kind === 'bars' && intent.concept === 'fraction_amount') return `What fraction of bar ${v.bars[0].label} is shaded?`;
   const [a, b] = pair(v, intent.targets);
   return v.kind === 'bars' ? `Do bars ${a.label} and ${b.label} show the same shaded amount, or is one greater?`
     : intent.concept === 'number_distance' ? `How far apart are ${a.label} and ${b.label}?` : `Which is farther right, ${a.label} or ${b.label}, or are they at the same position?`;
@@ -92,6 +100,26 @@ function signature(v: MathVisual) {
   return JSON.stringify(math);
 }
 function area(v: MathVisual) { return v.kind === 'geometry' ? geometryArea(v) : v.kind === 'parallelogram' ? v.base * v.height : fail('an area claim needs an area diagram'); }
+function change(before: MathVisual, after: MathVisual): string {
+  if (before.kind === 'parallelogram' && after.kind === 'parallelogram') {
+    if (before.stage === 'slant' && after.stage === 'cut') return 'Cut along the perpendicular height to separate the left triangle.';
+    if (before.stage === 'cut' && after.stage === 'reassembled') return `The left triangle slides right by ${after.base} units to complete the rectangle.`;
+  }
+  if (before.kind === 'array' && after.kind === 'array' && before.rows === after.rows && before.columns === after.columns && after.splitAt !== null)
+    return `Split each row into ${after.splitAt} and ${after.columns - after.splitAt} squares; there are still ${after.rows} rows of ${after.columns}.`;
+  if (before.kind === 'geometry' && after.kind === 'geometry') {
+    const changes = (['width', 'height'] as const).filter(key => before[key] !== after[key]);
+    return changes.map(key => `The ${key === 'width' ? 'base' : 'perpendicular height'} changes from ${before[key]} to ${after[key]} units.`).join(' ');
+  }
+  if (before.kind === 'bars' && after.kind === 'bars') return after.bars.filter(a => {
+    const b = before.bars.find(x => x.id === a.id);
+    return !b || b.parts !== a.parts || b.shaded !== a.shaded;
+  }).map(a => {
+    const b = before.bars.find(x => x.id === a.id);
+    return b ? `Bar ${a.label} changes from ${fraction(b.shaded, b.parts)} to ${fraction(a.shaded, a.parts)}.` : structure(after);
+  }).join(' ');
+  return `Before: ${structure(before)} Now: ${structure(after)}`;
+}
 function conserve(before: MathVisual, after: MathVisual, intent: z.infer<typeof TeachingIntentSchema>): string {
   if (before.kind === 'array' && after.kind === 'array') {
     if (before.rows * before.columns !== after.rows * after.columns) return fail('the total number of squares changed');
@@ -103,7 +131,7 @@ function conserve(before: MathVisual, after: MathVisual, intent: z.infer<typeof 
       const b = before.bars.find(x => x.id === a.id);
       if (!b || a.shaded * b.parts !== b.shaded * a.parts) return fail('repartitioning changed the shaded fraction');
     }
-    return 'The partitions changed, but each bar keeps the same shaded amount of the same whole.';
+    return `The partitions changed, but ${after.bars.map(b => `bar ${b.label}`).join(' and ')} ${after.bars.length === 1 ? 'keeps' : 'keep'} the same shaded amount of the same whole.`;
   }
   if (intent.concept === 'area_conservation' || intent.concept === 'area') {
     if (area(before) !== area(after)) return fail('the area changed');
@@ -118,8 +146,10 @@ export function compileTeaching(input: unknown, after: MathVisual, before?: Math
   const intent = TeachingIntentSchema.parse(input);
   const capability = MATH_CAPABILITIES[intent.concept];
   if (!capability.kinds.includes(after.kind)) return fail(`${intent.concept} cannot be shown with ${after.kind}`);
-  if (intent.targets.length && !['compare', 'calculate', 'question'].includes(intent.action)) return fail('targets only apply to comparisons, calculations and questions');
-  if (intent.targets.length && after.kind !== 'bars' && after.kind !== 'number_line') return fail('this representation has no addressable comparison targets');
+  after = selectTargets(after, intent.targets);
+  if (before && ['change', 'conserve'].includes(intent.action)) before = selectTargets(before, intent.targets);
+  if (intent.concept === 'number_distance' && intent.action === 'compare') return fail('use calculate to measure distance, or number_order to compare positions');
+  if (intent.concept === 'distributivity' && intent.action === 'calculate' && after.kind === 'array' && after.splitAt === null) return fail('split the array before deriving its two partial products');
   if (intent.concept === 'fraction_equivalence' && ['compare', 'calculate'].includes(intent.action)) {
     const [a, b] = pair(after, intent.targets);
     if (!('parts' in a) || !('parts' in b) || a.shaded * b.parts !== b.shaded * a.parts) return fail('these fractions are not equivalent');
@@ -135,7 +165,7 @@ export function compileTeaching(input: unknown, after: MathVisual, before?: Math
       if (!before || !capability.kinds.includes(before.kind)) return fail('a transformation needs a compatible starting picture');
       if (signature(before) === signature(after)) return fail('no mathematical change was rendered');
       if (intent.action === 'conserve') narration = conserve(before, after, intent);
-      else narration = `Before: ${structure(before)} Now: ${structure(after)}`;
+      else narration = change(before, after);
       break;
     }
   }

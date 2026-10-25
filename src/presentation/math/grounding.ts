@@ -10,6 +10,11 @@ export function compileGroundedMoment(input: { visual: unknown; teaching: unknow
   let commands = compileMathCommand(visual, before, { ...input, title: 'Math' });
   let after = applyCanvasCommands(before, commands);
   const canonical = canonicalMathVisual(after.math!.visual);
+  const previous = before.math?.visual;
+  if (previous?.kind === 'parallelogram' && canonical.kind === 'parallelogram' && visual.kind === 'update' &&
+      (previous.stage !== 'slant' || canonical.stage !== 'slant') &&
+      (previous.base !== canonical.base || previous.height !== canonical.height || previous.shear !== canonical.shear))
+    throw new Error('A cut-and-slide transition must keep the same pieces: base, height and shear cannot change during the proof.');
   if (visual.kind !== 'keep' && visual.kind !== 'update') {
     const { id: _id, title: _title, interactive: _interactive, showEquation: _show, focus: _focus, ...shape } = canonical;
     visual = CompactMathCommandSchema.parse(shape);
@@ -17,6 +22,7 @@ export function compileGroundedMoment(input: { visual: unknown; teaching: unknow
     after = applyCanvasCommands(before, commands);
   }
   const { narration, intent } = compileTeaching(input.teaching, canonical, before.math ? canonicalMathVisual(before.math.visual) : undefined);
+  if (['change', 'conserve'].includes(intent.action) && visual.kind !== 'update') throw new Error('A transformation must update existing objects, not replace the picture.');
   if (intent.action === 'question' && input.showEquation) throw new Error('Hide the answer equation when asking a prediction.');
   return { visual, commands, after, narration, teaching: intent };
 }

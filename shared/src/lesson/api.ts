@@ -98,12 +98,28 @@ export const TOOL_NAMES = {
   clearBoard: 'clear_board',
   remember: 'remember',
   visualUnavailable: 'visual_unavailable',
+  askLearner: 'ask_learner',
+} as const;
+
+/** Conversational moves carry no unverified mathematical assertions. */
+export const LEARNER_QUESTIONS = {
+  clarify_topic: 'What would you like to understand?',
+  clarify_step: 'Which part feels confusing?',
+  invite_reasoning: 'Tell me how you worked that out.',
+  repeat_request: 'Could you say that once more?',
+  handoff: 'Try your original question now. Talk me through your first step.',
 } as const;
 
 export function buildToolSpecs(pack: LessonPack): ToolSpec[] {
   const categories = pack.taxonomy.map(c => c.key);
   const concepts = pack.taxonomy.flatMap(c => c.concepts.map(k => k.key));
+  const generatedKinds = generationKinds(pack);
   return [
+    {
+      name: TOOL_NAMES.askLearner,
+      description: 'Ask a conversational question without adding a mathematical claim. Use for clarification, hearing the learner\'s reasoning, or returning to their homework. For a question about specific visible quantities use math_canvas with teaching.action question instead.',
+      parameters: { type: 'object', properties: { question: { type: 'string', enum: Object.keys(LEARNER_QUESTIONS) } }, required: ['question'], additionalProperties: false },
+    },
     {
       name: TOOL_NAMES.visualUnavailable,
       description: 'Use when the requested demonstration is outside the canvas teaching capabilities. Clears the unrelated picture and speaks an honest limitation automatically. Never substitute an unrelated diagram or claim unsupported mathematics.',
@@ -138,15 +154,15 @@ export function buildToolSpecs(pack: LessonPack): ToolSpec[] {
       name: TOOL_NAMES.showBoardItem,
       description:
         'Show something on the shared board. Either pass kind + content, or a library taskKey. ' +
-        pack.boardKinds.map(k => `${k.name}: ${k.description}`).join(' | '),
+        generatedKinds.map(k => `${k.name}: ${k.description}`).join(' | '),
       parameters: {
         type: 'object',
         properties: {
-          kind: { type: 'string', enum: pack.boardKinds.map(k => k.name) },
+          kind: { type: 'string', enum: generatedKinds.map(k => k.name) },
           content: {
             type: 'object',
             description: 'Use the exact content schema for the selected kind. Updates use changes:[{type:..., ...fields}].',
-            anyOf: pack.boardKinds.map(k => k.contentSchema),
+            anyOf: generatedKinds.map(k => k.generationSchema ?? k.contentSchema),
           },
           taskKey: { type: 'string', description: 'Key of a library task to show instead of content.' },
           expectedAnswer: {
@@ -195,5 +211,10 @@ export function describeTaxonomy(pack: LessonPack): string {
 
 /** {{board}} kinds block for the system prompt. */
 export function describeBoardKinds(pack: LessonPack): string {
-  return pack.boardKinds.map(k => `- ${k.name}: ${k.description}`).join('\n');
+  return generationKinds(pack).map(k => `- ${k.name}: ${k.description}`).join('\n');
+}
+
+function generationKinds(pack: LessonPack) {
+  const verified = pack.boardKinds.filter(k => k.generationSchema);
+  return verified.length ? verified : pack.boardKinds;
 }

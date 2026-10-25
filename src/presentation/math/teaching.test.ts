@@ -53,4 +53,19 @@ describe('grounded teaching compiler', () => {
     expect(JSON.stringify(proposal)).toBe(original);
     expect(() => strict(plan([{ visual: { kind: 'bars', bars: [{ id: 'a', label: 'A', parts: 2, shaded: 3 }] }, teaching: { concept: 'fraction_amount', action: 'observe' } }]))).toThrow(/Shading exceeds/);
   });
+  it('keeps transformation identity, proof pieces and questions consistent with the animation', () => {
+    expect(() => strict(plan([
+      { visual: { kind: 'geometry', shape: 'rectangle', width: 3, height: 2 }, teaching: { concept: 'area', action: 'observe' } },
+      { visual: { kind: 'geometry', shape: 'rectangle', width: 6, height: 2 }, teaching: { concept: 'area', action: 'change' } },
+    ]))).toThrow(/update existing objects/);
+    expect(() => strict(plan([
+      { visual: { kind: 'parallelogram', base: 6, height: 4, shear: 2 }, teaching: { concept: 'area', action: 'observe' } },
+      { visual: { kind: 'update', changes: [{ type: 'set_parallelogram', base: 8, stage: 'cut' }] }, teaching: { concept: 'area', action: 'change' } },
+    ]))).toThrow(/same pieces/);
+    expect(() => strict(plan([{ visual: { kind: 'array', rows: 3, columns: 7 }, teaching: { concept: 'equal_groups', action: 'question' }, showEquation: true }]))).toThrow(/Hide the answer/);
+    expect(() => strict(plan([
+      { visual: { kind: 'array', rows: 3, columns: 7 }, teaching: { concept: 'equal_groups', action: 'observe' } },
+      { visual: { kind: 'keep' }, teaching: { concept: 'equal_groups', action: 'observe' } },
+    ]))).toThrow(/redundant moment/);
+  });
 });

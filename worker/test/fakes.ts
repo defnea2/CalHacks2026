@@ -92,7 +92,7 @@ export class FakeLlm implements LlmProvider {
   }
 }
 
-export const OPTS: AgentOptions = { preemptive: false, preemptiveSilenceMs: 30, maxToolRounds: 2, recentTurns: 12, toolTimeoutMs: 200 };
+export const OPTS: AgentOptions = { preemptive: false, preemptiveSilenceMs: 30, maxToolRounds: 2, recentTurns: 12, toolTimeoutMs: 200, verifiedSpeech: false };
 
 export function makeAgent(llm: LlmProvider, transport = new FakeTransport(), opts: Partial<AgentOptions> = {}, logs: string[] = []) {
   const agent = new Agent({ transport, llm, pack, opts: { ...OPTS, ...opts }, log: m => logs.push(m) });

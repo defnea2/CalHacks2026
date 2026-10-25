@@ -24,6 +24,26 @@ async function answer(llm: FakeLlm, prep?: (t: ReturnType<typeof makeAgent>['tra
 }
 
 describe('reply', () => {
+  it('production speech cannot bypass the compiler with an ordinary response', async () => {
+    const llm = new FakeLlm([[text('This rectangle has 99 square units and is obtuse.'), done]]);
+    const { agent, transport } = makeAgent(llm, undefined, { verifiedSpeech: true });
+    agent.onSession(session(S));
+    agent.onTurn(turn(S, 0, 'Explain this picture.'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Which part feels confusing?']);
+    agent.closeAll();
+  });
+
+  it('production conversation uses authored questions without misclassifying the learner', async () => {
+    const llm = new FakeLlm([[text('That is correct!'), tool(TOOL_NAMES.askLearner, { question: 'invite_reasoning' }), done]]);
+    const { agent, transport } = makeAgent(llm, undefined, { verifiedSpeech: true });
+    agent.onSession(session(S));
+    agent.onTurn(turn(S, 0, 'I think it is five.'));
+    await waitFor(() => transport.of('appendTutorTurn').length === 1);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Tell me how you worked that out.']);
+    agent.closeAll();
+  });
+
   it('delivers paired narration once, keeps its cues intact, and skips redundant model rounds', async () => {
     const llm = new FakeLlm([[
       tool(TOOL_NAMES.setTopic, { category }),
@@ -194,7 +214,7 @@ describe('reply', () => {
         ...tokens('First we cut the pizza into equal slices. '),
         tool(TOOL_NAMES.setPhase, { phase: phaseId, reason: 'found the gap' }),
         ...tokens('Look at the board with me for a second. '),
-        tool(TOOL_NAMES.showBoardItem, { kind, taskKey: 'library-example' }),
+        tool(TOOL_NAMES.showBoardItem, { taskKey: 'library-example' }),
         ...tokens('Each slice is the same size as the others.'),
         done,
       ],
@@ -207,7 +227,7 @@ describe('reply', () => {
   });
 
   it('board item before any text points at sentence 0', async () => {
-    const llm = new FakeLlm([[tool(TOOL_NAMES.showBoardItem, { kind, taskKey: 'library-example' }), ...tokens('Here is a picture of our pizza for you.'), done]]);
+    const llm = new FakeLlm([[tool(TOOL_NAMES.showBoardItem, { taskKey: 'library-example' }), ...tokens('Here is a picture of our pizza for you.'), done]]);
     const { transport } = await answer(llm);
     expect(transport.of('showBoardItem')[0]!.sentenceIdx).toBe(0);
   });
@@ -226,7 +246,7 @@ describe('reply', () => {
     const { transport } = await answer(llm);
     expect(llm.calls.map(c => c.tools.length > 0)).toEqual([true, true, true]);
     expect(transport.of('showBoardItem')).toHaveLength(1);
-    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Let us look at the picture.', 'The left triangle is cut along the perpendicular height, without changing the pieces.']);
+    expect(transport.of('addSentence').map(s => s.display)).toEqual(['Let us look at the picture.', 'A perpendicular cut separates the left triangle from the rest of the shape.']);
   });
 
   it('action-only reply without text calls the LLM again with the results', async () => {

@@ -176,6 +176,15 @@ describe('contract checks catch broken packs', () => {
     });
     expect(PACK_CHECKS.toolSpecs(p)).toEqual([]);
   });
+
+  it('offers the generation contract without dropping historical renderer kinds', () => {
+    const verified = pack.boardKinds.filter(k => k.generationSchema);
+    expect(verified.length).toBeGreaterThan(0);
+    const spec = buildToolSpecs(pack).find(s => s.name === 'show_board_item')!.parameters;
+    expect(spec.properties?.kind?.enum).toEqual(verified.map(k => k.name));
+    expect(spec.properties?.content?.anyOf).toEqual(verified.map(k => k.generationSchema));
+    expect(pack.boardKinds.length).toBeGreaterThan(verified.length);
+  });
 });
 
 describe('latexMath evaluator', () => {

@@ -24,6 +24,8 @@ export interface AgentOptions {
   maxToolRounds: number;
   recentTurns: number;
   toolTimeoutMs: number;
+  /** Default true. False is reserved for transport tests using scripted prose. */
+  verifiedSpeech?: boolean;
 }
 
 export interface AgentDeps {
@@ -372,6 +374,7 @@ export class SessionAgent {
       system: a.system,
       maxToolRounds: a.deps.opts.maxToolRounds,
       recentTurns: a.deps.opts.recentTurns,
+      verifiedSpeech: a.deps.opts.verifiedSpeech,
       log: a.log,
       now: a.now,
       isDropped: (u, i) => this.sentences.get(`${u}:${i}`)?.status === DROPPED,

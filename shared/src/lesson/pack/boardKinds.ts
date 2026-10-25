@@ -1,10 +1,12 @@
 import mathCanvasSchema from './mathCanvas.schema.json';
+import mathCanvasGenerationSchema from './mathCanvasGeneration.schema.json';
 import type { BoardKindDef, JsonSchema } from '../types';
 
 // Placeholder board kinds (spec "Board item kinds"). Math is LaTeX, rendered with KaTeX.
 export const boardKinds: BoardKindDef[] = [
   {
     name: 'math_canvas',
+    generationSchema: mathCanvasGenerationSchema as unknown as JsonSchema,
     description: 'A verified animated math explanation. Content: {title,moments:[{sentenceOffset,teaching:{concept,action,targets:[]},visual,interactive:false,showEquation:false}]}. '
       + 'Do NOT author narration: the app derives speech from the actual diagram and speaks it exactly once. Offsets 0,1,2,3; start with a complete visual; later use updates. Only final moment interactive. '
       + 'Concepts: equal_groups/distributivity require array; fraction_amount/fraction_comparison/fraction_equivalence require bars; number_order/number_distance require number_line; area/area_conservation require geometry or parallelogram. Unsupported concepts must use visual_unavailable. '

@@ -86,7 +86,7 @@ describe('ToolRouter', () => {
     const tr = t();
     const r = await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, {
       kind: 'math_canvas', content: { title: 'Cut', moments: [
-        { sentenceOffset: 1, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
+        { sentenceOffset: 1, teaching: { concept: 'area', action: 'change' }, visual: { kind: 'update', changes: [{ type: 'set_parallelogram', stage: 'cut' }] } },
       ] },
     }), ctx(tr));
     expect(r.ok).toBe(false);
