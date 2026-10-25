@@ -7,6 +7,10 @@ import { PhaseSchema, type TeachingPhase } from "./phase";
 import { LessonArcSchema } from "./arc";
 export { PhaseSchema, type TeachingPhase } from "./phase";
 const short = z.string().min(1).max(600);
+/** What the learner chose after the tutor double-checked a significant change (see intent.ts):
+ *  the next step is planned for it, then it is cleared. */
+export const LearnerDecisionSchema = z.enum(["give_answer", "task_now", "hand_back", "resume"]);
+export type LearnerDecision = z.infer<typeof LearnerDecisionSchema>;
 export const SessionConfigSchema = z
   .object({
     sessionId: IdSchema,
@@ -18,6 +22,7 @@ export const SessionConfigSchema = z
     lessonStyle: z.enum(["mini_lesson", "step_by_step"]).optional(),
     // A rigid lesson arc from the lesson pack (e.g. the two-minute demo); absent = adaptive policy.
     arc: LessonArcSchema.optional(),
+    decision: LearnerDecisionSchema.optional(),
     context: z
       .array(
         z

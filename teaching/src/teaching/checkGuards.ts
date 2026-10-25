@@ -121,10 +121,22 @@ export function visibleAnswer(check: TeachingCheck | null | undefined, canvas: C
     if (Number.isInteger(n)) answer = { num: n };
   }
   if (!answer) return null;
-  const dens = answer.den ? [answer.den] : numbersIn(check.prompt).filter(n => Number.isInteger(n) && n > 0);
+  // A bare count is an answer fraction only when the prompt names its denominator: "how many
+  // sixths?" (a lone denominator word) or "... so the bottom number is 12". Other numbers of the
+  // prompt never count ("one third cut into two pieces" with 2 of 3 drawn is not the answer 2).
+  const dens = answer.den ? [answer.den] : promptDenominators(check.prompt);
   const bar = visual.bars.find(b => b.shaded === answer!.num && dens.includes(b.parts));
   if (!bar) return null;
   return `The task's answer is already on the picture: "${bar.label}" shows ${bar.shaded} of ${bar.parts} parts, which is the answer to "${check.prompt}". Ask a task whose answer is not drawn (different numbers than every bar shown), or draw a different picture.`;
+}
+
+/** Denominators a prompt names for a bare-count answer (see visibleAnswer). */
+function promptDenominators(prompt: string): number[] {
+  const out = numberItems(prompt).flatMap(x => (x.kind === "den" ? [x.den] : []));
+  const bottom = /\bbottom(?: number)? (?:is|be|becomes|of)\s+([\p{L}\d-]+)/iu.exec(prompt);
+  const v = bottom ? spokenValue(bottom[1]!) : null;
+  if (v?.kind === "num" && Number.isInteger(v.value)) out.push(v.value);
+  return out;
 }
 
 /** Voice tutor: the check is spoken and answered by voice (or typed), never "type/click/tap". */

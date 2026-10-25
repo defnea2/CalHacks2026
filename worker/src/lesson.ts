@@ -113,6 +113,8 @@ export class LessonRun {
   /** Beats queued to the module in this attempt (index of the next one). */
   private queued = 0;
   private rejection?: string;
+  /** The previous attempt's first moment was rejected because the task's answer was visible. */
+  private acceptVisible = false;
   private finishing = false;
   private firstTokenAt = 0;
   private firstTokenRecorded = false;
@@ -247,7 +249,9 @@ export class LessonRun {
   /** Queues moment `index` (compact form; the module recompiles it). */
   private sendBeat(index: number, moment: { narration: string; [k: string]: unknown }, final: boolean) {
     const { narration, ...rest } = moment;
-    const visual = JSON.stringify(final ? { ...rest, final: true } : rest);
+    // Second visible-answer rejection of the same lesson: ask the module to accept it (logged there).
+    const flags = { ...(final ? { final: true } : {}), ...(index === 0 && this.acceptVisible && !('kind' in rest) ? { acceptVisible: true } : {}) };
+    const visual = JSON.stringify({ ...rest, ...flags });
     this.queued = Math.max(this.queued, index + 1);
     return this.enqueue(async () => {
       if (this.rejection) return;
@@ -310,7 +314,18 @@ export class LessonRun {
       ]);
       this.turnImage = turnImage;
       if (this.aborted) return;
-      const built = JSON.parse(raw) as { ok: boolean; request?: ModelRequest; error?: string; library?: unknown; topic?: { category: string; concept: string } };
+      const built = JSON.parse(raw) as { ok: boolean; request?: ModelRequest; error?: string; library?: unknown; topic?: { category: string; concept: string }; say?: string[]; sayOnly?: boolean };
+      // Authored lines from the module (push-back / steer back): spoken at once, before any step.
+      if (built.ok && built.say?.length) {
+        this.speakPrelude(built.say);
+        if (built.sayOnly) {
+          this.log(`authored reply: ${built.say.join(' ').slice(0, 120)}`);
+          this.llmActive = false;
+          await this.chain;
+          if (!this.aborted) await this.close(false);
+          return;
+        }
+      }
       if (!built.ok || !built.request) throw new Error(`no lesson request: ${built.error ?? 'unknown'}`);
       this.imageIncluded = !!image;
       this.library = this.deps.libraryIndex && built.library ? built.library : null;
@@ -361,6 +376,10 @@ export class LessonRun {
           } else if (!repair && out.kind !== 'silent' && error !== 'deadline') {
             this.stats.rejectedBeforeSpeech.push(error);
             repair = { output: out.output, error };
+            if (/already on the picture/.test(error)) {
+              this.acceptVisible = true;
+              this.log('visible-answer rejection: the repair round is accepted even if the answer stays visible');
+            }
             this.stats.repairs++;
             this.log(`repair round: ${error.slice(0, 200)}`);
           } else throw new Error(`lesson not usable: ${error}`);

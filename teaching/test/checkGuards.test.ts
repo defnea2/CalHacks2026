@@ -79,6 +79,9 @@ describe("the task's answer is not visible", () => {
     expect(visibleAnswer(number("Expand 3/4 so the bottom number is 12. What is the top number?", 9), bars([2, 3], [8, 12]))).toBeNull();
     expect(visibleAnswer(number("How many slices are shaded?", 3), bars([3, 6]))).toBeNull();
     expect(visibleAnswer(number("One half is how many sixths?", 3), emptyCanvas())).toBeNull();
+    // Night rehearsal false positive: a bare count (2) never matches a drawn fraction (2 of 3).
+    expect(visibleAnswer(number("If one third is cut into two smaller pieces, how many pieces does one third become in sixths? Say the number.", 2), bars([2, 3]))).toBeNull();
+    expect(visibleAnswer(number("How many pieces of three are shaded? Say the number.", 2), bars([2, 3]))).toBeNull();
   });
 });
 

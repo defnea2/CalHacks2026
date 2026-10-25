@@ -10,7 +10,7 @@
 //   arcBudget     -> worst-case seconds of audio until explanation, formalization and task
 import { z } from "zod";
 import { PhaseSchema, type TeachingPhase } from "./phase";
-import type { Evidence, TeachingStep } from "./contracts";
+import type { Evidence, LearnerDecision, TeachingStep } from "./contracts";
 
 const phases = z.array(PhaseSchema).max(8);
 export const ArcStageSchema = z
@@ -48,6 +48,8 @@ export const LessonArcSchema = z
     /** Allowed phases when the current step's phase is in no stage. */
     fallback: phases,
     stages: z.array(ArcStageSchema).min(1).max(8),
+    /** Allowed phases after the learner confirmed a significant change (intent.ts); `resume` = the current stage again. */
+    decisions: z.object({ give_answer: phases, task_now: phases, hand_back: phases }).strict().optional(),
     /** Arc-wide instructions (system prompt, cache-stable). */
     guide: z.string().min(1).max(2000),
   })
@@ -61,7 +63,9 @@ export function arcStageFor(arc: LessonArc, phase: TeachingPhase): ArcStage | un
 }
 
 /** Next allowed phases under the arc (deterministic; evidence picks the branch). */
-export function arcPhases(arc: LessonArc, current: TeachingStep | null, evidence: Evidence | undefined): TeachingPhase[] {
+export function arcPhases(arc: LessonArc, current: TeachingStep | null, evidence: Evidence | undefined, decision?: LearnerDecision): TeachingPhase[] {
+  if (decision === "resume") return current ? (arcStageFor(arc, current.phase)?.phases ?? arc.fallback) : arc.start;
+  if (decision && arc.decisions) return arc.decisions[decision];
   if (!current) return arc.start;
   const stage = arcStageFor(arc, current.phase);
   if (!stage) return arc.fallback;
