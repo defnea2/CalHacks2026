@@ -9,6 +9,8 @@ export interface SessionRow {
   turnState: string;
   active: boolean;
   hasImage: boolean;
+  /** A turn photo waits for the learner's next turn. */
+  pendingPhoto?: boolean;
   currentUtteranceId: bigint;
   /** Turns appended so far (0 = nothing said yet: the tutor may open). */
   turnCount: number;
@@ -34,6 +36,8 @@ export interface TurnRow {
   source?: string;
   /** '' or a lesson button intent (another_way | smaller_step | continue | demonstrate). */
   intent?: string;
+  /** A photo (turn_image) was sent with this student turn. */
+  hasPhoto?: boolean;
 }
 
 export interface PhraseRow {
@@ -76,6 +80,8 @@ export interface Transport {
   buildContext(a: { sessionId: bigint }): Promise<string>;
   setTopic(a: { sessionId: bigint; category: string; concept: string }): Promise<string>;
   getSessionImage(a: { sessionId: bigint }): Promise<string>;
+  /** Photo the learner sent with that turn (pending one while it is open) as a data URL, or ''. */
+  getTurnImage?(a: { sessionId: bigint; turnIdx: number }): Promise<string>;
   // ---- team lesson planner (contract section 1)
   /** JSON {ok: true, request: ModelRequest} | {ok: false, error}. */
   buildLessonRequest(a: { sessionId: bigint; requestId: string }): Promise<string>;

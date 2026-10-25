@@ -136,6 +136,8 @@ export function Captions({
     return [...byTurn.values(), ...byUtt.values()].sort((a, b) => a.at - b.at);
   }, [data.phrases, data.turns, data.sentences, tutorShown]);
 
+  // Turn photos (no bytes on the client): a marker on the student turn they were sent with.
+  const photoTurns = useMemo(() => new Set(data.turns.filter(t => t.hasPhoto).map(t => String(t.idx))), [data.turns]);
   const transcript = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   useEffect(() => {
@@ -154,6 +156,7 @@ export function Captions({
           className={cx('caption-entry max-w-[85%] rounded-2xl px-4 py-2 text-[15px] leading-snug', e.role === 'student' ? 'self-end bg-primary text-primary-foreground' : 'self-start bg-secondary')}
         >
           <span className="caption-speaker">{e.role === 'student' ? 'You' : 'Tutor'}</span>
+          {e.role === 'student' && photoTurns.has(e.ref) && <span className="caption-photo" data-testid="caption-photo">[photo sent] </span>}
           {e.parts.map(p => (
             <span
               key={p.id}

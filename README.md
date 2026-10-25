@@ -1,6 +1,12 @@
-# Voice math tutor on SpacetimeDB
+<p><img src="docs/brand/fibonacci-mark-280.svg" width="96" height="96" alt="Fibonacci golden spiral logo" /></p>
+
+# Fibonacci
+
+A voice math tutor on SpacetimeDB.
 
 ## For judges
+
+**Fibonacci — a voice math tutor for children aged 8–12 who are stuck on fractions homework.**
 
 **Who and what.** For children aged 8–12 (3rd–6th grade) who are stuck on fractions or decimals
 homework and have nobody at home who can explain *why* (why 1/4 + 2/4 is not 3/8). The child talks
@@ -119,6 +125,7 @@ inventory: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §2–3, §10–11.
 
 - Not tested with real children, on real devices or with loudspeakers (headphones recommended; echo can trigger barge-in).
 - All numbers were measured on one laptop against a **local** SpacetimeDB 2.13. Maincloud is supported by the publish script but not migrated or measured.
+- Cloud plan (not started): Maincloud migration, then a per-turn Cloudflare Worker replacing the Node LLM worker, in [docs/CLOUD_PLAN.md](docs/CLOUD_PLAN.md).
 - Procedure slots: the local server runs ~10 procedures at once and an HTTP wait holds a slot; with 4 parallel voice sessions TTS jobs waited up to 0.7 s. Simulated-student calls are capped at 4 in flight.
 - STT defaults to `ink-whisper`; `ink-2` needs the proxy on a public host.
 - Word budgets, tone, staying on topic and not asking for personal data are prompted, not enforced; explanations often run over budget (107–150 words). The spoken math in the narration is not formally checked.
@@ -138,7 +145,7 @@ inventory: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §2–3, §10–11.
 
 ## About the project
 
-A voice math tutor for children aged 8–12. A student talks (or types) about the task they are stuck
+Fibonacci is a voice math tutor for children aged 8–12. A student talks (or types) about the task they are stuck
 on, optionally with a photo, and the tutor explains it with moving pictures that change exactly when
 the tutor says the matching words: first an intuitive picture, then the formal notation, then a task
 the student solves themselves. Teachers can run a whole class: every online student joins a live
@@ -154,8 +161,9 @@ Test users only. Never use real children's data.
 
 ## Features
 
-- **Self-learning by voice or text**: "Learn by myself" with a task description and an optional photo;
-  talk (browser VAD + semantic turn detection, barge-in) or type ("Type instead of talking").
+- **Self-learning by voice**: "Learn by myself" with a task description and an optional photo;
+  microphone and sound start with the lesson (browser VAD + semantic turn detection, barge-in);
+  a gear menu picks microphone / speaker and sets the microphone boost and tutor volume.
 - **Lesson arc**: the team's teaching methodology (intuition → formalization → solving) planned by
   Claude Haiku 5.5 and streamed moment by moment; every moment is compiled and validated by
   SpacetimeDB against the live canvas, with a repair round or a recap when the model slips.

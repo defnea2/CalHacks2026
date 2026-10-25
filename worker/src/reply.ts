@@ -88,6 +88,8 @@ export class ReplyRun {
   /** Messages sent to the LLM in the last round (chat history of this reply). */
   history: ChatMessage[] = [];
   imageIncluded = false;
+  /** Turn photos are a lesson-planner feature (LessonRun); plain replies never ask for one. */
+  readonly turnPhoto = false;
   preemptive = false;
   readonly opening: boolean;
   /** Phase whose block was the latest one in the history, per LLM call (tests, logs). */

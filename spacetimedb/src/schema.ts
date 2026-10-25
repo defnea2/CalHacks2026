@@ -54,6 +54,8 @@ export const session = table(
     classSessionId: t.u64().default(0n),
     /** false = text mode: no STT/TTS; sentences count as played after a reading delay. */
     voice: t.bool().default(true),
+    /** A turn photo is waiting for the learner's next turn (no bytes; see turn_image). */
+    pendingPhoto: t.bool().default(false),
   }
 );
 
@@ -63,6 +65,33 @@ export const sessionImage = table(
     sessionId: t.u64().primaryKey(),
     mime: t.string(),
     data: t.byteArray(),
+  }
+);
+
+/** Photos taken during a session (private, <= 1 MB). At most one pending (bound = false) per
+ *  session; closing the learner's next student turn binds it (turnIdx, usedAt) and the worker
+ *  reads it for that turn via getTurnImage. */
+export const turnImage = table(
+  { name: 'turn_image' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    sessionId: t.u64().index('btree'),
+    learnerId: t.u64(),
+    mime: t.string(),
+    data: t.byteArray(),
+    createdAt: t.timestamp(),
+    bound: t.bool().default(false),
+    turnIdx: t.u32().default(0),
+    usedAt: t.option(t.timestamp()),
+  }
+);
+
+/** Identity that started an ad-hoc session (private): only it may attach turn photos. */
+export const sessionOwner = table(
+  { name: 'session_owner' },
+  {
+    sessionId: t.u64().primaryKey(),
+    owner: t.identity(),
   }
 );
 
@@ -144,6 +173,8 @@ export const turn = table(
     source: t.string().default('voice'),
     /** '' or a lesson intent of the team UI (TURN_INTENTS). */
     intent: t.string().default(''),
+    /** Student turns: a photo (turn_image) was sent with this turn. */
+    hasPhoto: t.bool().default(false),
   }
 );
 
@@ -470,6 +501,8 @@ const spacetimedb = schema(
     learner,
     session,
     sessionImage,
+    turnImage,
+    sessionOwner,
     audioIn,
     speechActivity,
     phrase,

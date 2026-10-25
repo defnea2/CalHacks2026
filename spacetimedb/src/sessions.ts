@@ -56,6 +56,7 @@ export function startSession(ctx: Ctx, args: { learnerId: bigint; taskText: stri
     endedAt: undefined,
     classSessionId: 0n,
     voice: args.voice ?? true,
+    pendingPhoto: false,
   });
   ctx.db.extractionCursor.insert({ sessionId: session.id, nextIdx: 0, runningSinceMicros: 0n });
   return session;

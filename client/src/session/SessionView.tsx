@@ -31,6 +31,7 @@ import { parseNotes } from '@tutor/visual/teaching/spacetimeModel';
 import { LessonCanvas } from './LessonCanvas';
 import { AudioSettings } from '../components/AudioSettings';
 import { micErrorMessage } from '../audio/audioPrefs';
+import { PhotoButton } from './PhotoButton';
 import { useTextPlayback } from './useTextPlayback';
 import { useAgentStatus } from './useAgentStatus';
 import { STAGE_LABELS } from './stages';
@@ -506,6 +507,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
                     <span className="stage-muted" data-testid="mic-off">{starting ? 'Starting the microphone…' : 'Microphone off'}</span>
                   ) : null}
                   {ui.deviceNotice && !micError && <span className="stage-muted" role="status" data-testid="device-notice">{ui.deviceNotice}</span>}
+                  <PhotoButton conn={conn} sessionId={sessionId} pending={!!session?.pendingPhoto} />
                   {mode === 'voice' && (
                     <button
                       type="button"

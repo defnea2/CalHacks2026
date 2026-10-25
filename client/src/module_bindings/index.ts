@@ -38,6 +38,7 @@ import AddBeatReducer from "./add_beat_reducer";
 import AddSentenceReducer from "./add_sentence_reducer";
 import AgentHeartbeatReducer from "./agent_heartbeat_reducer";
 import AppendTutorTurnReducer from "./append_tutor_turn_reducer";
+import AttachImageReducer from "./attach_image_reducer";
 import BeginLessonReducer from "./begin_lesson_reducer";
 import BeginOpeningReducer from "./begin_opening_reducer";
 import BeginUtteranceReducer from "./begin_utterance_reducer";
@@ -54,6 +55,7 @@ import PushAudioReducer from "./push_audio_reducer";
 import RecordMetricReducer from "./record_metric_reducer";
 import RegisterAgentReducer from "./register_agent_reducer";
 import RememberReducer from "./remember_reducer";
+import RemovePendingImageReducer from "./remove_pending_image_reducer";
 import ReportNoiseReducer from "./report_noise_reducer";
 import RequestTutorReducer from "./request_tutor_reducer";
 import ResetSimulatedStudentsReducer from "./reset_simulated_students_reducer";
@@ -78,6 +80,7 @@ import UploadPhotoReducer from "./upload_photo_reducer";
 import * as BuildContextProcedure from "./build_context_procedure";
 import * as BuildLessonRequestProcedure from "./build_lesson_request_procedure";
 import * as GetSessionImageProcedure from "./get_session_image_procedure";
+import * as GetTurnImageProcedure from "./get_turn_image_procedure";
 import * as LearnerInsightsProcedure from "./learner_insights_procedure";
 import * as PrefetchTopicProcedure from "./prefetch_topic_procedure";
 import * as RefreshDashboardProcedure from "./refresh_dashboard_procedure";
@@ -512,6 +515,7 @@ const reducersSchema = __reducers(
   __reducerSchema("add_sentence", AddSentenceReducer),
   __reducerSchema("agent_heartbeat", AgentHeartbeatReducer),
   __reducerSchema("append_tutor_turn", AppendTutorTurnReducer),
+  __reducerSchema("attach_image", AttachImageReducer),
   __reducerSchema("begin_lesson", BeginLessonReducer),
   __reducerSchema("begin_opening", BeginOpeningReducer),
   __reducerSchema("begin_utterance", BeginUtteranceReducer),
@@ -528,6 +532,7 @@ const reducersSchema = __reducers(
   __reducerSchema("record_metric", RecordMetricReducer),
   __reducerSchema("register_agent", RegisterAgentReducer),
   __reducerSchema("remember", RememberReducer),
+  __reducerSchema("remove_pending_image", RemovePendingImageReducer),
   __reducerSchema("report_noise", ReportNoiseReducer),
   __reducerSchema("request_tutor", RequestTutorReducer),
   __reducerSchema("reset_simulated_students", ResetSimulatedStudentsReducer),
@@ -554,6 +559,7 @@ const proceduresSchema = __procedures(
   __procedureSchema("build_context", BuildContextProcedure.params, BuildContextProcedure.returnType),
   __procedureSchema("build_lesson_request", BuildLessonRequestProcedure.params, BuildLessonRequestProcedure.returnType),
   __procedureSchema("get_session_image", GetSessionImageProcedure.params, GetSessionImageProcedure.returnType),
+  __procedureSchema("get_turn_image", GetTurnImageProcedure.params, GetTurnImageProcedure.returnType),
   __procedureSchema("learner_insights", LearnerInsightsProcedure.params, LearnerInsightsProcedure.returnType),
   __procedureSchema("prefetch_topic", PrefetchTopicProcedure.params, PrefetchTopicProcedure.returnType),
   __procedureSchema("refresh_dashboard", RefreshDashboardProcedure.params, RefreshDashboardProcedure.returnType),

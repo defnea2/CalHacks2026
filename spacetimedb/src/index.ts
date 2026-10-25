@@ -19,6 +19,7 @@ import { base64 } from './providers';
 import * as seed from './seed';
 import * as sessions from './sessions';
 import * as textMode from './text_mode';
+import * as turnPhoto from './turn_photo';
 import * as pipeline from './pipeline';
 import * as voiceIn from './voice_in';
 import * as voiceOut from './voice_out';
@@ -55,7 +56,7 @@ export const createTestUser = spacetimedb.reducer(
 export const startSession = spacetimedb.reducer(
   { learnerId: t.u64(), taskText: t.string() },
   (ctx, args) => {
-    sessions.startSession(ctx, args);
+    turnPhoto.recordOwner(ctx, sessions.startSession(ctx, args).id);
   }
 );
 
@@ -63,6 +64,15 @@ export const uploadPhoto = spacetimedb.reducer(
   { sessionId: t.u64(), mime: t.string(), data: t.byteArray() },
   (ctx, args) => sessions.uploadPhoto(ctx, args)
 );
+
+/** Photo taken during the session (jpeg/png/webp/gif, <= 1 MB); goes with the learner's next
+ *  closed turn. Replaces a still-pending one. Only the session's learner (turn_photo.ts). */
+export const attachImage = spacetimedb.reducer(
+  { sessionId: t.u64(), mime: t.string(), data: t.byteArray() },
+  (ctx, args) => turnPhoto.attachImage(ctx, args)
+);
+
+export const removePendingImage = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => turnPhoto.removePendingImage(ctx, sessionId));
 
 export const endSession = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => sessions.endSession(ctx, sessionId));
 
@@ -334,6 +344,16 @@ export const getSessionImage = spacetimedb.procedure({ sessionId: t.u64() }, t.s
     const cls = s?.classSessionId ? tx.db.classSession.id.find(s.classSessionId) : undefined;
     const doc = cls ? tx.db.classDocument.classSessionId.find(cls.id) : undefined;
     return cls && doc ? { mime: cls.documentMime, data: doc.data } : null;
+  });
+  return img ? `data:${img.mime};base64,${base64(img.data)}` : '';
+});
+
+/** Agent only. Photo the learner sent with turn `turnIdx` (or the pending one while that turn is
+ *  still open) as a data URL, or ''. */
+export const getTurnImage = spacetimedb.procedure({ sessionId: t.u64(), turnIdx: t.u32() }, t.string(), (ctx, { sessionId, turnIdx }) => {
+  const img = ctx.withTx(tx => {
+    requireAgent(tx);
+    return turnPhoto.turnImageFor(tx, sessionId, turnIdx);
   });
   return img ? `data:${img.mime};base64,${base64(img.data)}` : '';
 });

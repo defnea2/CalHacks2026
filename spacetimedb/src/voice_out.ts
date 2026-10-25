@@ -307,6 +307,7 @@ export function appendTutorTurn(
       closedAt: ctx.timestamp,
       source: session.voice ? SOURCE_VOICE : SOURCE_TEXT,
       intent: '',
+      hasPhoto: false,
     });
     session = updateSession(ctx, session, { turnCount: session.turnCount + 1 });
     onTurnAppended(ctx, args.sessionId);

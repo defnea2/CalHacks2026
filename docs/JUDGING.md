@@ -1,4 +1,6 @@
-# Judging index
+# Judging index: Fibonacci
+
+Fibonacci is a voice math tutor for children aged 8–12 with a live classroom view for teachers.
 
 For reviewers and reviewer agents: each track's criteria mapped to evidence (file:line, route,
 screenshot, measured number with its source). Short version: [README "For judges"](../README.md#for-judges).
@@ -53,8 +55,8 @@ all sessions · `?lesson` offline lab · `?miccheck`.
 Use the "3 minutes" text in [PITCH.md §1](PITCH.md#3-minutes) over the live flow in
 [DEMO.md "Script"](DEMO.md#script): problem 30 s → student by voice 60 s (DEMO 0:15–0:55) → teacher
 dashboard, groups and observe 60 s (DEMO 0:55–1:45) → why SpacetimeDB 30 s. Then 2 minutes Q&A
-([PITCH.md §3](PITCH.md#3-likely-judge-questions)). **Demo by voice**: text mode exists
-("Type instead of talking"), but it is only the fallback for a broken network.
+([PITCH.md §3](PITCH.md#3-likely-judge-questions)). **Voice only**: the student UI has no
+text mode; microphone and sound start with the lesson (gear menu: devices, boost, volume).
 
 ---
 
@@ -164,8 +166,8 @@ Conflicts between the judging brief and what is on `main`:
    `assessResponse` (see table above). Say that instead.
 4. **12–15-word sentence chunker.** Does not exist; the chunker splits at sentence ends with no
    maximum (`maxWords: Infinity`). Word budgets are prompted per stage.
-5. **"No text fallback in the demo."** Text mode exists ("Type instead of talking", `?voice=0`) and
-   is listed in DEMO.md "Fallbacks". The demo must use voice; text only if the network fails.
+5. **Voice only.** The student UI has no text mode (removed: it cluttered the screen); the text
+   path stays in the backend for simulated students and harnesses. Mic trouble: DEMO.md "Fallbacks".
 6. **Chunk size.** PITCH.md says 160 ms chunks; config says `AUDIO_CHUNK_MS: 150`. Measured chunks
    are 5,120 B = 160 ms (rounded to whole VAD frames). Both are consistent; say "about 160 ms".
 7. **README Quickstart said OpenRouter was required**; `scripts/publish.mjs:10` only requires it
@@ -173,6 +175,8 @@ Conflicts between the judging brief and what is on `main`:
 8. **Transcripts are public tables.** Our privacy line "everything sensitive is private" is only
    true for audio, photos, memory and answer keys. Transcripts (`phrase`, `turn`, `reply_sentence`)
    are public and there is no auth. Say this if asked.
+
+9. **Cloud.** Everything runs locally. The plan for Maincloud plus a per-turn Cloudflare Worker (steps, effort, risks, open questions) is in [CLOUD_PLAN.md](CLOUD_PLAN.md); nothing is deployed.
 
 Open TODOs for humans: real quote (parent/teacher/tutor), demo video, Devpost team members and
 prize opt-ins (all four tracks), final screenshot choice (avoid `13-dashboard-clusters*.png`, see

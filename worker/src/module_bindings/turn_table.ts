@@ -24,4 +24,5 @@ export default __t.row({
   closedAt: __t.option(__t.timestamp()).name("closed_at"),
   source: __t.string(),
   intent: __t.string(),
+  hasPhoto: __t.bool().name("has_photo"),
 });

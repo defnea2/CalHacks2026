@@ -1,6 +1,8 @@
 > Integrated canvas: see [VOICE_CANVAS.md](../docs/VOICE_CANVAS.md). Open `http://127.0.0.1:5175/?canvasPreview` for a database-free test.
 
-# Client
+# Client (Fibonacci)
+
+Brand: `src/brand/Logo.tsx` (`LogoMark` picks the 20/32/48/56 px or gridded large variant; `Wordmark` is mark + "fibonacci" in Fredoka 600, loaded from Google Fonts in `index.html` and used only by the wordmark). SVGs: `docs/brand/`.
 
 Local web client: Vite + React + TypeScript + Tailwind v4 (neutral oklch tokens as in the neoknow test client). It talks only to SpacetimeDB, through the generated bindings in `src/module_bindings/`, and builds to static files (`pnpm --filter client build` → `dist/`; no server endpoints).
 
@@ -160,6 +162,9 @@ Inline markers: the tutor writes `⟦b1⟧` in its text where an item belongs an
 | `end-session`, `open-observer` | | session |
 | `mic-state` | `data-listening`, `data-speaking`, `data-tutor-audio` | session, while talking |
 | `task-display`, `session-photo-input`, `photo-state` | `data-state` | session |
+| `turn-photo` | `data-state` = none / uploading / pending / sent / error | session (`PhotoButton`: camera button in the controls row) |
+| `photo-button`, `photo-modal`, `photo-video`, `photo-capture`, `photo-review`, `photo-retake`, `photo-use`, `photo-pick`, `photo-file`, `photo-chip`, `photo-remove` | | session: take a picture at any time (live camera preview via getUserMedia; file/`capture` input without a webcam), compressed to a ≤ 1 MB JPEG, `attachImage`; the chip says "Will be sent with your next answer" until the next turn closes |
+| `caption-photo` | | captions: "[photo sent]" on the student turn a photo went out with (also in the observer) |
 | `captions` | | |
 | `caption-student` | `data-ref` = turn idx; children `caption-phrase` with `data-id` (phraseId), `data-status` | |
 | `caption-tutor` | `data-ref` = utteranceId; children `caption-sentence` with `data-id` (idx), `data-status` | |
