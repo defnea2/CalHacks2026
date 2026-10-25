@@ -3,11 +3,15 @@
 // The library is used only for frames and speech probabilities (onFrameProcessed); its own
 // segmenting is disabled, so VAD_PHRASE_MS / VAD_TURN_MS / pre-roll / min speech / max phrase
 // are all ours. Model, worklet and ORT wasm are served from /vad/ (copied at dev/build time).
+// Smart Turn (SMART_TURN=1): VadMachine asks at each phrase end; the model runs in a worker
+// (SmartTurn.ts) and its verdict goes back into the machine. Until the model is loaded, or if
+// it fails, requests are dropped and the VAD_TURN_MS silence fallback ends the turn.
 import { MicVAD } from '@ricky0123/vad-web';
 import type { AppSettings } from '../config';
 import { VadMachine, type VadEvent } from './vadMachine';
 import { rmsDbfs } from './pcm';
 import { eventLog } from '../lib/debug';
+import { SmartTurnDetector } from './SmartTurn';
 
 export interface CaptureOptions {
   ctx: AudioContext;
@@ -25,6 +29,8 @@ export class AudioCapture {
   private vad: MicVAD | null = null;
   private stream: MediaStream | null = null;
   private stopped = false;
+  private smartTurn: SmartTurnDetector | null = null;
+  private smartTurnReady = false;
 
   constructor(private readonly opts: CaptureOptions) {
     const { voice, client } = opts.settings;
@@ -62,6 +68,64 @@ export class AudioCapture {
     });
     await this.vad.start();
     eventLog.log('capture.started', {});
+    if (settings.voice.SMART_TURN) this.startSmartTurn();
+  }
+
+  private startSmartTurn(): void {
+    const t0 = performance.now();
+    try {
+      this.smartTurn = new SmartTurnDetector(VAD_ASSET_PATH);
+    } catch (err) {
+      eventLog.log('smart_turn.error', { error: String(err) });
+      return;
+    }
+    this.smartTurn.ready.then(
+      r => {
+        this.smartTurnReady = true;
+        eventLog.log('smart_turn.ready', { ...r, totalMs: Math.round(performance.now() - t0) });
+      },
+      err => eventLog.log('smart_turn.error', { error: String(err) })
+    );
+  }
+
+  private onSmartTurnRequest(e: Extract<VadEvent, { type: 'smart_turn_request' }>): void {
+    const audioMs = Math.round(e.pcm.length / 16);
+    if (!this.smartTurn || !this.smartTurnReady) {
+      eventLog.log('vad.smart_turn', { requestId: e.requestId, prob: null, ms: 0, decision: 'unavailable', audioMs });
+      return;
+    }
+    const t0 = performance.now();
+    void this.smartTurn.predict(e.requestId, e.pcm).then(v => {
+      if (this.stopped) return;
+      const ms = Math.round(performance.now() - t0);
+      if (!v) {
+        eventLog.log('vad.smart_turn', { requestId: e.requestId, prob: null, ms, decision: 'skipped', audioMs });
+        return;
+      }
+      for (const ev of this.machine.smartTurnResult(e.requestId, v.prob)) {
+        if (ev.type === 'smart_turn') {
+          eventLog.log('vad.smart_turn', {
+            requestId: e.requestId,
+            prob: Math.round(v.prob * 1000) / 1000,
+            ms,
+            decision: ev.decision,
+            ended: ev.ended,
+            silenceMs: Math.round(ev.silenceMs),
+            featMs: Math.round(v.featMs),
+            inferMs: Math.round(v.inferMs),
+            audioMs,
+          });
+        }
+        this.opts.onEvent(ev);
+      }
+    });
+  }
+
+  private emit(events: VadEvent[]): void {
+    for (const e of events) {
+      if (e.type === 'smart_turn_request') this.onSmartTurnRequest(e);
+      else this.opts.onEvent(e);
+    }
   }
 
   private stats = { n: 0, levelSum: 0, maxLevel: -100, maxProb: 0, since: 0 };
@@ -89,7 +153,7 @@ export class AudioCapture {
       this.stats = { n: 0, levelSum: 0, maxLevel: -100, maxProb: 0, since: now };
     }
     this.opts.onFrame?.(level, prob);
-    for (const e of this.machine.process(prob, frame, level)) this.opts.onEvent(e);
+    this.emit(this.machine.process(prob, frame, level));
   }
 
   set tutorSpeaking(v: boolean) {
@@ -98,8 +162,9 @@ export class AudioCapture {
 
   async stop(): Promise<void> {
     if (this.stopped) return;
-    for (const e of this.machine.stop()) this.opts.onEvent(e);
+    this.emit(this.machine.stop());
     this.stopped = true;
+    this.smartTurn?.destroy();
     try {
       await this.vad?.destroy();
     } catch (err) {
