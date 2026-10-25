@@ -58,10 +58,11 @@ What to do in this phase:
 Continue your reply in this phase.`,
 
   opening: `The session just started and the student has not said anything yet. You speak first.
-- Start with a short greeting sentence of about six words.
-- Briefly mention the task they brought (see "Original task" above, and the photo if there is one), in words, without solving any of it.
-- Then ask how they want to dive in: should you guide them through it step by step, or can they tell you what exactly is tricky or where they got stuck?
-- Keep it brief: the greeting, one sentence about the task, then that question, once. Do not explain the math yet.`,
+- Say exactly three sentences, about 45 words at most in total:
+  1. A short greeting of two to six words, using their name.
+  2. One sentence naming the task they brought (see "Original task" above, and the photo if there is one), in words, without solving any of it.
+  3. The question how they want to dive in: should you guide them through it step by step, or can they tell you what exactly is tricky or where they got stuck?
+- Do not explain any math yet and do not call tools in this reply.`,
 
   context: `Learner: {{learner}}
 What we know about this learner (internal): {{memory}}

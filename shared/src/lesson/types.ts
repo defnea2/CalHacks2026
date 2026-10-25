@@ -25,8 +25,8 @@ export interface PhaseDef {
   /** Shown to the LLM in the system prompt ({{phases}}). */
   description: string;
   /** Detailed instructions for this phase: what the tutor does, what to watch for, when to
-   *  move on. Only the CURRENT phase's block is in the system prompt ({{phaseInstructions}});
-   *  it is swapped completely when the phase changes. */
+   *  move on. Only the CURRENT phase's block is sent ({{phaseInstructions}} in prompts.phase),
+   *  as a system message after the current turn; a phase change appends the new block. */
   instructions: string;
   /** Phase ids this phase may move to. */
   next: string[];

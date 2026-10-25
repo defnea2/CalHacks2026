@@ -268,7 +268,8 @@ export class ReplyRun {
           this.log(`phase -> ${phase}: phase block appended`);
         }
         this.promptPhases.push(phase);
-        const chunker = new SentenceChunker();
+        // The reply's very first sentence may be short and goes to TTS alone (speech starts sooner).
+        const chunker = new SentenceChunker(this.sent.length === 0 ? { firstMinWords: 1 } : {});
         let text = '';
         let raw: unknown;
         const calls: ToolResult['call'][] = [];

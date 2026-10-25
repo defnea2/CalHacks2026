@@ -15,6 +15,9 @@
 export interface SentenceChunkerOptions {
   maxWords?: number; // default 25
   minWords?: number; // default 6
+  /** Minimum for the first piece only (default: minWords). 1 lets a short opening sentence
+   *  ("Great thinking!") go to TTS on its own, so speech starts sooner. */
+  firstMinWords?: number;
 }
 
 /** Titles: a period after these never ends a sentence. */
@@ -113,11 +116,18 @@ function longSplitPoints(text: string): number[] {
 export class SentenceChunker {
   private readonly maxWords: number;
   private readonly minWords: number;
+  private readonly firstMinWords: number;
+  private emitted = 0;
   private buf = '';
 
   constructor(opts: SentenceChunkerOptions = {}) {
     this.maxWords = opts.maxWords ?? 25;
     this.minWords = opts.minWords ?? 6;
+    this.firstMinWords = opts.firstMinWords ?? this.minWords;
+  }
+
+  private get min(): number {
+    return this.emitted === 0 ? this.firstMinWords : this.minWords;
   }
 
   /** Feed a token delta; returns zero or more complete sentences. */
@@ -130,6 +140,7 @@ export class SentenceChunker {
       const sentence = this.buf.slice(0, end).trim();
       this.buf = this.buf.slice(end).replace(/^\s+/, '');
       out.push(...this.splitLong(sentence).map(tidy));
+      this.emitted++;
     }
     // Rare fallback: a sentence that runs on without terminal punctuation.
     if (countWords(this.buf) > this.maxWords) {
@@ -166,12 +177,12 @@ export class SentenceChunker {
       const next = m[1] ?? m[2] ?? '';
       const end = m.index + m[0].length;
       if (!isRealBoundary(this.buf, m.index, m[0], next)) continue;
-      if (countWords(this.buf.slice(0, end)) < this.minWords) continue; // merge with the next sentence
+      if (countWords(this.buf.slice(0, end)) < this.min) continue; // merge with the next sentence
       return end;
     }
     // Nothing confirmed by a next character: a sure sentence end at the very end still counts.
     const t = this.buf.match(TRAILING);
-    if (t && countWords(this.buf) >= this.minWords && isSureEnd(this.buf, t.index!, t[1]!)) return this.buf.length;
+    if (t && countWords(this.buf) >= this.min && isSureEnd(this.buf, t.index!, t[1]!)) return this.buf.length;
     return -1;
   }
 
