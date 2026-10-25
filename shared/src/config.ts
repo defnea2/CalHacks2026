@@ -50,6 +50,8 @@ export const MODULE_DEFAULTS = {
   MEMORY_MIN_CONFIDENCE: 0.7,
   CARTESIA_TTS_MODEL: 'sonic-3.6',
   CARTESIA_STT_MODEL: 'ink-2',
+  /** Local batch-STT endpoint (stt-proxy). */
+  STT_BASE_URL: 'http://127.0.0.1:8787',
   /** "Parker": casual, supportive warmth. Child-friendly tutor voice. */
   CARTESIA_VOICE_ID: '30894953-bcce-41fe-892c-15ce19c843ff',
   CARTESIA_VERSION: '2026-08-14',

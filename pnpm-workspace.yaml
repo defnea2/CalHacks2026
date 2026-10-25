@@ -4,3 +4,4 @@ packages:
   - worker
   - client
   - e2e
+  - stt-proxy

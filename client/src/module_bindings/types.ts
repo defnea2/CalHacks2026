@@ -11,11 +11,11 @@ import {
 } from "spacetimedb";
 
 export const AudioIn = __t.object("AudioIn", {
+  id: __t.u64(),
   sessionId: __t.u64(),
   phraseId: __t.u32(),
   seq: __t.u32(),
   pcm: __t.byteArray(),
-  final: __t.bool(),
 });
 export type AudioIn = __Infer<typeof AudioIn>;
 
@@ -233,6 +233,22 @@ export const Skill = __t.object("Skill", {
   tutorNote: __t.string(),
 });
 export type Skill = __Infer<typeof Skill>;
+
+export const SpeechActivity = __t.object("SpeechActivity", {
+  sessionId: __t.u64(),
+  phraseId: __t.u32(),
+  seq: __t.u32(),
+});
+export type SpeechActivity = __Infer<typeof SpeechActivity>;
+
+export const SttJob = __t.object("SttJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  sessionId: __t.u64(),
+  phraseId: __t.u32(),
+  attempt: __t.u32(),
+});
+export type SttJob = __Infer<typeof SttJob>;
 
 export const SummaryJob = __t.object("SummaryJob", {
   scheduledId: __t.u64(),

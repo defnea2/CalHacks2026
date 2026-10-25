@@ -47,17 +47,17 @@ export interface ExpectedAnswer {
 // runtimes (module procedure vs worker) without touching the rest.
 // ---------------------------------------------------------------------------
 
-/** Streaming speech-to-text for one session. Runs in the worker (Cartesia ink-2 websocket),
- *  see README "First checks" #3. */
-export interface SttStream {
-  /** Raw PCM16 mono at the stream's sample rate. */
-  push(pcm: Uint8Array): void;
-  /** Phrase ended: flush and resolve with the phrase's full text ('' if nothing was said). */
-  finalize(): Promise<string>;
-  close(): void;
+/** One phrase of PCM16 mono in, text out. Runs in a SpacetimeDB procedure (one-shot request
+ *  to the Cartesia batch STT interface, served locally by stt-proxy -> ink-2; README check #3). */
+export interface SttRequest {
+  pcm: Uint8Array;
+  sampleRate: number;
+  model: string;
+  language: string;
 }
-export interface SttProvider {
-  open(opts: { sampleRate: number; keyterms?: string[] }): SttStream;
+export interface SttResult {
+  text: string;
+  durationS: number;
 }
 
 /** One sentence in, complete PCM16 audio out. Runs in a SpacetimeDB procedure. */

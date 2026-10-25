@@ -43,7 +43,6 @@ import EndSessionReducer from "./end_session_reducer";
 import EndTurnReducer from "./end_turn_reducer";
 import InterruptReducer from "./interrupt_reducer";
 import MarkPlayedReducer from "./mark_played_reducer";
-import PhraseTranscribedReducer from "./phrase_transcribed_reducer";
 import PushAudioReducer from "./push_audio_reducer";
 import RecordMetricReducer from "./record_metric_reducer";
 import RegisterAgentReducer from "./register_agent_reducer";
@@ -62,7 +61,6 @@ import * as GetSessionImageProcedure from "./get_session_image_procedure";
 import * as SetTopicProcedure from "./set_topic_procedure";
 
 // Import all table schema definitions
-import AudioInRow from "./audio_in_table";
 import AudioOutRow from "./audio_out_table";
 import BoardItemRow from "./board_item_table";
 import CategoryRow from "./category_table";
@@ -74,6 +72,7 @@ import PlaybackFlushRow from "./playback_flush_table";
 import ReplySentenceRow from "./reply_sentence_table";
 import SessionRow from "./session_table";
 import SkillRow from "./skill_table";
+import SpeechActivityRow from "./speech_activity_table";
 import TaskRow from "./task_table";
 import TurnRow from "./turn_table";
 import TurnMetricsRow from "./turn_metrics_table";
@@ -82,14 +81,6 @@ import TurnMetricsRow from "./turn_metrics_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
-  audioIn: __table({
-    name: 'audio_in',
-    indexes: [
-    ],
-    constraints: [
-    ],
-    event: true,
-  }, AudioInRow),
   audioOut: __table({
     name: 'audio_out',
     indexes: [
@@ -237,6 +228,14 @@ const tablesSchema = __schema({
       { name: 'skill_key_key', constraint: 'unique', columns: ['key'] },
     ],
   }, SkillRow),
+  speechActivity: __table({
+    name: 'speech_activity',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, SpeechActivityRow),
   task: __table({
     name: 'task',
     indexes: [
@@ -303,7 +302,6 @@ const reducersSchema = __reducers(
   __reducerSchema("end_turn", EndTurnReducer),
   __reducerSchema("interrupt", InterruptReducer),
   __reducerSchema("mark_played", MarkPlayedReducer),
-  __reducerSchema("phrase_transcribed", PhraseTranscribedReducer),
   __reducerSchema("push_audio", PushAudioReducer),
   __reducerSchema("record_metric", RecordMetricReducer),
   __reducerSchema("register_agent", RegisterAgentReducer),

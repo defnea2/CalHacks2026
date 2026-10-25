@@ -1,7 +1,7 @@
 // Module entry. Reducer/procedure SIGNATURES are the contract (Stream 0, lead-owned):
 // client and worker bindings are generated from them. Bodies are owned by the module stream.
 import { t, SenderError } from 'spacetimedb/server';
-import spacetimedb, { ttsJob, extractionJob, summaryJob } from './schema';
+import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob } from './schema';
 
 export default spacetimedb;
 
@@ -38,7 +38,9 @@ export const uploadPhoto = spacetimedb.reducer(
 
 export const endSession = spacetimedb.reducer({ sessionId: t.u64() }, (_ctx, _args) => todo('endSession'));
 
-/** One ~150 ms chunk of 16 kHz PCM16. `final` closes the phrase. Repeated (sessionId, phraseId, seq) ignored. */
+/** One ~150 ms chunk of 16 kHz PCM16, buffered in audio_in. `final` closes the phrase:
+ *  raises pendingPhrases on the open student turn and inserts an stt_job due now.
+ *  Repeated (sessionId, phraseId, seq) ignored. Emits speech_activity. */
 export const pushAudio = spacetimedb.reducer(
   { sessionId: t.u64(), phraseId: t.u32(), seq: t.u32(), pcm: t.byteArray(), final: t.bool() },
   (_ctx, _args) => todo('pushAudio')
@@ -71,12 +73,6 @@ export const reportNoise = spacetimedb.reducer(
 
 /** Worker presents AGENT_SECRET once; its identity is stored in `role` as agent. */
 export const registerAgent = spacetimedb.reducer({ secret: t.string() }, (_ctx, _args) => todo('registerAgent'));
-
-/** STT result for one phrase (STT runs in the worker). Empty text discards the phrase. */
-export const phraseTranscribed = spacetimedb.reducer(
-  { sessionId: t.u64(), phraseId: t.u32(), text: t.string() },
-  (_ctx, _args) => todo('phraseTranscribed')
-);
 
 export const setTurnState = spacetimedb.reducer(
   { sessionId: t.u64(), state: t.string() },
@@ -147,6 +143,16 @@ export const setTopic = spacetimedb.procedure(
 
 /** Agent only. Task photo as a data URL, or '' if none. */
 export const getSessionImage = spacetimedb.procedure({ sessionId: t.u64() }, t.string(), (_ctx, _args) => todo('getSessionImage'));
+
+/** Joins the phrase's audio_in chunks by seq, POSTs them to STT_BASE_URL/stt (Cartesia batch
+ *  interface, served by stt-proxy -> ink-2), appends text to the turn, lowers pendingPhrases,
+ *  deletes the audio. Empty transcript or too-short phrase -> discarded. */
+export const transcribePhrase = spacetimedb.procedure(
+  { onSchedule: sttJob },
+  { job: sttJob.rowType },
+  t.unit(),
+  (_ctx, _args) => todo('transcribePhrase')
+);
 
 export const synthesizeSentence = spacetimedb.procedure(
   { onSchedule: ttsJob },

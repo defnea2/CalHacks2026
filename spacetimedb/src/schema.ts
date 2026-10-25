@@ -58,16 +58,30 @@ export const sessionImage = table(
 
 // ---------------------------------------------------------------- voice input
 
-/** Student audio chunks. Event table: rows are broadcast, never stored. The worker
- *  subscribes and streams them to Cartesia ink-2 (STT runs in the worker, First check #3). */
+/** Buffered student audio (private). Joined by seq and transcribed in one request when the
+ *  phrase's final chunk arrives; deleted once the phrase is transcribed. */
 export const audioIn = table(
-  { name: 'audio_in', public: true, event: true },
+  {
+    name: 'audio_in',
+    indexes: [{ accessor: 'bySessionPhrase', algorithm: 'btree', columns: ['sessionId', 'phraseId'] }],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    sessionId: t.u64().index('btree'),
+    phraseId: t.u32(),
+    seq: t.u32(),
+    pcm: t.byteArray(),
+  }
+);
+
+/** Student speech activity (no audio). Event table: lets the worker abort preemptive
+ *  generation as soon as the student speaks again. */
+export const speechActivity = table(
+  { name: 'speech_activity', public: true, event: true },
   {
     sessionId: t.u64(),
     phraseId: t.u32(),
     seq: t.u32(),
-    pcm: t.byteArray(),
-    final: t.bool(),
   }
 );
 
@@ -227,6 +241,17 @@ export const role = table(
 );
 
 // ---------------------------------------------------------------- scheduled jobs
+
+export const sttJob = table(
+  { name: 'stt_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    sessionId: t.u64(),
+    phraseId: t.u32(),
+    attempt: t.u32(),
+  }
+);
 
 export const ttsJob = table(
   { name: 'tts_job' },
@@ -420,6 +445,7 @@ const spacetimedb = schema(
     session,
     sessionImage,
     audioIn,
+    speechActivity,
     phrase,
     turn,
     replySentence,
@@ -429,6 +455,7 @@ const spacetimedb = schema(
     boardAnswer,
     turnMetrics,
     role,
+    sttJob,
     ttsJob,
     extractionJob,
     summaryJob,
@@ -452,6 +479,9 @@ const spacetimedb = schema(
       OPENROUTER_EXTRACTION_MODEL: t.string(),
       /** Shared secret the worker presents to registerAgent. */
       AGENT_SECRET: t.string(),
+      /** Base URL for batch STT. Default http://127.0.0.1:8787 (stt-proxy, see README). */
+      STT_BASE_URL: t.option(t.string()),
+      CARTESIA_STT_MODEL: t.option(t.string()),
       CARTESIA_TTS_MODEL: t.option(t.string()),
       CARTESIA_VOICE_ID: t.option(t.string()),
       TTS_SAMPLE_RATE: t.option(t.string()),

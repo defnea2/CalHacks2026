@@ -14,6 +14,4 @@ export default __t.row({
   sessionId: __t.u64().name("session_id"),
   phraseId: __t.u32().name("phrase_id"),
   seq: __t.u32(),
-  pcm: __t.byteArray(),
-  final: __t.bool(),
 });
