@@ -3,7 +3,7 @@ import { emptyCanvas, type CanvasState, type VisualBeat } from "../src/presentat
 import { LessonStreamParser } from "../src/server/streamingLesson";
 import { applyLearnerMathAction } from "../src/teaching/interactions";
 import {
-  acceptStep, buildModelRequest, compileMoment, finalizeLesson, interruptLesson, newLessonRecord, parseBeatInput, parseLessonMeta,
+  acceptStep, answerResponse, buildModelRequest, compileMoment, finalizeLesson, interruptLesson, newLessonRecord, parseBeatInput, parseLessonMeta,
   presented, publicCheck, recordUtterance, respond,
 } from "../src/teaching/lessonFlow";
 import { miniLessonText, miniMeta, miniMoments, miniSession } from "./fixtures";
@@ -84,5 +84,14 @@ describe("lesson flow (module-side compilation)", () => {
     expect(stale).toMatchObject({ ok: false, error: expect.stringMatching(/Stale/) });
     const reveal = applyLearnerMathAction(planned, { eventId: "m3", visualId: "math", revision: planned.math!.revision, change: { type: "set_equation", visible: true } });
     expect(reveal).toMatchObject({ ok: false, error: expect.stringMatching(/cannot set_equation/) });
+  });
+
+  it("spoken/typed answers to a choice check select the named option", () => {
+    const check = { kind: "choice" as const, prompt: "Which is bigger?", options: [{ id: "a", label: "0.5" }, { id: "b", label: "0.45" }], correctOptionId: "a" };
+    expect(answerResponse(check, "I think 0.45")).toEqual({ kind: "choice", optionId: "b" });
+    expect(answerResponse(check, "0.5 is bigger")).toEqual({ kind: "choice", optionId: "a" });
+    expect(answerResponse(check, "b")).toEqual({ kind: "choice", optionId: "b" });
+    expect(answerResponse(check, "both?")).toEqual({ kind: "answer", text: "both?" });
+    expect(answerResponse({ kind: "explanation", prompt: "Why?", rubric: ["x"] }, "because")).toEqual({ kind: "answer", text: "because" });
   });
 });

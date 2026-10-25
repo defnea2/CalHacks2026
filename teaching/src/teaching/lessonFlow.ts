@@ -76,6 +76,22 @@ export function respond(r: LessonRecord, eventId: string, response: LearnerRespo
   return { record: bump(r, { evidence: [...r.evidence, item], status: "needs_plan" }), evidence: item };
 }
 
+/** A typed or spoken answer. For a choice check, text naming exactly one option (its label, or
+ *  "a"/"b"... its id) counts as choosing it: voice and text learners cannot click the option. */
+export function answerResponse(check: TeachingStep["check"], text: string): LearnerResponse["response"] {
+  if (check?.kind !== "choice") return { kind: "answer", text };
+  const norm = (s: string) => ` ${s.toLowerCase().replace(/[^\p{L}\p{N}./]+/gu, " ").trim()} `;
+  const said = norm(text);
+  const byLabel = check.options.filter(o => said.includes(norm(o.label)));
+  // Prefer the longest label ("0.45" also contains "0.4"); ignore ties.
+  const longest = byLabel.sort((a, b) => b.label.length - a.label.length);
+  if (longest.length === 1 || (longest.length > 1 && longest[0]!.label.length > longest[1]!.label.length && norm(longest[0]!.label).includes(norm(longest[1]!.label).trim())))
+    return { kind: "choice", optionId: longest[0]!.id };
+  const byId = check.options.filter(o => said.trim() === o.id.toLowerCase() || said.includes(` option ${o.id.toLowerCase()} `));
+  if (byId.length === 1) return { kind: "choice", optionId: byId[0]!.id };
+  return { kind: "answer", text };
+}
+
 /** Unscored learner context (an utterance that is not an answer). Never invents evidence. */
 export function recordUtterance(r: LessonRecord, id: string, text: string): LessonRecord {
   const utterance = text.trim().slice(0, 2000);

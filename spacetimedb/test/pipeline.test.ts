@@ -144,6 +144,11 @@ describe('lesson_state over the utterance (text mode)', () => {
     // The next request lets the model assess the explanation.
     const out = JSON.parse((mod.buildLessonRequest as any)(proc(e.h, e.agent), { sessionId: e.s.id, requestId: 'r2' }));
     expect(out.request.context.phaseOptionsAfterAssessment).toBeTruthy();
+    // The next step may not re-ask the same check.
+    call(e.h, e.agent, mod.beginUtterance, { sessionId: e.s.id, utteranceId: 200n, replyToIdx: turns(e.h, e.s.id).at(-1)!.idx, preemptive: false });
+    const again = { ...miniMeta, assessment: { evidenceId: ev[0].eventId, judgement: 'unclear', observation: 'Vague.' } };
+    expect(() => call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 200n, meta: JSON.stringify(again) })).toThrow(/repeats a question/);
+    call(e.h, e.agent, mod.beginLesson, { sessionId: e.s.id, utteranceId: 200n, meta: JSON.stringify({ ...again, check: { ...miniMeta.check, prompt: 'What stays the same when we cut more pieces?' } }) });
   });
 
   it('a typed turn mid-lesson interrupts: needs_plan, canvas rolls back to the last beat the learner saw', () => {
