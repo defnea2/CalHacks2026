@@ -70,7 +70,7 @@ export default defineConfig({
   optimizeDeps: { include: ['@ricky0123/vad-web', 'onnxruntime-web/wasm', 'katex', 'mafs', 'motion/react'] },
   // the Smart Turn worker imports ONNX Runtime, which code-splits (needs ES module workers)
   worker: { format: 'es' },
-  // 5175: the team's root app (src/) keeps 5173
+  // 5175: the one client (the team's src/ UI is part of this build, see @tutor/visual above)
   server: { host: '127.0.0.1', port: 5175, strictPort: true },
   preview: { host: '127.0.0.1' },
   test: { include: ['test/**/*.test.ts', 'test/**/*.test.tsx'], environment: 'node' },

@@ -5,9 +5,6 @@ import { demoPlanningModel } from "../teaching/dev/demoModel";
 import { generatePlan, parseModelRequest, planningPrompt } from "./planning";
 import { join } from "node:path";
 import { codexArgs } from "./codexModel";
-import { trustedRequest, readJson } from "./teachingPlugin";
-import { Readable } from "node:stream";
-import type { IncomingMessage } from "node:http";
 
 function request() {
   return new TeachingPlanner({ sessionId: "local-test", topic: "Why does multiplication mean equal groups?" }).request(emptyCanvas());
@@ -52,12 +49,6 @@ describe("local no-key model bridge", () => {
     const cancelled = new AbortController(); cancelled.abort();
     await expect(generatePlan(parseModelRequest(request()), generate, cancelled.signal)).rejects.toThrow();
     expect(generate).toHaveBeenCalledTimes(1);
-  });
-  it("requires the local app host and rejects other origins", () => {
-    const req = (host: string, origin?: string) => ({ headers: { host, origin } }) as IncomingMessage;
-    expect(trustedRequest(req("127.0.0.1:5173", "http://127.0.0.1:5173"), 5173)).toBe(true);
-    expect(trustedRequest(req("127.0.0.1:5173", "https://other.example"), 5173)).toBe(false);
-    expect(trustedRequest(req("attacker.example:5173"), 5173)).toBe(false);
   });
   it("runs ephemeral read-only requests with command execution and integrations disabled", () => {
     const args = codexArgs("/tmp/tutor test", "chosen-model");
@@ -107,16 +98,4 @@ it("supports thin generated shapes while rejecting unusably small text objects",
   expect(await generatePlan(parseModelRequest(input), vi.fn().mockResolvedValue(valid), new AbortController().signal)).toBeTruthy();
   valid.beats[0].cues[0].commands[1] = { type: "add", nodes: [{ id: "label", kind: "label", x: 500, y: 500, width: 800, height: 4, label: "Ground" }] };
   await expect(generatePlan(parseModelRequest(input), vi.fn().mockResolvedValue(valid), new AbortController().signal)).rejects.toThrow("20 by 20");
-});
-
-it("limits request bodies and releases a body read when cancelled", async () => {
-  const large = Readable.from([Buffer.alloc(1_000_001)]) as IncomingMessage;
-  await expect(readJson(large, new AbortController().signal)).rejects.toThrow("too large");
-  const pending = new Readable({ read() {} }) as IncomingMessage;
-  const controller = new AbortController();
-  const result = readJson(pending, controller.signal);
-  const assertion = expect(result).rejects.toThrow("cancelled");
-  controller.abort();
-  await assertion;
-  expect(pending.destroyed).toBe(true);
 });

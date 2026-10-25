@@ -4,14 +4,16 @@ A narration-driven visual engine, with a unified math canvas for the team’s cu
 
 ## Run
 
-Use Node 22.12+ and npm:
+One static client app (`client/`, Vite, port 5175) talks only to SpacetimeDB; the LLM runs in `worker/`. The team UI in `src/` (app shell, lessons, canvas, visuals) is part of that build under the alias `@tutor/visual` (see [client/README.md](client/README.md) "One app").
 
 ```sh
-npm ci
-npm run dev
+pnpm install
+pnpm stdb:start && pnpm stdb:publish   # local SpacetimeDB + module
+pnpm worker                            # LLM worker (keys from .env)
+pnpm dev                               # = pnpm --filter client dev → http://127.0.0.1:5175
 ```
 
-Copy `.env.example` to `.env.local`, set the server-only `ANTHROPIC_API_KEY`, and restart the dev server. Open http://127.0.0.1:5173. Generated lessons use Anthropic streaming; offline samples work without credentials. See [Anthropic setup and voice integration](docs/teaching/VOICE.md). The [older Codex bridge](docs/teaching/LOCAL_MODEL.md) remains explicitly selectable for local development.
+`/` picks a learner and starts a session (talk or type, optional text-only mode); `?lesson` opens the team lesson lab (prepared and sample lessons work offline; live lessons run over SpacetimeDB); `?observe=<id>` and `?overview` are read-only. `pnpm build` writes static files to `client/dist/` (no `/api/*` endpoints exist anymore).
 
 ## Compact math and instant exploration
 
@@ -29,7 +31,7 @@ Answer a question to get the next explanation automatically. **Show another way*
 
 For a quick demo: Equal groups → choose **2 + 3** → **Show another way** → move an object into a basket → answer **six** → continue through independent practice. The same layout supports decimals, scientific diagrams, and future topics supplied by a real planning model.
 
-**Original question and connection settings** lets you preserve a homework question or choose a different compatible planning endpoint. The included `/api/teaching/plan` streams validated plans from Anthropic, with JSON compatibility for existing clients. Errors are visible and never silently substitute a fixture.
+**Homework and settings** lets you preserve a homework question; the connection line reads the worker heartbeat (`agent_status`). Live lessons are planned by the worker and validated by the SpacetimeDB module (`beat` rows); errors are visible and never silently substitute a fixture.
 
 - [Integrated session API, demo checklist, and voice migration](docs/teaching/SESSION.md)
 - [Teaching planner and model contracts](docs/teaching/INTEGRATION.md)
@@ -152,7 +154,7 @@ Each feature is a separate commit on `feature/visual-engine`. The branch starts 
 
 ## Voice runtime
 
-The Cartesia/SpacetimeDB voice runtime is now included alongside the text-only tutor. See [animated voice canvas integration](docs/VOICE_CANVAS.md) and [voice setup](docs/VOICE_RUNTIME.md). The voice client uses port 5175; its `?canvasPreview` route works without microphone access or API keys. Use `pnpm dev:voice` for the voice stack; `npm run dev` still starts the text-only tutor.
+The Cartesia/SpacetimeDB voice runtime is now included alongside the text-only tutor. See [animated voice canvas integration](docs/VOICE_CANVAS.md) and [voice setup](docs/VOICE_RUNTIME.md). The voice client uses port 5175; its `?canvasPreview` route works without microphone access or API keys. Use `pnpm dev:voice` for the whole stack; voice and typed lessons share one session screen.
 
 ## Abdul + voice integration branch
 
