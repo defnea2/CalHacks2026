@@ -24,6 +24,12 @@ export function clusterSlots(size: number): 2 | 4 {
 }
 
 /** student_cluster.learnerIds: JSON string[] (u64 as strings). Never throws. */
+/** Learner ids of a student_cluster row: the typed `members` column, or the JSON `learnerIds`
+ *  string of a row from an older module (members empty or missing). */
+export function clusterMemberIds(c: { learnerIds: string; members?: readonly bigint[] }): string[] {
+  return c.members && c.members.length ? c.members.map(String) : parseLearnerIds(c.learnerIds);
+}
+
 export function parseLearnerIds(json: string): string[] {
   try {
     const v = JSON.parse(json) as unknown;

@@ -10,7 +10,7 @@ import type { ClassSession, ClassSummary, DashboardState, Learner, LessonState, 
 import { callReducer, subscribe } from '../stdb/connection';
 import { useRows } from '../stdb/useRows';
 import { navigate, phaseLabel, routeUrl, tsMs } from '../lib/format';
-import { agoLabel, clusterRows, nextLabel, observeOrder, parseLearnerIds, stepObserve, ungroupedIds, type ClusterBlock, refreshResult } from '../lib/dashboard';
+import { agoLabel, clusterRows, nextLabel, observeOrder, clusterMemberIds, stepObserve, ungroupedIds, type ClusterBlock, refreshResult } from '../lib/dashboard';
 import { eventLog } from '../lib/debug';
 import { parseNotes } from '@tutor/visual/teaching/spacetimeModel';
 import { typedTurnText } from '../components/session';
@@ -107,7 +107,7 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
   const rows = useMemo(
     () =>
       clusterRows(
-        clusterRowsRaw.map(c => ({ id: c.id.toString(), position: c.position, name: c.name, description: c.description, learnerIds: parseLearnerIds(c.learnerIds).filter(id => students.has(id)) })).filter(c => c.learnerIds.length > 0)
+        clusterRowsRaw.map(c => ({ id: c.id.toString(), position: c.position, name: c.name, description: c.description, learnerIds: clusterMemberIds(c).filter(id => students.has(id)) })).filter(c => c.learnerIds.length > 0)
       ),
     [clusterRowsRaw, students]
   );

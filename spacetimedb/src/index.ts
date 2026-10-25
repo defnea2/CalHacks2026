@@ -33,6 +33,7 @@ export const init = spacetimedb.init(ctx => {
   ensureLibrary(ctx);
   classroom.ensureSimProfiles(ctx);
   ensureRetentionJob(ctx);
+  classroom.backfillClusterMembers(ctx);
 });
 
 /** init only runs when the database is created; a republished pack reloads on the next connect. */
@@ -40,6 +41,7 @@ export const onConnect = spacetimedb.clientConnected(ctx => {
   ensureLibrary(ctx);
   classroom.ensureSimProfiles(ctx);
   ensureRetentionJob(ctx);
+  classroom.backfillClusterMembers(ctx);
 });
 /** Marks the connection's (real) learners offline in `presence`. */
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
@@ -153,7 +155,9 @@ export const submitInteraction = spacetimedb.reducer(
     )
 );
 
-/** Replaces /api/teaching/shear-feedback: kind 'shear_feedback', payload = the slant lesson state JSON. */
+/** UNUSED: no screen calls it and the worker no longer subscribes to tutor_request (the slant
+ *  lesson's tutor feedback, which replaced /api/teaching/shear-feedback, has no UI caller). Kept so
+ *  published clients and the module tests keep their contract; kind 'shear_feedback'. */
 export const requestTutor = spacetimedb.reducer({ sessionId: t.u64(), kind: t.string(), payload: t.string() }, (ctx, args) =>
   pipeline.requestTutor(ctx, args)
 );
@@ -386,6 +390,8 @@ export const synthesizeSentence = spacetimedb.procedure(
 
 /** Scheduled: a text-mode sentence was read (its reading delay passed) -> played. */
 export const finishTextSentence = spacetimedb.reducer({ onSchedule: textPlayJob }, { job: textPlayJob.rowType }, (ctx, { job }) => {
+  // Not redundant: scheduled reducers stay client-callable in 2.13 (a CLI call reaches the body),
+  // so every scheduled reducer checks that the scheduler (the module identity) called it.
   if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
   textMode.finishTextSentence(ctx, job);
 });

@@ -74,6 +74,7 @@ export const BoardItem = __t.object("BoardItem", {
   lastAnswer: __t.string(),
   createdAt: __t.timestamp(),
   markerPos: __t.i32(),
+  attempts: __t.u32(),
 });
 export type BoardItem = __Infer<typeof BoardItem>;
 
@@ -453,6 +454,7 @@ export const StudentCluster = __t.object("StudentCluster", {
   name: __t.string(),
   description: __t.string(),
   learnerIds: __t.string(),
+  members: __t.array(__t.u64()),
 });
 export type StudentCluster = __Infer<typeof StudentCluster>;
 

@@ -35,10 +35,13 @@ const connHex = (ctx: Ctx) => ctx.connectionId?.toHexString() ?? '';
 
 // ================================================================ seed profiles
 
-/** Loads/updates the 20 simulation profiles (init + connect; cheap when unchanged). */
-export function ensureSimProfiles(ctx: Ctx): void {
-  for (const s of SIM_STUDENTS) {
-    const row = {
+type SimProfileRow = NonNullable<ReturnType<Ctx['db']['simProfile']['rank']['find']>>;
+let simProfileRows: Array<{ row: SimProfileRow; json: string }> | undefined;
+
+/** The seed rows and their JSON, built once per module instance (they are bundled constants). */
+function profileRows() {
+  return (simProfileRows ??= SIM_STUDENTS.map(s => {
+    const row: SimProfileRow = {
       rank: s.rank,
       name: s.name,
       age: s.age,
@@ -48,9 +51,16 @@ export function ensureSimProfiles(ctx: Ctx): void {
       misconceptions: JSON.stringify(s.misconceptions),
       memory: JSON.stringify(s.memory),
     };
-    const cur = ctx.db.simProfile.rank.find(s.rank);
+    return { row, json: JSON.stringify(row) };
+  }));
+}
+
+/** Loads/updates the 20 simulation profiles (init + connect; 20 point lookups when unchanged). */
+export function ensureSimProfiles(ctx: Ctx): void {
+  for (const { row, json } of profileRows()) {
+    const cur = ctx.db.simProfile.rank.find(row.rank);
     if (!cur) ctx.db.simProfile.insert(row);
-    else if (JSON.stringify(cur) !== JSON.stringify(row)) ctx.db.simProfile.rank.update(row);
+    else if (JSON.stringify(cur) !== json) ctx.db.simProfile.rank.update(row);
   }
 }
 
@@ -774,6 +784,34 @@ export function refreshDashboard(ctx: PCtx, classSessionId: bigint, scheduled: b
   return { ok: true, repaired: !valid, repairs, clusters: clusters.length };
 }
 
+/** Decimal learner id strings -> u64 (anything else dropped). */
+export function memberIds(ids: readonly string[]): bigint[] {
+  return ids.filter(id => /^\d{1,20}$/.test(id)).map(id => BigInt(id));
+}
+
+let clustersBackfilled = false;
+
+/** student_cluster rows written before the typed `members` column existed get it from
+ *  learnerIds. Once per module instance (init + connect); later rows are written with both. */
+export function backfillClusterMembers(ctx: Ctx): number {
+  if (clustersBackfilled) return 0;
+  let n = 0;
+  for (const c of [...ctx.db.studentCluster.iter()]) {
+    if (c.members.length) continue;
+    const ids = memberIds(parseJson<unknown[]>(c.learnerIds, []).map(String));
+    if (!ids.length) continue;
+    ctx.db.studentCluster.id.update({ ...c, members: ids });
+    n++;
+  }
+  clustersBackfilled = true;
+  return n;
+}
+
+/** Tests only. */
+export function resetClusterBackfill(): void {
+  clustersBackfilled = false;
+}
+
 function normalizeClusters(raw: unknown): Cluster[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -793,7 +831,15 @@ export function writeDashboard(ctx: Ctx, classSessionId: bigint, summary: string
   else ctx.db.classSummary.insert(row);
   for (const c of [...ctx.db.studentCluster.classSessionId.filter(classSessionId)]) ctx.db.studentCluster.id.delete(c.id);
   clusters.forEach((c, position) =>
-    ctx.db.studentCluster.insert({ id: 0n, classSessionId, position, name: c.name || 'Group', description: c.description, learnerIds: JSON.stringify(c.learnerIds) })
+    ctx.db.studentCluster.insert({
+      id: 0n,
+      classSessionId,
+      position,
+      name: c.name || 'Group',
+      description: c.description,
+      learnerIds: JSON.stringify(c.learnerIds),
+      members: memberIds(c.learnerIds),
+    })
   );
   const st = ctx.db.dashboardState.classSessionId.find(classSessionId);
   if (!st) return;

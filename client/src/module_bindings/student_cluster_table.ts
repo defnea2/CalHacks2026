@@ -17,4 +17,5 @@ export default __t.row({
   name: __t.string(),
   description: __t.string(),
   learnerIds: __t.string().name("learner_ids"),
+  members: __t.array(__t.u64()),
 });

@@ -117,8 +117,8 @@ read them) can see them; **event** = rows are broadcast to subscribers at commit
 | `lesson_record` | private | Authoritative `TeachingPlanner` record (current step incl. its check with the answer, history) |
 | `lesson_plan` | private | The lesson being streamed for one utterance (meta, accepted beats, canvas after each beat) |
 | `agent_status` | public | Worker heartbeat (row 0, every 5 s): model, provider, busy sessions. The UI shows "tutor online" |
-| `tutor_request` / `tutor_result` | public | Request/result rows for the slant lesson's tutor feedback (replaces the old `/api/teaching/shear-feedback`) |
-| `text_playback` | private | Reading clock of a text-mode session |
+| `tutor_request` / `tutor_result` | public | Request/result rows for the slant lesson's tutor feedback (replaces the old `/api/teaching/shear-feedback`). Unused: no UI inserts requests and the worker does not subscribe |
+| `text_playback` | private | Reading clock of a text-mode session (`endsAtMicros`: u64 Unix micros, see Column types) |
 
 ### Memory (all private)
 
@@ -128,7 +128,7 @@ read them) can see them; **event** = rows are broadcast to subscribers at commit
 | `note_evidence` | Quote + turn range that supports a note |
 | `concept_state` | Mastery 0–100 per learner and concept |
 | `session_summary` | Summary + next focus written at session end |
-| `extraction_cursor` | First turn not yet processed + a running marker (no duplicate windows) |
+| `extraction_cursor` | First turn not yet processed + a running marker `runningSinceMicros` (u64 Unix micros; no duplicate windows) |
 
 Memory is never subscribed to by a client; it reaches the LLM only through the agent-only procedures
 `buildContext` / `buildLessonRequest`, and the dashboard through its own procedure.
@@ -143,7 +143,7 @@ Memory is never subscribed to by a client; it reaches the LLM only through the a
 | `class_document` | private | Image payload of the class document (reaches the worker like a task photo) |
 | `sim_profile` | public, read-only | 20 seed students (persona, misconceptions, seed memory) from `shared/src/classroom/simStudents.ts` |
 | `class_summary` | public | Class-wide LLM summary + version |
-| `student_cluster` | public | Groups of exactly 2 or 4 students (one 3 only for odd classes) with a short name and description |
+| `student_cluster` | public | Groups of exactly 2 or 4 students (one 3 only for odd classes) with a short name and description. `members: u64[]` (typed); `learnerIds` (JSON string) is still written for older clients |
 | `dashboard_state` | public | Who the teacher is observing, `nextDueAt`, `running`, `lastError` |
 | `sim_running` | private | Student-LLM calls in flight (concurrency cap) |
 
@@ -175,6 +175,16 @@ Kept: sessions, turns, phrases (text), reply sentences, metrics, `lesson_state`,
 memory notes, evidence, mastery, summaries, and the history flags `session.hasImage` /
 `turn.hasPhoto`. A sweep only touches rows past their limit, so it is idempotent; photo tables stay
 small, so it reads them whole (`lesson_record` / `lesson_plan` only when `RETENTION_DAYS` is set).
+
+### Column types
+
+Two time columns stay `u64` Unix micros instead of `t.timestamp()`: `text_playback.endsAtMicros`
+and `extraction_cursor.runningSinceMicros` (0 = idle). Changing a column's type is not an
+automatic migration in 2.13 (only adding tables, indexes and columns with defaults at the end is),
+so it would need `--clear` or a parallel column holding the same state twice; both are private and
+only compared with `ctx.timestamp.microsSinceUnixEpoch`. `student_cluster.learnerIds` got the
+additive typed column `members: u64[]` instead (written together; rows from before are backfilled
+from the JSON once per module instance on init / connect).
 
 ### Indexes
 
@@ -210,7 +220,7 @@ checks the caller's identity in the private `role` table.
 
 | Reducer / procedure | Caller | File | What |
 | --- | --- | --- | --- |
-| `init`, `onConnect` | lifecycle | `library.ts`, `classroom.ts` | Load the content library and the 20 sim profiles (cheap when unchanged) |
+| `init`, `onConnect` | lifecycle | `library.ts`, `classroom.ts`, `retention.ts` | Load the content library and the 20 sim profiles when they changed (pack hash and profile rows computed once per module instance; a connect does one `library_meta` and 20 `sim_profile` lookups), ensure the `retention_job` row, backfill `student_cluster.members` |
 | `onDisconnect` | lifecycle | `classroom.ts` | That connection's real learners → `offline` |
 | `createTestUser` | client | `sessions.ts` | New learner |
 | `startSession(learnerId, taskText)` | client | `sessions.ts` | Ends the learner's active session, starts a new one |
@@ -225,11 +235,11 @@ checks the caller's identity in the private `role` table.
 | `interruptUtterance(sessionId, utteranceId)` | client | `voice_out.ts` | Barge-in scoped to the utterance the client was playing: the current one → `interrupt`; one that just finished (learner cut into its last sentence) → its tutor turn marked interrupted + flush; older ones ignored |
 | `markPlayed` | client | `voice_out.ts` | A sentence started playing (drives reveals, first-playback metric, "what was heard") |
 | `reportNoise` | client | `index.ts` | Noise floor of the turn, for metrics |
-| `submitGapAnswer` | client | `lesson.ts` | Gap task answer, checked against the private `board_answer` |
+| `submitGapAnswer` | client | `lesson.ts` | Gap task answer, checked against the private `board_answer`; only while the session is active, at most 10 answers per task (`board_item.attempts`), a solved task is not re-graded |
 | `submitTextTurn(sessionId, text, intent)` | client (module for sims) | `text_mode.ts` | Typed turn or a lesson button (`another_way`, `smaller_step`, `continue`, `demonstrate`); interrupts a running reply like barge-in |
 | `setSessionVoice(sessionId, voice)` | client | `text_mode.ts` | Text mode on/off |
 | `submitInteraction(sessionId, kind, payload)` | client | `pipeline.ts` | Canvas manipulation (`math_action`, `activity_action`), `submit`, `choice`; validated against `canvas_state` and the open check |
-| `requestTutor` | client | `pipeline.ts` | Slant-lesson feedback request row (`tutor_request`). No UI calls it today; the worker (`tutorRequests.ts`) serves the rows if one appears |
+| `requestTutor` | client | `pipeline.ts` | **Unused.** Slant-lesson feedback request row (`tutor_request`); no UI calls it and the worker no longer subscribes (`tutorRequests.ts` stays, re-enabled by adding the subscription back) |
 | `registerAgent(secret)` | worker | `index.ts` | Registers the worker identity as `agent` |
 | `agentHeartbeat`, `submitTutorResult` | agent | `pipeline.ts` | Heartbeat row 0; result of a `tutor_request` |
 | `beginUtterance`, `beginOpening` | agent | `voice_out.ts`, `opening.ts` | Start a tutor reply (or the opening) with a worker-chosen unique utterance id |

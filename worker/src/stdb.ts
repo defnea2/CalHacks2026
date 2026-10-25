@@ -34,7 +34,8 @@ export const SUBSCRIPTIONS = [
   // Event tables: no stored rows, so no initial size; each event names its session.
   'SELECT * FROM speech_activity',
   'SELECT * FROM playback_flush',
-  "SELECT * FROM tutor_request WHERE status = 'pending'",
+  // tutor_request is not subscribed: requestTutor has no UI caller (index.ts). TutorRequests stays
+  // wired below so re-adding "SELECT * FROM tutor_request WHERE status = 'pending'" revives it.
 ];
 
 function readToken(file: string): string | undefined {

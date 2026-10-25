@@ -249,6 +249,8 @@ export const boardItem = table(
      *  sentenceIdx) where the item appears (at the word there). -1 = no marker: reveal when the
      *  sentence starts playing. */
     markerPos: t.i32().default(-1),
+    /** Gap tasks: answers submitted so far (submitGapAnswer stops at GAP_MAX_ATTEMPTS). */
+    attempts: t.u32().default(0),
   }
 );
 

@@ -25,4 +25,5 @@ export default __t.row({
   lastAnswer: __t.string().name("last_answer"),
   createdAt: __t.timestamp().name("created_at"),
   markerPos: __t.i32().name("marker_pos"),
+  attempts: __t.u32(),
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TestAuth } from 'spacetimedb/server/test-utils';
 import { pack } from '../../shared/src/lesson/index';
+import { resetLibraryVersionCache } from '../src/library';
 import { mod, setup } from './helpers';
 
 describe('content library', () => {
@@ -18,6 +19,7 @@ describe('content library', () => {
       pack.content.tasks = [
         { key: 'fe-gap-1', skill: 'fractions-expand/given-factor', type: 'gap', difficulty: 1, show: '\\square', say: 'x', answer: { form: 'number', value: '3' }, steps: [], wrongStepIndex: -1 },
       ];
+      resetLibraryVersionCache();
       const { h } = setup();
       expect(h.db.concept.key.find('fractions-expand')!.dependsOn).toBe('["fractions-unit"]');
       expect(JSON.parse(h.db.skill.key.find('fractions-expand/given-factor')!.steps)).toEqual([{ show: 'a', say: 'a' }]);
@@ -25,11 +27,16 @@ describe('content library', () => {
       expect(h.db.libraryMeta.id.find(0)!.packVersion.startsWith(pack.version)).toBe(true);
 
       pack.content.tasks = [];
+      // Cached per module instance: the same connect without a new pack does not reload.
+      h.withReducerTx(TestAuth.internal(), ctx => (mod.onConnect as any)(ctx, {}));
+      expect([...h.db.task.iter()]).toHaveLength(1);
+      resetLibraryVersionCache(); // a republish = a new module instance with the edited pack
       h.withReducerTx(TestAuth.internal(), ctx => (mod.onConnect as any)(ctx, {}));
       expect([...h.db.task.iter()]).toHaveLength(0);
       expect(h.db.concept.key.find('fractions-expand')).toBeTruthy();
     } finally {
       Object.assign(pack.content, saved);
+      resetLibraryVersionCache();
     }
   });
 });
