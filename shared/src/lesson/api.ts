@@ -3,6 +3,7 @@
 import type { JsonSchema, LessonPack, PhaseDef, BoardKindDef } from './types';
 import type { ToolSpec } from '../types';
 import { MEMORY_KINDS, MEMORY_OUTCOMES } from '../types';
+import { markerText } from '../markers';
 
 export function getPhase(pack: LessonPack, id: string): PhaseDef | undefined {
   return pack.phases.find(p => p.id === id);
@@ -93,6 +94,10 @@ export const TOOL_NAMES = {
   remember: 'remember',
 } as const;
 
+/** Description of the optional `id` argument of board tools (inline marker, see markers.ts). */
+export const MARKER_ID_DESCRIPTION =
+  `Short marker id like "b1". Your spoken text must contain ${markerText('b1')} right after the words about this item; it appears at that word.`;
+
 export function buildToolSpecs(pack: LessonPack): ToolSpec[] {
   const categories = pack.taxonomy.map(c => c.key);
   const concepts = pack.taxonomy.flatMap(c => c.concepts.map(k => k.key));
@@ -130,6 +135,7 @@ export function buildToolSpecs(pack: LessonPack): ToolSpec[] {
       parameters: {
         type: 'object',
         properties: {
+          id: { type: 'string', description: MARKER_ID_DESCRIPTION },
           kind: { type: 'string', enum: pack.boardKinds.map(k => k.name) },
           content: { type: 'object', description: 'Content object for the kind (see kind descriptions).' },
           taskKey: { type: 'string', description: 'Key of a library task to show instead of content.' },
