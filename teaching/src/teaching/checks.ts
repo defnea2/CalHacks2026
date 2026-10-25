@@ -113,6 +113,8 @@ const unclear = (observation: string): Observation => ({
   source: "unassessed",
   observation,
 });
+const HEDGED = /\b(maybe|perhaps|not sure|i guess|no idea)\b/i;
+
 const numberEqual = (a: number, b: number) =>
   Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 export function assessResponse(
@@ -138,6 +140,9 @@ export function assessResponse(
       return unclear("This check needs a numeric answer.");
     const expected = numericValue(check.rule);
     const parsed = parseSpokenNumber(response.text);
+    // A hedged guess ("I think maybe six?") stays unclear: the tutor asks, it doesn't grade.
+    if (parsed === null && HEDGED.test(response.text))
+      return unclear("Response is a hedged guess; clarify rather than grade it.");
     // Beyond a bare number: one number or fraction inside the answer ("it's nine", "nine twelfths").
     const said = parsed === null ? spokenValue(response.text) : { kind: "num" as const, value: parsed };
     if (said?.kind === "frac") {
