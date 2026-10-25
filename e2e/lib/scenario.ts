@@ -488,7 +488,7 @@ function evaluateInterrupt(
   run: ScenarioRun
 ): void {
   const barge = ofType('vad.barge_in')[0];
-  const call = ofType('reducer.call').find(e => e.name === 'interrupt');
+  const call = ofType('reducer.call').find(e => e.name === 'interrupt' || e.name === 'interruptUtterance');
   const flush = ofType('audio.flush').find(e => e.reason === 'barge_in');
   if (!barge) {
     const firstPlay = ofType('audio.play_start')[0];

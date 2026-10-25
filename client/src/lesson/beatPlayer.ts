@@ -14,6 +14,7 @@ import type { CanvasState, VisualBeat } from '@tutor/visual/presentation/contrac
 import type { MathAction } from '@tutor/visual/presentation/math/models';
 import type { LearnerAction } from '@tutor/visual/shared';
 import { beatRowToVisual, contiguousBeats, type BeatRowLike } from '@tutor/visual/teaching/spacetimeModel';
+import { cueSentenceOffset } from '@tutor/visual/teaching/keyframes';
 
 export interface OrderedBeat {
   key: string;
@@ -23,6 +24,26 @@ export interface OrderedBeat {
   narration: string;
   visual: VisualBeat | null;
   error: string | null;
+  /** Keyframe part of the beat (0 = the beat itself; k = cues revealed with sentence sentenceIdx). */
+  part: number;
+}
+
+/**
+ * Per-sentence keyframes: cues whose id ends in `-s<k>` (module splitKeyframes, e.g. the equation of
+ * a formalization moment) become their own reveal step on sentence `beat.sentenceIdx + k`, so each
+ * visual change lands on the sentence that talks about it. A beat without such cues stays one step.
+ */
+export function keyframeParts(b: OrderedBeat): OrderedBeat[] {
+  if (!b.visual || b.visual.cues.length < 2) return [b];
+  const groups = new Map<number, VisualBeat['cues']>();
+  for (const cue of b.visual.cues) {
+    const k = cueSentenceOffset(cue.id);
+    groups.set(k, [...(groups.get(k) ?? []), cue]);
+  }
+  if (groups.size < 2 || !groups.has(0)) return [b];
+  return [...groups.entries()]
+    .sort((x, y) => x[0] - y[0])
+    .map(([k, cues]) => ({ ...b, key: k ? `${b.key}:s${k}` : b.key, sentenceIdx: b.sentenceIdx < 0 ? -1 : b.sentenceIdx + k, part: k, visual: { ...b.visual!, id: k ? `${b.visual!.id}-s${k}` : b.visual!.id, cues } }));
 }
 
 export function orderBeats(rows: readonly BeatRowLike[]): OrderedBeat[] {
@@ -37,7 +58,7 @@ export function orderBeats(rows: readonly BeatRowLike[]): OrderedBeat[] {
       } catch (e) {
         error = e instanceof Error ? e.message : String(e);
       }
-      out.push({ key: `${r.utteranceId}:${r.idx}`, utteranceId: r.utteranceId, idx: r.idx, sentenceIdx: r.sentenceIdx, narration: r.narration, visual, error });
+      out.push(...keyframeParts({ key: `${r.utteranceId}:${r.idx}`, utteranceId: r.utteranceId, idx: r.idx, sentenceIdx: r.sentenceIdx, narration: r.narration, visual, error, part: 0 }));
     }
   }
   return out;
@@ -69,10 +90,11 @@ export function revealCount({ beats, started, over, mode, textShown }: RevealInp
   return n;
 }
 
-/** Beats of the latest utterance (text-mode playback works on these). */
+/** Beats of the latest utterance (text-mode playback works on these: one step per beat, its
+ *  keyframe parts show together by idx). */
 export function latestUtteranceBeats(beats: readonly OrderedBeat[]): OrderedBeat[] {
   const last = beats.at(-1);
-  return last ? beats.filter(b => b.utteranceId === last.utteranceId) : [];
+  return last ? beats.filter(b => b.utteranceId === last.utteranceId && b.part === 0) : [];
 }
 
 /** Reading time of one beat in text mode (the team's Lesson formula). */

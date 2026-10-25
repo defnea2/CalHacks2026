@@ -112,6 +112,13 @@ export class PlaybackQueue {
     this.updatePlaying();
   }
 
+  /** Utterance whose audio is playing right now (the earliest scheduled one not yet ended), or 0n. */
+  get playingUtterance(): bigint {
+    const now = this.ctx.currentTime;
+    const s = this.scheduled.filter(x => !x.cancelled && x.endAt > now).sort((a, b) => a.startAt - b.startAt)[0];
+    return s?.utteranceId ?? 0n;
+  }
+
   /** True while audio is scheduled to play from now on. */
   get isPlaying(): boolean {
     const now = this.ctx.currentTime;

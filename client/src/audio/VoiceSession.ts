@@ -142,13 +142,18 @@ export class VoiceSession {
         this.o.onTurnEnd?.(wall);
         break;
       }
-      case 'barge_in':
+      case 'barge_in': {
         eventLog.log('vad.barge_in', { speechMs: Math.round(e.speechMs) });
+        // Utterance-scoped: the one this tab is playing. The server already moved on when its LAST
+        // sentence started (currentUtteranceId 0), so a plain interrupt would miss it.
+        const utteranceId = this.playback.playingUtterance || this.serverUtterance;
         this.playback.flush(undefined, 'barge_in');
         // the utterance the server is on may not have sent audio yet: never play it later
         if (this.serverUtterance !== 0n) this.playback.flush(this.serverUtterance, 'barge_in');
-        void callReducer('interrupt', { sessionId }, () => conn.reducers.interrupt({ sessionId }));
+        const args = { sessionId, utteranceId };
+        void callReducer('interruptUtterance', args, () => conn.reducers.interruptUtterance(args));
         break;
+      }
       case 'misfire':
         eventLog.log('vad.misfire', { speechMs: Math.round(e.speechMs) });
         break;

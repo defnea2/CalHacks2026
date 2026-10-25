@@ -5,7 +5,7 @@ export const topicCues: Record<string, string[]> = {
   'place-value': ['place value', 'hundreds?', 'thousands?', 'tens and ones', 'digits?', 'round(ing)? to'],
   regrouping: ['carry(ing)?', 'borrow(ing)?', 'regroup(ing)?', 'column (addition|subtraction)', '\\d+ ?[+-] ?\\d{2,}'],
   'multiplication-groups': ['times', 'multipl(y|ication|ied)', 'groups? of', 'rows? of', 'arrays?', '\\d+ ?[x×*] ?\\d+'],
-  'division-sharing': ['divid(e|ed|ing)', 'division', 'shar(e|ed|ing) (equally|fairly)', 'each (get|gets)', '\\d+ ?[÷:/] ?\\d+ (people|friends|children|kids)'],
+  'division-sharing': ['divid(e|ed|ing)', 'division', 'shar(e|es|ed|ing)', 'equally', 'fairly', 'each (get|gets)', '\\d+ ?[÷:/] ?\\d+ (people|friends|children|kids)'],
   'fractions-unit': ['what (is )?a fraction', 'one (half|third|quarter)', 'unit fractions?', 'numerator', 'denominator'],
   'fractions-compare': ['compare', 'bigger', 'larger', 'smaller', 'greater', 'less than', 'more than', 'which is more', '[<>]'],
   'fractions-expand': ['expand(ing)?', 'equivalent', 'same (amount|value)', '(is )?the same as', 'bottom number is', 'denominator (is|of) \\d+', 'simplif(y|ying)', 'reduce'],
