@@ -45,6 +45,7 @@ export class PlaybackQueue {
   private silent = new Set<{ utteranceId: bigint; timer: ReturnType<typeof setTimeout> }>();
   private nextStart = 0;
   private gain: GainNode;
+  private volume: GainNode;
   /** Output level for the tutor avatar (absent on fake contexts in tests). */
   private analyser: AnalyserNode | null = null;
   private levelBuf: Float32Array | null = null;
@@ -59,7 +60,10 @@ export class PlaybackQueue {
   ) {
     this.orderer = new SentenceOrderer(client.PLAYBACK_GAP_TIMEOUT_MS);
     this.gain = ctx.createGain();
-    this.gain.connect(ctx.destination);
+    // Output volume (settings popover) after the analyser tap, so the avatar still moves at low volume.
+    this.volume = ctx.createGain();
+    this.gain.connect(this.volume);
+    this.volume.connect(ctx.destination);
     if (typeof ctx.createAnalyser === 'function') {
       this.analyser = ctx.createAnalyser();
       this.analyser.fftSize = 512;
@@ -141,10 +145,16 @@ export class PlaybackQueue {
     return Math.min(1, Math.sqrt(sum / this.levelBuf.length) * 4);
   }
 
+  /** Output volume 0..1 (settings popover). */
+  setVolume(v: number): void {
+    this.volume.gain.value = Math.min(1, Math.max(0, v));
+  }
+
   destroy(): void {
     clearInterval(this.tickTimer);
     this.flush(undefined, 'destroy');
     this.gain.disconnect();
+    this.volume.disconnect();
     this.analyser?.disconnect();
   }
 

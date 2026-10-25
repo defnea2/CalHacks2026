@@ -158,7 +158,7 @@ function printReport(results: GroupResult[], globalChecks: Check[], externalFlak
     console.log(`  latency ${label} (server): n=${lat.length} min ${lat[0]} p50 ${p(0.5)} max ${lat[lat.length - 1]} ms${opening ? '' : ` (target ${E2E_DEFAULTS.latencyTargetMs})`}`);
   };
   stat('turn end → first audio', false);
-  stat('"Start talking" → opening first audio', true);
+  stat('session start → opening first audio', true);
   console.log(`  external flakes: ${externalFlakes}`);
 }
 

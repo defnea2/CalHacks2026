@@ -13,7 +13,7 @@ export function Entry() {
         <div>
           <span className="pr-eyebrow">Math tutor for ages 8–12</span>
           <h1>Let's think it through,<br />one picture at a time.</h1>
-          <p>Talk or type with a tutor that explains with moving pictures. Teachers can run a whole class and watch every student learn.</p>
+          <p>Talk with a tutor that explains with moving pictures. Teachers can run a whole class and watch every student learn.</p>
         </div>
         <TutorAvatar state="idle" size={92} label="The tutor says hello" />
       </section>

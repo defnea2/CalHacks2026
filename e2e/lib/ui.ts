@@ -1,4 +1,6 @@
-// UI flow: entry (role student) -> create test user -> pick learner -> "Learn by myself" -> task text -> start session -> start talking.
+// UI flow: entry (role student) -> create test user -> pick learner -> "Learn by myself" -> task text -> start session.
+// Voice only: "Start my lesson" opens the session screen with microphone + sound already on (no
+// separate "Start talking" step), so the harness just waits for the microphone.
 import type { Page } from 'puppeteer-core';
 import { fill, tid, until } from './browser';
 
@@ -36,15 +38,14 @@ export async function createSessionViaUi(page: Page, baseUrl: string, learnerNam
   await page.waitForSelector(tid('session-screen'), { timeout: 20_000 });
   const id = await page.$eval(tid('session-screen'), el => el.getAttribute('data-session-id'));
   if (!id) throw new Error('session-screen without data-session-id');
-  // Voice sessions show the microphone button, text sessions (?voice=0) only the text input.
-  await until(page, 'session ready', 15_000, () => window.__tutor?.state?.sessionReady === true && !!document.querySelector('[data-testid="start-talking"]:not([disabled]), [data-mode="typed"] [data-testid="text-input"]'));
+  await until(page, 'session ready', 15_000, () => window.__tutor?.state?.sessionReady === true);
   return id;
 }
 
+/** The session auto-starts microphone + playback; wait until the microphone is on (or fails). */
 export async function startTalking(page: Page): Promise<number> {
-  await page.evaluate(() => window.__tutor.clear());
-  const at = Date.now();
-  await page.click(tid('start-talking'));
-  await page.waitForSelector(tid('mic-state'), { timeout: 15_000 });
-  return at;
+  await page.waitForSelector(`${tid('mic-state')}, ${tid('mic-error')}`, { timeout: 20_000 });
+  const err = await page.$(tid('mic-error'));
+  if (err) throw new Error(`microphone did not start: ${await page.$eval(tid('mic-error'), el => el.textContent)}`);
+  return Date.now();
 }

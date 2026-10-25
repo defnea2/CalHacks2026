@@ -1,5 +1,7 @@
 // Wires AudioCapture + PlaybackQueue to SpacetimeDB for one session (Transport = reducers up,
-// subscriptions down). Created on the "Start talking" click, which also creates the AudioContext.
+// subscriptions down). Created when the session screen opens (right after the "Start my lesson"
+// click, whose user activation lets the AudioContext run); mic + playback start at once.
+// Device / level settings (popover): see audioPrefs.ts and AudioDevices below.
 import type { DbConnection } from '../module_bindings';
 import type { AudioOut, PlaybackFlush } from '../module_bindings/types';
 import type { AppSettings } from '../config';
@@ -7,6 +9,7 @@ import { AudioCapture } from './AudioCapture';
 import { PlaybackQueue } from './PlaybackQueue';
 import { AudioUnlock } from './audioUnlock';
 import { floatToPcm16 } from './pcm';
+import { deviceAvailable, loadPrefs, savePrefs, sinkSelectable, clampInputGain, clampVolume, type AudioPrefs } from './audioPrefs';
 import type { VadEvent } from './vadMachine';
 import type { NoiseState } from './noise';
 import { callReducer } from '../stdb/connection';
@@ -23,6 +26,19 @@ export interface VoiceUiState {
   prob: number;
   /** AudioContext still not running after a resume attempt (autoplay blocked): show "Tap for sound". */
   audioBlocked?: boolean;
+  /** Short notice after a device change (e.g. "Microphone unplugged: using the default"). */
+  deviceNotice?: string;
+}
+
+/** What the settings popover drives (VoiceSession, or the ?miccheck capture). */
+export interface AudioDevices {
+  readonly prefs: AudioPrefs;
+  /** Speaker choice works only with AudioContext.setSinkId (Chrome/Edge). */
+  readonly canSelectSpeaker: boolean;
+  setMic(id: string): Promise<void>;
+  setSpeaker(id: string): Promise<void>;
+  setInputGain(v: number): void;
+  setOutputVolume(v: number): void;
 }
 
 export interface VoiceSessionOptions {
@@ -35,8 +51,9 @@ export interface VoiceSessionOptions {
   onTurnEnd?: (wallMs: number) => void;
 }
 
-export class VoiceSession {
+export class VoiceSession implements AudioDevices {
   readonly ctx: AudioContext;
+  prefs: AudioPrefs = loadPrefs();
   readonly playback: PlaybackQueue;
   private capture: AudioCapture | null = null;
   private serverSpeaking = false;
@@ -81,15 +98,76 @@ export class VoiceSession {
         this.updateTutorSpeaking();
       },
     });
+    this.playback.setVolume(this.prefs.outputVolume);
+    if (this.prefs.speakerId) void this.setSpeaker(this.prefs.speakerId, false);
     o.conn.db.audioOut.onInsert(this.onAudio);
     o.conn.db.playbackFlush.onInsert(this.onFlush);
+    navigator.mediaDevices?.addEventListener?.('devicechange', this.onDeviceChange);
   }
 
+  // ------------------------------------------------------------ devices (settings popover)
+  get canSelectSpeaker(): boolean {
+    return sinkSelectable(this.ctx);
+  }
+
+  async setMic(id: string): Promise<void> {
+    this.prefs = savePrefs({ micId: id });
+    this.o.onUi({ deviceNotice: '' });
+    await this.capture?.switchMic(id);
+  }
+
+  async setSpeaker(id: string, save = true): Promise<void> {
+    if (save) this.prefs = savePrefs({ speakerId: id });
+    if (!sinkSelectable(this.ctx)) return;
+    try {
+      await this.ctx.setSinkId(id);
+      eventLog.log('audio.sink', { deviceId: id });
+    } catch (err) {
+      eventLog.log('audio.sink_error', { deviceId: id, error: String(err) });
+      if (id) await this.ctx.setSinkId('').catch(() => {});
+    }
+  }
+
+  setInputGain(v: number): void {
+    this.prefs = savePrefs({ inputGain: clampInputGain(v) });
+    this.capture?.setInputGain(this.prefs.inputGain);
+  }
+
+  setOutputVolume(v: number): void {
+    this.prefs = savePrefs({ outputVolume: clampVolume(v) });
+    this.playback.setVolume(this.prefs.outputVolume);
+  }
+
+  /** A chosen device disappeared: fall back to the default and say so. */
+  private readonly onDeviceChange = async () => {
+    if (this.stopped) return;
+    let devices: MediaDeviceInfo[];
+    try {
+      devices = await navigator.mediaDevices.enumerateDevices();
+    } catch {
+      return;
+    }
+    if (!deviceAvailable(devices, 'audioinput', this.prefs.micId)) {
+      eventLog.log('audio.mic_lost', { deviceId: this.prefs.micId });
+      await this.setMic('').catch(err => eventLog.log('audio.mic_fallback_failed', { error: String(err) }));
+      this.o.onUi({ deviceNotice: 'Microphone unplugged: using the default microphone.' });
+    }
+    if (!deviceAvailable(devices, 'audiooutput', this.prefs.speakerId)) {
+      eventLog.log('audio.speaker_lost', { deviceId: this.prefs.speakerId });
+      await this.setSpeaker('');
+      this.o.onUi({ deviceNotice: 'Speaker unplugged: using the default speaker.' });
+    }
+  };
+
   async start(): Promise<void> {
+    if (this.stopped || this.capture) return;
     this.capture = new AudioCapture({
       ctx: this.ctx,
       settings: this.o.settings,
       firstPhraseId: this.o.firstPhraseId,
+      micId: this.prefs.micId,
+      inputGain: this.prefs.inputGain,
+      onTrackEnded: () => void this.onDeviceChange(),
       onEvent: e => this.onVad(e),
       onFrame: (levelDb, prob) => {
         const now = performance.now();
@@ -100,7 +178,27 @@ export class VoiceSession {
       },
     });
     this.updateTutorSpeaking();
-    await this.capture.start();
+    const c = this.capture;
+    try {
+      await c.start();
+    } catch (err) {
+      // The chosen microphone may be gone: one more try with the default before giving up.
+      const name = (err as { name?: string } | null)?.name;
+      if (!this.prefs.micId || (name !== 'OverconstrainedError' && name !== 'NotFoundError')) {
+        if (this.capture === c) this.capture = null;
+        await c.stop().catch(() => {});
+        throw err;
+      }
+      await c.stop().catch(() => {});
+      this.prefs = savePrefs({ micId: '' });
+      this.o.onUi({ deviceNotice: 'The chosen microphone is not available: using the default.' });
+      if (this.capture === c) this.capture = null;
+      return this.start();
+    }
+    if (this.stopped || this.capture !== c) {
+      await c.stop(); // stopped (or muted) while the microphone was opening
+      return;
+    }
     this.o.onUi({ listening: true });
   }
 
@@ -182,7 +280,7 @@ export class VoiceSession {
     return this.capture !== null;
   }
 
-  /** Microphone off, tutor audio keeps playing (typing student in a voice session). */
+  /** Microphone muted (capture stopped, tracks released), tutor audio keeps playing. */
   async stopCapture(): Promise<void> {
     const c = this.capture;
     this.capture = null;
@@ -196,6 +294,7 @@ export class VoiceSession {
     await this.capture?.stop();
     this.o.conn.db.audioOut.removeOnInsert(this.onAudio);
     this.o.conn.db.playbackFlush.removeOnInsert(this.onFlush);
+    navigator.mediaDevices?.removeEventListener?.('devicechange', this.onDeviceChange);
     this.playback.destroy();
     this.unlock.destroy();
     await this.ctx.close().catch(() => {});

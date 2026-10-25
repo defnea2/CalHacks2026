@@ -8,6 +8,33 @@ import type { NoiseState } from '../audio/noise';
 import { Badge, Button, Card, CardHeader, ErrorNote } from '../components/ui';
 import { EventLogView } from '../components/session';
 import { eventLog } from '../lib/debug';
+import { AudioSettings } from '../components/AudioSettings';
+import type { AudioDevices } from '../audio/VoiceSession';
+import { clampInputGain, clampVolume, loadPrefs, savePrefs, sinkSelectable, type AudioPrefs } from '../audio/audioPrefs';
+
+/** The settings popover on ?miccheck: same preferences as the session, applied to the local capture. */
+class MicCheckDevices implements AudioDevices {
+  prefs: AudioPrefs = loadPrefs();
+  constructor(private readonly ctx: AudioContext, private readonly capture: AudioCapture) {}
+  get canSelectSpeaker() {
+    return sinkSelectable(this.ctx);
+  }
+  async setMic(id: string) {
+    this.prefs = savePrefs({ micId: id });
+    await this.capture.switchMic(id);
+  }
+  async setSpeaker(id: string) {
+    this.prefs = savePrefs({ speakerId: id });
+    if (sinkSelectable(this.ctx)) await this.ctx.setSinkId(id);
+  }
+  setInputGain(v: number) {
+    this.prefs = savePrefs({ inputGain: clampInputGain(v) });
+    this.capture.setInputGain(this.prefs.inputGain);
+  }
+  setOutputVolume(v: number) {
+    this.prefs = savePrefs({ outputVolume: clampVolume(v) });
+  }
+}
 
 export function MicCheck({ settings }: { settings: AppSettings }) {
   const cap = useRef<{ c: AudioCapture; ctx: AudioContext } | null>(null);
@@ -15,6 +42,7 @@ export function MicCheck({ settings }: { settings: AppSettings }) {
   const [error, setError] = useState('');
   const [meter, setMeter] = useState({ levelDb: -100, prob: 0, floorDb: null as number | null, noise: 'quiet' as NoiseState });
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [devices, setDevices] = useState<MicCheckDevices | null>(null);
 
   useEffect(() => () => void cap.current?.c.stop().then(() => cap.current?.ctx.close()), []);
 
@@ -22,10 +50,13 @@ export function MicCheck({ settings }: { settings: AppSettings }) {
     setError('');
     const ctx = new AudioContext();
     let last = 0;
+    const prefs = loadPrefs();
     const c = new AudioCapture({
       ctx,
       settings,
       firstPhraseId: 1,
+      micId: prefs.micId,
+      inputGain: prefs.inputGain,
       onFrame: (levelDb, prob) => {
         const now = performance.now();
         if (now - last < 100) return;
@@ -42,6 +73,7 @@ export function MicCheck({ settings }: { settings: AppSettings }) {
     cap.current = { c, ctx };
     try {
       await c.start();
+      setDevices(new MicCheckDevices(ctx, c));
       setRunning(true);
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
@@ -53,6 +85,7 @@ export function MicCheck({ settings }: { settings: AppSettings }) {
     await cap.current?.c.stop();
     await cap.current?.ctx.close();
     cap.current = null;
+    setDevices(null);
     setRunning(false);
   };
 
@@ -63,15 +96,18 @@ export function MicCheck({ settings }: { settings: AppSettings }) {
       <ErrorNote>{error}</ErrorNote>
       <Card>
         <CardHeader title="Voice detection">
-          {running ? (
-            <Button size="sm" variant="secondary" onClick={stop}>
-              Stop
-            </Button>
-          ) : (
-            <Button size="sm" data-testid="miccheck-start" onClick={start}>
-              Start
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <AudioSettings devices={devices} levelDb={meter.levelDb} live={running} placement="down" />
+            {running ? (
+              <Button size="sm" variant="secondary" onClick={stop}>
+                Stop
+              </Button>
+            ) : (
+              <Button size="sm" data-testid="miccheck-start" onClick={start}>
+                Start
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <div className="flex flex-wrap gap-2 p-4 font-mono text-xs" data-testid="miccheck-meter" data-running={running}>
           <Badge>level {meter.levelDb.toFixed(0)} dBFS</Badge>

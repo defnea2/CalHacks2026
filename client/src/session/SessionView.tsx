@@ -1,9 +1,11 @@
-// One session screen for voice and text (the team's lesson layout): the canvas is the main
-// area, a small conversation column on the side. The learner can talk (VAD → pushAudio) or type
-// (submitTextTurn); the lesson buttons are turns with an intent; canvas manipulations go to
-// submitInteraction. Everything lesson-related is read from SpacetimeDB rows (beat,
-// lesson_state, canvas_state); this component only keeps presentation state (local audio,
-// text-mode pause/next/replay).
+// One session screen (the team's lesson layout): the canvas is the main area, a small
+// conversation column on the side. Voice only for the learner: the microphone and tutor audio
+// start as soon as the screen opens (the "Start my lesson" click gave the page its user
+// activation); the lesson buttons are turns with an intent (submitTextTurn with an empty text);
+// canvas manipulations go to submitInteraction. Everything lesson-related is read from
+// SpacetimeDB rows (beat, lesson_state, canvas_state); this component only keeps presentation
+// state. Typed sessions (session.voice = false: simulated classroom students, test harnesses)
+// still render here for observers, but the student UI has no way to start one.
 //
 // <SessionView readOnly /> is the observer (?observe=<id>), reused by the classroom dashboard:
 // no microphone, no audio, no inputs; reveals follow reply_sentence status `played`.
@@ -27,6 +29,8 @@ import { shouldStartConversation } from '../lib/conversation';
 import { latestUtteranceBeats, orderBeats, parseScene, playbackOver, revealCount, withoutUnheard } from '../lesson/beatPlayer';
 import { parseNotes } from '@tutor/visual/teaching/spacetimeModel';
 import { LessonCanvas } from './LessonCanvas';
+import { AudioSettings } from '../components/AudioSettings';
+import { micErrorMessage } from '../audio/audioPrefs';
 import { useTextPlayback } from './useTextPlayback';
 import { useAgentStatus } from './useAgentStatus';
 import { STAGE_LABELS } from './stages';
@@ -78,7 +82,9 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
   const [ui, setUi] = useState<VoiceUiState>({ listening: false, speaking: false, tutorAudio: false, noise: 'quiet', floorDb: null, levelDb: -100, prob: 0 });
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
-  const [draft, setDraft] = useState('');
+  /** Microphone could not start (permission denied, no device): inline message + "Try again". */
+  const [micError, setMicError] = useState('');
+  const autoVoice = useRef(false);
   const [localStarted, setLocalStarted] = useState<Map<string, number[]>>(() => new Map());
   /** Playback timing of the sentences this tab started ("utteranceId:idx"), for marker reveals. */
   const timings = useRef(new Map<string, SentenceTiming>());
@@ -206,6 +212,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
     () => () => {
       void voiceRef.current?.stop();
       voiceRef.current = null;
+      autoVoice.current = false;
     },
     []
   );
@@ -250,14 +257,17 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
     return v;
   }, [readOnly, settings, mode, conn, sessionId, maxPhraseId, onSentenceStart]);
 
+  /** Microphone + tutor audio on (automatically when the screen opens, or "Try again" / unmute). */
   const startTalking = async () => {
     setError('');
+    setMicError('');
     setStarting(true);
     try {
       const v = ensureAudio() ?? null;
       if (!v) throw new Error('audio is off in this session');
       eventLog.log('ui.start_talking', {});
       await v.start();
+      if (voiceRef.current !== v) return; // unmounted meanwhile
       setVoice(v);
       // Fresh session: the tutor speaks first (audio can play now that the click created the AudioContext).
       if (shouldStartConversation(session)) {
@@ -268,8 +278,8 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      eventLog.log('ui.start_failed', { error: msg });
-      setError(`Could not start the microphone: ${msg}`);
+      eventLog.log('ui.start_failed', { error: msg, name: (err as { name?: string } | null)?.name ?? '' });
+      setMicError(micErrorMessage(err));
       await voiceRef.current?.stopCapture();
     } finally {
       setStarting(false);
@@ -290,7 +300,16 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
     if (!r.ok) setError(r.error ?? 'failed');
   };
 
-  // ------------------------------------------------------------ learner input (text + buttons)
+  // Voice starts with the session: no extra "Start talking" step.
+  useEffect(() => {
+    if (readOnly || !settings || autoVoice.current || !data.ready || !active || mode !== 'voice') return;
+    autoVoice.current = true;
+    eventLog.log('ui.voice_autostart', { sessionId: sessionId.toString() });
+    void startTalking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readOnly, settings, data.ready, active, mode, sessionId]);
+
+  // ------------------------------------------------------------ learner input (buttons)
   const sendTurn = async (textValue: string, intent: string) => {
     setError('');
     ensureAudio();
@@ -351,8 +370,8 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
     [readOnly, localStarted, mode, hiddenFrom]
   );
 
-  // Joined from the waiting room in text mode: the tutor starts at once (voice needs a click for
-  // the AudioContext: the welcome button below, which calls startConversation like "Start talking").
+  // Typed session joined from the waiting room (simulated / harness students only): the tutor
+  // starts at once. Voice sessions call startConversation from startTalking.
   const autoStarted = useRef(false);
   useEffect(() => {
     if (!joining || autoStarted.current || !data.ready || mode !== 'typed' || !shouldStartConversation(session)) return;
@@ -431,16 +450,10 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
                     ? 'Waiting for the tutor.'
                     : thinking
                       ? 'The tutor is thinking about how to show it.'
-                      : mode === 'voice' && active && !listening && session?.turnCount === 0
-                        ? 'Press the button to turn on sound and the microphone. The tutor starts.'
-                        : 'Talk or type: the tutor explains with a moving picture.'}
+                      : starting
+                        ? 'Turning on sound and the microphone…'
+                        : 'Just talk: the tutor explains with a moving picture.'}
                 </p>
-                {!readOnly && active && mode === 'voice' && !listening && session?.turnCount === 0 && (
-                  <button type="button" className="pr-primary" data-testid="welcome-start" onClick={startTalking} disabled={starting}>
-                    <span>{starting ? 'Starting…' : joining ? 'Join the lesson' : 'Start talking'}</span>
-                    <span aria-hidden="true">→</span>
-                  </button>
-                )}
               </div>
             )}
           </div>
@@ -470,41 +483,44 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
                 <TutorAvatar state={avatarState} level={avatarLevel} size={58} />
                 <span className="stage-status" role="status" data-testid="stage-status">{stateLabel}</span>
               </div>
-              <div className="voice-control">
-                {!active ? (
+              {!active ? (
+                <div className="voice-control">
                   <Button size="lg" onClick={() => navigate(homeUrl())}>Start another question</Button>
-                ) : mode === 'typed' ? null : !listening ? (
-                  <Button size="lg" data-testid="start-talking" onClick={startTalking} disabled={starting || !active}>
-                    <MicIcon />
-                    {starting ? 'Starting…' : APP_CONFIG.startButtonText}
-                  </Button>
-                ) : (
-                  <Button size="lg" variant="outline" data-testid="stop-talking" onClick={stopTalking}>
-                    <MicIcon />
-                    Pause microphone
-                  </Button>
-                )}
-                {listening && <MicMeter ui={ui} phrase={livePhrase} />}
-                {active && voice && ui.audioBlocked && (
-                  <Button size="sm" variant="outline" data-testid="tap-for-sound" onClick={() => voice.resumeAudio()}>
-                    Tap for sound
-                  </Button>
-                )}
-              </div>
-              {active && (
-                <form
-                  className="stage-compose"
-                  data-testid="text-form"
-                  onSubmit={async e => {
-                    e.preventDefault();
-                    const t = draft.trim();
-                    if (!t) return;
-                    if (await sendTurn(t, '')) setDraft('');
-                  }}
-                >
-                  <input data-testid="text-input" aria-label={check ? 'Your answer' : 'Type to the tutor'} autoComplete="off" maxLength={2000} value={draft} onChange={e => setDraft(e.target.value)} placeholder={check ? 'Your answer…' : 'Or type here…'} />
-                  <button type="submit" data-testid="text-send" disabled={!draft.trim()} aria-label="Send">→</button>
-                </form>
+                </div>
+              ) : (
+                <div className="voice-control" data-testid="voice-control">
+                  {micError ? (
+                    <div className="stage-notice" role="alert" data-testid="mic-error">
+                      <span>{micError}</span>
+                      <button type="button" data-testid="mic-retry" onClick={() => void startTalking()} disabled={starting}>{starting ? 'Starting…' : 'Try again'}</button>
+                    </div>
+                  ) : voice && ui.audioBlocked ? (
+                    <div className="stage-notice" role="alert">
+                      <span>The browser blocked the sound.</span>
+                      <button type="button" data-testid="tap-for-sound" onClick={() => voice.resumeAudio()}>Tap for sound</button>
+                    </div>
+                  ) : listening ? (
+                    <MicMeter ui={ui} phrase={livePhrase} />
+                  ) : mode === 'voice' ? (
+                    <span className="stage-muted" data-testid="mic-off">{starting ? 'Starting the microphone…' : 'Microphone off'}</span>
+                  ) : null}
+                  {ui.deviceNotice && !micError && <span className="stage-muted" role="status" data-testid="device-notice">{ui.deviceNotice}</span>}
+                  {mode === 'voice' && (
+                    <button
+                      type="button"
+                      className="stage-icon"
+                      data-testid="mic-mute"
+                      aria-pressed={!listening && !starting && !micError}
+                      aria-label={listening ? 'Mute microphone' : 'Turn the microphone on'}
+                      title={listening ? 'Mute microphone' : 'Turn the microphone on'}
+                      disabled={starting}
+                      onClick={() => void (listening ? stopTalking() : startTalking())}
+                    >
+                      {listening ? <MicIcon /> : <MicOffIcon />}
+                    </button>
+                  )}
+                  {mode === 'voice' && <AudioSettings devices={voice} levelDb={ui.levelDb} live={listening} />}
+                </div>
               )}
               {ui.noise === 'noisy' && listening && <p role="status">{APP_CONFIG.noisyHint}</p>}
             </footer>
@@ -545,7 +561,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
                   Check my picture →
                 </button>
               ) : (
-                <p className="lesson-response-hint">Say it or type it below.</p>
+                <p className="lesson-response-hint">Say your answer out loud.</p>
               )}
             </div>
           )}
@@ -581,6 +597,10 @@ export function SessionView({ conn, sessionId, settings, readOnly = false, embed
       )}
     </div>
   );
+}
+
+function MicOffIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3M9 9v3a3 3 0 0 0 5.1 2.1M19 10v2a7 7 0 0 1-.9 3.4M5 10v2a7 7 0 0 0 11.6 5.3M12 19v3M8 22h8M3 3l18 18" /></svg>;
 }
 
 function MicIcon() {
