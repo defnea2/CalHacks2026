@@ -28,4 +28,5 @@ export default __t.row({
   endedAt: __t.option(__t.timestamp()).name("ended_at"),
   classSessionId: __t.u64().name("class_session_id"),
   voice: __t.bool(),
+  pendingPhoto: __t.bool().name("pending_photo"),
 });

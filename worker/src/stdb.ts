@@ -91,6 +91,9 @@ export class StdbTransport implements Transport {
   async getSessionImage(a: { sessionId: bigint }) {
     return this.c().procedures.getSessionImage(a);
   }
+  async getTurnImage(a: { sessionId: bigint; turnIdx: number }) {
+    return this.c().procedures.getTurnImage(a);
+  }
   async buildLessonRequest(a: { sessionId: bigint; requestId: string }) {
     return this.c().procedures.buildLessonRequest(a);
   }

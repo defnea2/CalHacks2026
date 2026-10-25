@@ -150,6 +150,9 @@ Inline markers: the tutor writes `⟦b1⟧` in its text where an item belongs an
 | `start-talking`, `stop-talking`, `end-session`, `open-observer` | | session |
 | `mic-state` | `data-listening`, `data-speaking`, `data-tutor-audio` | session, while talking |
 | `task-display`, `session-photo-input`, `photo-state` | `data-state` | session |
+| `turn-photo` | `data-state` = none / uploading / pending / sent / error | session (`PhotoButton`: camera button in the controls row) |
+| `photo-button`, `photo-modal`, `photo-video`, `photo-capture`, `photo-review`, `photo-retake`, `photo-use`, `photo-pick`, `photo-file`, `photo-chip`, `photo-remove` | | session: take a picture at any time (live camera preview via getUserMedia; file/`capture` input without a webcam), compressed to a ≤ 1 MB JPEG, `attachImage`; the chip says "Will be sent with your next answer" until the next turn closes |
+| `caption-photo` | | captions: "[photo sent]" on the student turn a photo went out with (also in the observer) |
 | `captions` | | |
 | `caption-student` | `data-ref` = turn idx; children `caption-phrase` with `data-id` (phraseId), `data-status` | |
 | `caption-tutor` | `data-ref` = utteranceId; children `caption-sentence` with `data-id` (idx), `data-status` | |

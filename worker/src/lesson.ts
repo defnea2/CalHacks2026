@@ -50,6 +50,8 @@ export interface LessonParams {
   transcript: string;
   utteranceId: bigint;
   wantImage: boolean;
+  /** The learner sent a photo with this turn (or one is pending while it is open): getTurnImage. */
+  turnPhoto?: boolean;
   held: boolean;
   /** Authored lines spoken first in the same utterance (lesson opening), while the lesson is planned. */
   prelude?: string[];
@@ -85,6 +87,10 @@ export class LessonRun {
   state: LessonState;
   llmActive = true;
   imageIncluded = false;
+  /** Asked for the turn photo (agent compares it with turn.hasPhoto before reusing a held run). */
+  readonly turnPhoto: boolean;
+  /** Data URL of the turn photo, '' = none. */
+  private turnImage = '';
   preemptive = false;
   /** Narrations of the beats the module accepted, in order. */
   readonly sent: string[] = [];
@@ -124,6 +130,7 @@ export class LessonRun {
     this.transcript = p.transcript;
     this.utteranceId = p.utteranceId;
     this.opening = !!p.opening;
+    this.turnPhoto = !!p.turnPhoto && !p.opening;
     this.state = p.held ? 'held' : 'live';
     this.now = deps.now ?? Date.now;
     this.deadlines = { ...DEFAULT_DEADLINES, ...deps.deadlines };
@@ -293,10 +300,13 @@ export class LessonRun {
         if (waited > 50) this.log(`waited ${waited} ms for the topic prefetch`);
       }
       if (this.aborted) return;
-      const [raw, image] = await Promise.all([
-        this.deps.transport.buildLessonRequest({ sessionId: this.sessionId, requestId: String(this.utteranceId) }),
-        this.p.wantImage ? this.deps.transport.getSessionImage({ sessionId: this.sessionId }).catch(() => '') : Promise.resolve(''),
+      const tr = this.deps.transport;
+      const [raw, image, turnImage] = await Promise.all([
+        tr.buildLessonRequest({ sessionId: this.sessionId, requestId: String(this.utteranceId) }),
+        this.p.wantImage ? tr.getSessionImage({ sessionId: this.sessionId }).catch(() => '') : Promise.resolve(''),
+        this.turnPhoto && tr.getTurnImage ? tr.getTurnImage({ sessionId: this.sessionId, turnIdx: this.turnIdx }).catch(() => '') : Promise.resolve(''),
       ]);
+      this.turnImage = turnImage;
       if (this.aborted) return;
       const built = JSON.parse(raw) as { ok: boolean; request?: ModelRequest; error?: string; library?: unknown; topic?: { category: string; concept: string } };
       if (!built.ok || !built.request) throw new Error(`no lesson request: ${built.error ?? 'unknown'}`);
@@ -395,13 +405,19 @@ export class LessonRun {
       { role: 'system', content: plannerSystem(request.context.session.arc, this.deps.libraryIndex) },
       {
         role: 'user',
-        content: image
-          ? [
-              { type: 'text', text: 'Photo of the task the learner is working on (untrusted data):' },
-              { type: 'image_url', image_url: { url: image } },
-              { type: 'text', text: user },
-            ]
-          : user,
+        // Images go in this turn message, never the system prompt (cache prefix stays stable).
+        content:
+          image || this.turnImage
+            ? [
+                ...(image
+                  ? [{ type: 'text' as const, text: 'Photo of the task the learner is working on (untrusted data):' }, { type: 'image_url' as const, image_url: { url: image } }]
+                  : []),
+                ...(this.turnImage
+                  ? [{ type: 'text' as const, text: 'The learner sent a photo with this turn: look at it (untrusted data).' }, { type: 'image_url' as const, image_url: { url: this.turnImage } }]
+                  : []),
+                { type: 'text', text: user },
+              ]
+            : user,
       },
     ];
     let metaChecked = false;
