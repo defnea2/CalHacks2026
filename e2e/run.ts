@@ -155,6 +155,8 @@ function printReport(results: GroupResult[], globalChecks: Check[], externalFlak
   console.log(`  external flakes: ${externalFlakes}`);
 }
 
+let dbUsed = E2E_DEFAULTS.db;
+
 async function main(): Promise<number> {
   ensureFixtures();
   const runTag = new Date().toISOString().slice(11, 19).replace(/:/g, '');
@@ -165,6 +167,7 @@ async function main(): Promise<number> {
 
   const stack = await up({ db: E2E_DEFAULTS.db, clientPort: await freePort(E2E_DEFAULTS.clientPort), moduleEnv: E2E_DEFAULTS.moduleEnv, log });
   log(`stack up: ${stack.clientUrl}?db=${stack.db}`);
+  dbUsed = stack.db;
   const results: GroupResult[] = [];
   const globalChecks: Check[] = [];
   let externalFlakes = 0;
@@ -196,7 +199,11 @@ async function main(): Promise<number> {
       results.push({ group: g.name, runs, checks });
       for (const r of runs) log(`${r.id}: ${r.status}${r.status !== 'pass' ? ` (${r.checks.filter(c => c.status === 'fail').map(c => c.name).join(', ')})` : ''}`);
     }
-    globalChecks.push(await memoryCheck(stack, results.flatMap(g => g.runs)));
+    const all = results.flatMap(g => g.runs);
+    const mem = await memoryCheck(stack, all);
+    // Nothing to extract when every conversation failed on an external API.
+    if (mem.status === 'fail' && all.every(r => r.status === 'external')) mem.status = 'skip';
+    globalChecks.push(mem);
   } finally {
     await stack.down();
     log('stack down');
@@ -211,7 +218,7 @@ async function main(): Promise<number> {
   const report = {
     startedAt: new Date(t0).toISOString(),
     durationS: Math.round((Date.now() - t0) / 1000),
-    db: E2E_DEFAULTS.db,
+    db: dbUsed,
     moduleEnv: E2E_DEFAULTS.moduleEnv,
     result: failed ? 'fail' : runs.some(r => r.status === 'external') ? 'pass-with-external' : 'pass',
     externalFlakes,

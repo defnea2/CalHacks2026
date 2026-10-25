@@ -101,9 +101,26 @@ async function waitFor(what: string, ms: number, check: () => boolean | Promise<
   throw new Error(`${what}: timed out after ${ms} ms`);
 }
 
+/** Hex identity the spacetime CLI is logged in with. */
+export function cliIdentity(): string {
+  const r = spawnSync(SPACETIME, ['login', 'show'], { encoding: 'utf8', env: { ...process.env, ...NO_PROXY } });
+  return (r.stdout + r.stderr).match(/\b(c2[0-9a-f]{62})\b/)?.[1] ?? '';
+}
+
 export async function up(o: StackOptions): Promise<Stack> {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  publish(o);
+  try {
+    publish(o);
+  } catch (e) {
+    // The test database belongs to another CLI identity (someone logged the CLI out/in):
+    // it cannot be cleared, so use a database name owned by the current identity.
+    if (!/not authorized/.test(String(e))) throw e;
+    const id = cliIdentity();
+    const db = `${o.db}-${id.slice(2, 10) || 'alt'}`;
+    o.log(`WARNING: CLI identity ${id.slice(0, 12)}… does not own ${o.db}; using ${db} instead`);
+    o = { ...o, db };
+    publish(o);
+  }
   const secret = agentSecret();
   const workerLog = path.join(OUT_DIR, 'worker.log');
   const clientLog = path.join(OUT_DIR, 'client.log');
