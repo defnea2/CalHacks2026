@@ -30,12 +30,12 @@ function Svg({ size = 20, title, strokeWidth = 1.8, children, ...rest }: IconPro
   );
 }
 
-/** Observe: an almond eye whose iris is a small golden spiral (quarter arcs 0.6 → 2.6, like the mark). */
+/** Observe: an almond eye whose iris is a small golden spiral (quarter arcs 0.4 → 2.75, Fibonacci ratios, like the mark). */
 export function ObserveIcon(p: IconProps) {
   return (
     <Svg {...p}>
       <path d="M2.6 12.2C5 8 8.2 5.9 12 5.9s7 2.1 9.4 6.3C19 16.4 15.8 18.5 12 18.5s-7-2.1-9.4-6.3Z" />
-      <path d="M12.2 12.5a.6.6 0 0 1 .6.6a1 1 0 0 1-1 1a1.6 1.6 0 0 1-1.6-1.6a2.6 2.6 0 0 1 2.6-2.6" />
+      <path d="M11.1 12.5a.4.4 0 0 1 .4.4a.65.65 0 0 1-.65.65a1.05 1.05 0 0 1-1.05-1.05a1.7 1.7 0 0 1 1.7-1.7a2.75 2.75 0 0 1 2.75 2.75" />
     </Svg>
   );
 }

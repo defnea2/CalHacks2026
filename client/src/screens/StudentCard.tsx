@@ -53,7 +53,7 @@ export function LiveChat({ bubbles }: { bubbles: Bubble[] }) {
         <div className="db-bubbles" ref={stack}>
           {bubbles.map(b => (
             <p key={b.key} data-key={b.key} data-testid="chat-bubble" data-who={b.who} className={`db-bubble db-bubble-${b.who}${b.live ? ' db-bubble-live' : ''}`}>
-              {b.text}
+              <span>{b.text}</span>
             </p>
           ))}
         </div>
