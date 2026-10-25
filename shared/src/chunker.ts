@@ -4,8 +4,13 @@
 //
 // Like LiveKit's basic sentence tokenizer, sentences shorter than `minWords` are merged with
 // the next one ("Great job! Let's look at the bottom number." is one piece), so TTS never gets
-// a two-word fragment. A boundary is only confirmed once the next non-space character has
-// arrived, so "e.g. the" or "Mr. Smith" are never cut.
+// a two-word fragment.
+//
+// A sentence at the end of the buffer is emitted at once (no waiting for the next token) when it
+// ends in ! or ?, or in a single . that cannot be a decimal point (digit before it), an
+// abbreviation/title ("e.g.", "Mr."), an initial ("J.") or an ellipsis, and no quote, bracket or
+// math is open. Every other boundary is confirmed only once the next non-space character has
+// arrived, so "e.g. the", "Mr. Smith" or "3.5" are never cut.
 
 export interface SentenceChunkerOptions {
   maxWords?: number; // default 25
@@ -22,6 +27,9 @@ const CONJUNCTIONS = new Set([
 
 /** Terminal punctuation run, optional closing quotes/brackets, then whitespace and a lookahead char. */
 const BOUNDARY = /[.!?…]+["'”’)\]]*(?=\s+(\S))|\n+(?=\s*(\S))/g;
+
+/** Sentence end at the very end of the buffer: punctuation run, closing quotes/brackets, spaces. */
+const TRAILING = /([.!?]+)["'”’)\]]*\s*$/;
 
 /** Emitted pieces: trimmed, inner whitespace (incl. newlines) collapsed. */
 const tidy = (s: string) => s.trim().replace(/\s+/g, ' ');
@@ -64,6 +72,24 @@ function isRealBoundary(text: string, start: number, punct: string, next: string
     // Single capital initial like "J. K." -> not an end.
     if (/^[A-Z]$/.test(before?.[1] ?? '') && /^[A-Z]/.test(next)) return false;
   }
+  return !insideMath(text.slice(0, start));
+}
+
+/** Can the punctuation run `punct` at `start` (end of the buffer) end a sentence without
+ *  seeing the next character? */
+function isSureEnd(text: string, start: number, punct: string): boolean {
+  if (!/[!?]/.test(punct)) {
+    if (punct !== '.') return false; // ".." / "..." may continue ("wait... then")
+    const before = text.slice(0, start);
+    if (/\d$/.test(before)) return false; // "3." may become "3.5"
+    const w = before.match(/([A-Za-z][A-Za-z.]*)$/)?.[1] ?? '';
+    if (w && (TITLES.has(w.toLowerCase()) || ABBREV.has(w.toLowerCase()))) return false;
+    if (/^[A-Z]$/.test(w)) return false; // initial "J."
+  }
+  // An open double quote may still be closed right after the punctuation ('size."').
+  const straight = (text.match(/"/g) ?? []).length;
+  const open = (text.match(/“/g) ?? []).length - (text.match(/”/g) ?? []).length;
+  if (straight % 2 === 1 || open > 0) return false;
   return !insideMath(text.slice(0, start));
 }
 
@@ -143,6 +169,9 @@ export class SentenceChunker {
       if (countWords(this.buf.slice(0, end)) < this.minWords) continue; // merge with the next sentence
       return end;
     }
+    // Nothing confirmed by a next character: a sure sentence end at the very end still counts.
+    const t = this.buf.match(TRAILING);
+    if (t && countWords(this.buf) >= this.minWords && isSureEnd(this.buf, t.index!, t[1]!)) return this.buf.length;
     return -1;
   }
 
