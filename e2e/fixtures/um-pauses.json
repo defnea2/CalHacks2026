@@ -1,0 +1,23 @@
+{
+  "name": "um-pauses",
+  "description": "Hesitations with thinking pauses shorter than the turn end, same turn.",
+  "noiseDbfs": null,
+  "durationMs": 12490,
+  "timeline": [
+    {
+      "say": "Um, so,",
+      "startMs": 1500,
+      "endMs": 3100
+    },
+    {
+      "say": "I think the bottom number says how many pieces.",
+      "startMs": 3600,
+      "endMs": 6640
+    },
+    {
+      "say": "Uh, and the top is how many I have.",
+      "startMs": 7190,
+      "endMs": 9990
+    }
+  ]
+}

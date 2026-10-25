@@ -1,0 +1,13 @@
+{
+  "name": "correct-step",
+  "description": "Student states a correct step in one turn.",
+  "noiseDbfs": null,
+  "durationMs": 7200,
+  "timeline": [
+    {
+      "say": "I multiply the top and the bottom by four.",
+      "startMs": 1500,
+      "endMs": 4700
+    }
+  ]
+}

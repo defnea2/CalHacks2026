@@ -1,0 +1,18 @@
+{
+  "name": "interrupt",
+  "description": "Opening question, long wait while the tutor answers, then barge-in during the reply.",
+  "noiseDbfs": null,
+  "durationMs": 20520,
+  "timeline": [
+    {
+      "say": "I do not understand how to expand fractions.",
+      "startMs": 1500,
+      "endMs": 4860
+    },
+    {
+      "say": "Wait, I have a question. Why does the bottom change too?",
+      "startMs": 10360,
+      "endMs": 14520
+    }
+  ]
+}

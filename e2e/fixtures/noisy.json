@@ -1,0 +1,13 @@
+{
+  "name": "noisy",
+  "description": "Correct step with steady background noise.",
+  "noiseDbfs": -42,
+  "durationMs": 6900,
+  "timeline": [
+    {
+      "say": "I need to find the number to multiply by.",
+      "startMs": 2000,
+      "endMs": 4400
+    }
+  ]
+}
