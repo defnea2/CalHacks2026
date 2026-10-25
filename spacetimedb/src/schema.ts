@@ -8,6 +8,7 @@
 // - Every lookup column is indexed.
 import { schema, table, t } from 'spacetimedb/server';
 import * as classroom from './schema_classroom';
+import { textPlayJob, textPlayback } from './schema_pipeline';
 
 // ---------------------------------------------------------------- learners & sessions
 
@@ -51,6 +52,8 @@ export const session = table(
     endedAt: t.option(t.timestamp()),
     /** Linked class session (0 = ad-hoc). */
     classSessionId: t.u64().default(0n),
+    /** false = text mode: no STT/TTS; sentences count as played after a reading delay. */
+    voice: t.bool().default(true),
   }
 );
 
@@ -137,6 +140,10 @@ export const turn = table(
     interrupted: t.bool(),
     createdAt: t.timestamp(),
     closedAt: t.option(t.timestamp()),
+    /** 'voice' | 'text' | 'sim' (TURN_SOURCES). */
+    source: t.string().default('voice'),
+    /** '' or a lesson intent of the team UI (TURN_INTENTS). */
+    intent: t.string().default(''),
   }
 );
 
@@ -490,6 +497,8 @@ const spacetimedb = schema(
     task,
     libraryMeta,
     ...classroom,
+    textPlayJob,
+    textPlayback,
   },
   {
     env: {

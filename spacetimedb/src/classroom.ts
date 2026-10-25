@@ -6,9 +6,9 @@ import { SIM_STUDENTS, type SimMemoryNote } from '../../shared/src/classroom/sim
 import { repairClusters, sizeRuleText, type Cluster, type ClusterStudent } from '../../shared/src/classroom/clusters';
 import { pack } from '../../shared/src/lesson/index';
 import { getPhase } from '../../shared/src/lesson/api';
-import type { TurnState, TurnStatus } from '../../shared/src/types';
+import { SOURCE_SIM, type TurnState, type TurnStatus } from '../../shared/src/types';
 import { AnthropicError, callAnthropicJson } from './anthropic';
-import { appendTextTurn } from './classroom_text';
+import { submitTextTurn } from './text_mode';
 import { isImageMime } from './classroom_context';
 import { type Ctx, type PCtx, type SessionRow, type TurnRow, dueIn, onSessionUpdated, parseJson, sessionTurns, truncate, ts, updateSession } from './ctx';
 import { settings } from './env';
@@ -24,7 +24,6 @@ const WAITING: PresenceStatus = 'waiting';
 const IN_SESSION: PresenceStatus = 'in_session';
 const LISTENING: TurnState = 'listening';
 const LIVE_STUDENT: readonly TurnStatus[] = ['open', 'closing', 'ready'];
-const SIM_SOURCE = 'sim';
 
 type ClassRow = NonNullable<ReturnType<Ctx['db']['classSession']['id']['find']>>;
 type LearnerRow = NonNullable<ReturnType<Ctx['db']['learner']['id']['find']>>;
@@ -138,7 +137,9 @@ export function startClassSession(ctx: Ctx, a: StartClassArgs): ClassRow {
     if (p.status !== WAITING && p.status !== IN_SESSION) continue;
     const l = ctx.db.learner.id.find(p.learnerId);
     if (!l || l.isSimulated) continue;
-    linkedSession(ctx, cls, l.id, true);
+    // Keeps the student's mode (a typed ad-hoc session stays in text mode).
+    const prev = [...ctx.db.session.learnerId.filter(l.id)].find(s => s.active);
+    linkedSession(ctx, cls, l.id, prev?.voice ?? true);
     writePresence(ctx, l.id, IN_SESSION);
   }
 
@@ -170,13 +171,8 @@ export function startClassSession(ctx: Ctx, a: StartClassArgs): ClassRow {
 /** New session for the learner linked to the class (ends the learner's previous session). */
 function linkedSession(ctx: Ctx, cls: ClassRow, learnerId: bigint, voice: boolean): SessionRow {
   const task = (cls.content || cls.goals).replace(/\s+/g, ' ').trim().slice(0, 300);
-  const s = startSession(ctx, { learnerId, taskText: task });
-  return updateSession(ctx, s, { classSessionId: cls.id, hasImage: isImageMime(cls.documentMime), ...voiceFlag(voice) });
-}
-
-/** session.voice (text mode, night/pipeline) when the column exists. */
-function voiceFlag(_voice: boolean): Partial<SessionRow> {
-  return {}; // TODO(text mode merge): { voice }
+  const s = startSession(ctx, { learnerId, taskText: task, voice });
+  return updateSession(ctx, s, { classSessionId: cls.id, hasImage: isImageMime(cls.documentMime) });
 }
 
 export function endClassSession(ctx: Ctx, classSessionId: bigint): void {
@@ -486,13 +482,18 @@ export function simStudentTurn(ctx: PCtx, job: SimJob): void {
     if (tx.db.simRunning.sessionId.find(job.sessionId)) tx.db.simRunning.sessionId.delete(job.sessionId);
     const s = tx.db.session.id.find(job.sessionId);
     if (!s || s.turnCount !== job.turnCount || simBlocker(tx, s)) return; // the session moved on meanwhile
-    submitSimText(tx, s.id, truncate(message || 'hmm i dont know', 300));
+    try {
+      submitSimText(tx, s.id, truncate(message || 'hmm i dont know', 300));
+    } catch (e) {
+      if (!(e instanceof SenderError)) throw e;
+      console.warn(`simStudentTurn s${job.sessionId}: turn rejected: ${e.message}`);
+    }
   });
 }
 
 /** The internal text-turn path with source 'sim'. */
 export function submitSimText(ctx: Ctx, sessionId: bigint, text: string): void {
-  appendTextTurn(ctx, sessionId, text, '', SIM_SOURCE);
+  submitTextTurn(ctx, { sessionId, text, intent: '' }, SOURCE_SIM);
 }
 
 // ================================================================ dashboard

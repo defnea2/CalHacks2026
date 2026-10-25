@@ -22,11 +22,13 @@ import RegisterAgentReducer from "../register_agent_reducer";
 import RememberReducer from "../remember_reducer";
 import ReportNoiseReducer from "../report_noise_reducer";
 import SetPhaseReducer from "../set_phase_reducer";
+import SetSessionVoiceReducer from "../set_session_voice_reducer";
 import SetTurnStateReducer from "../set_turn_state_reducer";
 import ShowBoardItemReducer from "../show_board_item_reducer";
 import StartConversationReducer from "../start_conversation_reducer";
 import StartSessionReducer from "../start_session_reducer";
 import SubmitGapAnswerReducer from "../submit_gap_answer_reducer";
+import SubmitTextTurnReducer from "../submit_text_turn_reducer";
 import UploadPhotoReducer from "../upload_photo_reducer";
 
 export type AddSentenceParams = __Infer<typeof AddSentenceReducer>;
@@ -45,10 +47,12 @@ export type RegisterAgentParams = __Infer<typeof RegisterAgentReducer>;
 export type RememberParams = __Infer<typeof RememberReducer>;
 export type ReportNoiseParams = __Infer<typeof ReportNoiseReducer>;
 export type SetPhaseParams = __Infer<typeof SetPhaseReducer>;
+export type SetSessionVoiceParams = __Infer<typeof SetSessionVoiceReducer>;
 export type SetTurnStateParams = __Infer<typeof SetTurnStateReducer>;
 export type ShowBoardItemParams = __Infer<typeof ShowBoardItemReducer>;
 export type StartConversationParams = __Infer<typeof StartConversationReducer>;
 export type StartSessionParams = __Infer<typeof StartSessionReducer>;
 export type SubmitGapAnswerParams = __Infer<typeof SubmitGapAnswerReducer>;
+export type SubmitTextTurnParams = __Infer<typeof SubmitTextTurnReducer>;
 export type UploadPhotoParams = __Infer<typeof UploadPhotoReducer>;
 

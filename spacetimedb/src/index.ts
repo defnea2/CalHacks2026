@@ -5,6 +5,7 @@ import { t, SenderError } from 'spacetimedb/server';
 import spacetimedb, { sttJob, ttsJob, extractionJob, summaryJob } from './schema';
 import { dashboardJob, simTurnJob } from './schema_classroom';
 import * as classroom from './classroom';
+import { textPlayJob } from './schema_pipeline';
 import { METRIC_NAMES, TURN_STATES, type MetricName } from '../../shared/src/types';
 import { AGENT_ROLE, getActiveSession, getSession, metricsFor, requireAgent, ts } from './ctx';
 import { settings } from './env';
@@ -14,6 +15,7 @@ import * as memory from './memory';
 import * as opening from './opening';
 import { base64 } from './providers';
 import * as sessions from './sessions';
+import * as textMode from './text_mode';
 import * as voiceIn from './voice_in';
 import * as voiceOut from './voice_out';
 
@@ -105,6 +107,19 @@ export const reportNoise = spacetimedb.reducer(
     const m = metricsFor(ctx, sessionId, turn.idx);
     ctx.db.turnMetrics.id.update({ ...m, noiseDb });
   }
+);
+
+/** Text mode (contract section 1): appends a complete typed student turn (status ready); intent ''
+ *  or one of another_way | smaller_step | continue | demonstrate (empty text allowed with an intent).
+ *  Interrupts a running tutor reply like barge-in. */
+export const submitTextTurn = spacetimedb.reducer(
+  { sessionId: t.u64(), text: t.string(), intent: t.string() },
+  (ctx, args) => textMode.submitTextTurn(ctx, args)
+);
+
+/** voice = false: text mode (no STT/TTS; sentences count as played after a reading delay). */
+export const setSessionVoice = spacetimedb.reducer({ sessionId: t.u64(), voice: t.bool() }, (ctx, { sessionId, voice }) =>
+  textMode.setSessionVoice(ctx, sessionId, voice)
 );
 
 // ---------------------------------------------------------------- agent-only reducers
@@ -270,6 +285,12 @@ export const synthesizeSentence = spacetimedb.procedure(
     return {};
   }
 );
+
+/** Scheduled: a text-mode sentence was read (its reading delay passed) -> played. */
+export const finishTextSentence = spacetimedb.reducer({ onSchedule: textPlayJob }, { job: textPlayJob.rowType }, (ctx, { job }) => {
+  if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('scheduler only');
+  textMode.finishTextSentence(ctx, job);
+});
 
 export const extractMemory = spacetimedb.procedure(
   { onSchedule: extractionJob },

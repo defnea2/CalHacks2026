@@ -74,7 +74,7 @@ export function pcm(ms: number, fill = 1): Uint8Array {
 }
 
 /** Pops all due jobs from a schedule table (the harness has no scheduler). */
-function popJobs<T extends { scheduledId: bigint }>(h: H, table: 'sttJob' | 'ttsJob' | 'extractionJob' | 'summaryJob'): T[] {
+export function popJobs<T extends { scheduledId: bigint }>(h: H, table: 'sttJob' | 'ttsJob' | 'extractionJob' | 'summaryJob' | 'textPlayJob'): T[] {
   const jobs = [...(h.db[table] as any).iter()] as T[];
   h.withReducerTx(TestAuth.internal(), ctx => {
     for (const j of jobs) (ctx.db[table] as any).scheduledId.delete(j.scheduledId);
@@ -90,6 +90,16 @@ export function runStt(h: H, responder?: Responder): number {
 export function runTts(h: H, responder?: Responder): number {
   const jobs = popJobs<any>(h, 'ttsJob');
   for (const job of jobs) (mod.synthesizeSentence as any)(proc(h, TestAuth.internal() as never, responder), { job });
+  return jobs.length;
+}
+/** Runs the text-mode reading jobs (all, or only those due at or before `untilMicros`), in due order. */
+export function runTextPlay(h: H, untilMicros?: bigint): number {
+  const at = (j: any): bigint => (typeof j.scheduledAt.value === 'bigint' ? j.scheduledAt.value : j.scheduledAt.value.microsSinceUnixEpoch);
+  const jobs = ([...(h.db.textPlayJob as any).iter()] as any[]).filter(j => at(j) <= (untilMicros ?? 1n << 62n)).sort((a, b) => (at(a) < at(b) ? -1 : 1));
+  h.withReducerTx(TestAuth.internal(), ctx => {
+    for (const j of jobs) (ctx.db.textPlayJob as any).scheduledId.delete(j.scheduledId);
+  });
+  for (const job of jobs) h.withReducerTx(TestAuth.internal(), ctx => (mod.finishTextSentence as any)(ctx, { job }));
   return jobs.length;
 }
 export function runExtraction(h: H, responder?: Responder): number {

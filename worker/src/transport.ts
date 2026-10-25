@@ -12,6 +12,8 @@ export interface SessionRow {
   currentUtteranceId: bigint;
   /** Turns appended so far (0 = nothing said yet: the tutor may open). */
   turnCount: number;
+  /** false = text mode (no STT/TTS); absent = voice. */
+  voice?: boolean;
   /** Read for context-prefetch invalidation (topic, learner). */
   category?: string;
   concept?: string;
@@ -26,6 +28,10 @@ export interface TurnRow {
   status: string;
   utteranceId: bigint;
   interrupted: boolean;
+  /** 'voice' | 'text' | 'sim' (absent in old rows/tests = voice). */
+  source?: string;
+  /** '' or a lesson button intent (another_way | smaller_step | continue | demonstrate). */
+  intent?: string;
 }
 
 export interface PhraseRow {

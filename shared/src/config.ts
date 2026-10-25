@@ -93,6 +93,13 @@ export const MODULE_DEFAULTS = {
   BOARD_CONTENT_MAX: 4000,
   /** Max photo size after client compression. */
   PHOTO_MAX_BYTES: 1_000_000,
+  /** Text mode (session.voice = false): a sentence counts as played after this reading time
+   *  per word (no TTS), so turn states still flow thinking -> speaking -> listening. */
+  TEXT_SENTENCE_MS_PER_WORD: 280,
+  /** Lower bound of one sentence's reading time. */
+  TEXT_SENTENCE_MIN_MS: 700,
+  /** Max typed student turn length. */
+  TEXT_TURN_MAX_CHARS: 2000,
 } as const;
 
 /** "Daisy": very young voice used only for generated test-student speech. */
