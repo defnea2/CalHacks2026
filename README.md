@@ -18,7 +18,7 @@ Test users only. Never use real children's data.
 
 ## Running locally
 
-Requirements: Node 22+, pnpm, the `spacetime` CLI (2.13), and a root `.env` with `CARTESIA_API_KEY`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` (see `.env.example`).
+Requirements: Node 22+, pnpm, the `spacetime` CLI (2.13), and a root `.env` with `CARTESIA_API_KEY`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and `ANTHROPIC_API_KEY` for memory extraction (see `.env.example` and *Memory extraction*).
 
 ```bash
 pnpm install
@@ -82,6 +82,16 @@ The proxy uses the caller's own Cartesia key from the `Authorization` header and
 The module only knows a base URL (`STT_BASE_URL`, default `http://127.0.0.1:8787`). The API key stays in the module env and passes through in the `Authorization` header. When SpacetimeDB gets websockets or async procedures (issue #4697), or Cartesia offers `ink-2` in batch, set `STT_BASE_URL=https://api.cartesia.ai` and delete `stt-proxy/`. Nothing else changes.
 
 **Why not stream from the worker?** That was the spec's fallback. It works (385 ms after `finalize`), but it moves a SpacetimeDB responsibility into the worker. The proxy keeps the architecture as close as possible to what SpacetimeDB would do natively. Phrases are transcribed while the student is still talking, so only the last phrase's transcription falls inside the turn-end wait.
+
+## Memory extraction
+
+Every `MEMORY_EVERY_N_TURNS` turns (default 6) the `extractMemory` procedure sends the new conversation window plus the learner's existing notes to an LLM and stores notes, evidence quotes and mastery estimates (items below confidence 0.7 are dropped; duplicate creates become `reinforce`). `endSession` schedules a final window and `summarizeSession`. Both are background calls, so they don't add to turn latency.
+
+- **Provider:** Claude Haiku 5.5 (`claude-haiku-5-5`) through the Anthropic Messages API when `ANTHROPIC_API_KEY` is set; otherwise the OpenRouter path (`OPENROUTER_EXTRACTION_MODEL`). Force one with `MEMORY_PROVIDER=anthropic|openrouter`; override the model with `ANTHROPIC_EXTRACTION_MODEL`. `scripts/publish.mjs` passes all three plus the key into the module env.
+- **Client:** `spacetimedb/src/anthropic.ts` → `callAnthropicJson(ctx, { system, user, schema, effort, maxTokens })`. Raw HTTP (`POST /v1/messages`, `anthropic-version: 2023-06-01`), because procedures can't run the SDK. JSON comes from structured outputs (`output_config.format = { type: "json_schema", schema }`, GA, no beta header), so the schema must use the supported subset: `additionalProperties: false` on objects, every field required, no `minimum`/`maxLength`-style constraints. No `temperature`/`top_p`/`top_k` (400 on this model). Haiku 5.5 thinks adaptively by default, so the answer is read from the `text` block(s), not `content[0]`.
+- **Effort / limits:** extraction `effort: medium`, `max_tokens: 8000`; summary `effort: low`, `max_tokens: 4000` (thinking counts toward `max_tokens`).
+- **Failures:** `AnthropicError.kind` is `http` (network error or non-200), `refusal`, `truncated` (`stop_reason: max_tokens`) or `parse`. `http`/`truncated`/`parse` are retried after 10/30/90 s, then dropped (the next turns schedule a fresh window). A `refusal` is not retried: Haiku has no server-side fallback and the same input gives the same answer, so the window is skipped (cursor advances, nothing written) and a refused summary is simply missing.
+- **Measured (2026-10-25, local, real Haiku 5.5):** extraction call 2.1–4.6 s (≈1.8–1.9k input / 350–830 output tokens), session summary 3.2 s (≈0.5k / 0.2k). Each call logs model, latency and token usage (`spacetime logs`).
 
 ## Running on Maincloud (hosted SpacetimeDB)
 

@@ -89,8 +89,9 @@ function memoryJson(
   if (settings.memoryProvider(ctx) === 'openrouter') {
     return chatJson(ctx, { system: opts.system, user: opts.user, schemaName: opts.schemaName, schema: opts.schema, maxTokens: opts.openrouterMaxTokens });
   }
+  const started = Date.now();
   const r = callAnthropicJson(ctx, { system: opts.system, user: opts.user, schema: opts.schema, effort: opts.effort, maxTokens: opts.maxTokens });
-  console.log(`${opts.schemaName}: ${r.model} in=${r.usage.inputTokens} out=${r.usage.outputTokens}`);
+  console.log(`${opts.schemaName}: ${r.model} ${Date.now() - started} ms, in=${r.usage.inputTokens} out=${r.usage.outputTokens}`);
   return r.value;
 }
 
