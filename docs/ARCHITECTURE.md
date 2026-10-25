@@ -579,7 +579,10 @@ teacher (or of a student with no teacher who could issue a new code).
 The roster (`teacher_student`) is written by `addStudent` and by a session-update hook whenever a
 session is linked to a class session (and backfilled once from existing class sessions).
 `setPresence` for someone else's learner was the old way to take over a student's class session;
-it now fails like every other student reducer.
+it now fails like every other student reducer. Limitation: classes have no membership list yet
+(every waiting student joins the newest running class, section 9), so joining a teacher's class is
+what puts a student on that teacher's roster; a class code a student enters in the waiting room
+would be the next step.
 
 **Pre-existing rows.** `auth_meta.enabledAt` is set on the first `init`/connect with this module.
 Learners and teachers created before it that have no link are *claimable once*: the first device that
