@@ -144,6 +144,8 @@ export const showBoardItem = spacetimedb.reducer(
     sessionId: t.u64(),
     utteranceId: t.u64(),
     sentenceIdx: t.u32(),
+    /** Inline marker offset in that sentence's speech; -1 = none. */
+    markerPos: t.i32(),
     kind: t.string(),
     content: t.string(),
     taskKey: t.string(),

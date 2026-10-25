@@ -45,10 +45,24 @@ describe('ToolRouter', () => {
     const ans = { form: 'number', value: '3' };
     await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, { kind: kindName, content, expectedAnswer: ans }), ctx(tr));
     expect(tr.of('showBoardItem')).toEqual([
-      { sessionId: 7n, utteranceId: 99n, sentenceIdx: 3, kind: kindName, content: JSON.stringify(content), taskKey: '', expectedAnswer: JSON.stringify(ans) },
+      { sessionId: 7n, utteranceId: 99n, sentenceIdx: 3, markerPos: -1, kind: kindName, content: JSON.stringify(content), taskKey: '', expectedAnswer: JSON.stringify(ans) },
     ]);
     await new ToolRouter(createToolDefs(pack), 100).run(call(TOOL_NAMES.showBoardItem, { kind: kindName, taskKey: 'k1' }), ctx(tr));
     expect(tr.of('showBoardItem')[1]).toMatchObject({ content: '', taskKey: 'k1', expectedAnswer: '' });
+  });
+
+  it('show_board_item with an id uses the marker anchor; unknown ids fall back to the next sentence', async () => {
+    const tr = t();
+    const asked: unknown[] = [];
+    const anchor = (id: unknown) => (asked.push(id), id === 'b1' ? { sentenceIdx: 1, pos: 12 } : undefined);
+    const router = new ToolRouter(createToolDefs(pack), 100);
+    await router.run(call(TOOL_NAMES.showBoardItem, { id: 'b1', kind: kindName, content: { text: 'a' } }), { ...ctx(tr), anchor });
+    await router.run(call(TOOL_NAMES.showBoardItem, { id: 'zz', kind: kindName, content: { text: 'b' } }), { ...ctx(tr), anchor });
+    expect(asked).toEqual(['b1', 'zz']);
+    expect(tr.of('showBoardItem').map(a => [a.sentenceIdx, a.markerPos])).toEqual([
+      [1, 12],
+      [3, -1],
+    ]);
   });
 
   it('query tools return the procedure result', async () => {

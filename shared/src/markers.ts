@@ -9,8 +9,8 @@
 // removed without an anchor, so they are never spoken.
 import { normalizeForSpeech } from './normalizer';
 
-export const MARKER_OPEN = '[[';
-export const MARKER_CLOSE = ']]';
+export const MARKER_OPEN = '⟦';
+export const MARKER_CLOSE = '⟧';
 export const markerText = (id: string) => `${MARKER_OPEN}${id}${MARKER_CLOSE}`;
 
 const ID = '[A-Za-z0-9_-]{1,24}';
@@ -104,7 +104,7 @@ export function prepareSentence(raw: string, normalize: (s: string) => string = 
   const withSentinels = raw
     .replace(WELL_FORMED, (_m, a?: string, b?: string) => {
       const id = normalizeMarkerId(a ?? b ?? '');
-      if (ids.includes(id) || ids.length >= 256) return ' ';
+      if (ids.length >= 256) return ' ';
       ids.push(id);
       return String.fromCodePoint(SENTINEL_BASE + ids.length - 1);
     })

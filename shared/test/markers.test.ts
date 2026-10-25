@@ -43,10 +43,10 @@ describe('prepareSentence', () => {
     expect(at(p.speech, p.markers[0]!.pos)).toBe(' at the top number.'.trimStart());
   });
 
-  it('accepts [[id]], dedupes, lower-cases', () => {
+  it('accepts [[id]], keeps repeated ids (each occurrence anchors one item), lower-cases', () => {
     const p = prepareSentence('First [[S1]] then ⟦s1⟧ again [[t-2]].');
     expect(p.display).toBe('First then again.');
-    expect(p.markers.map(m => m.id)).toEqual(['s1', 't-2']);
+    expect(p.markers.map(m => m.id)).toEqual(['s1', 's1', 't-2']);
   });
 
   it('drops malformed markers without an anchor and never speaks them', () => {

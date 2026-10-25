@@ -1,6 +1,6 @@
 // Voice output: utterances, sentences, TTS jobs, playback state, interrupts, tutor turns.
 import { SenderError } from 'spacetimedb/server';
-import type { SentenceStatus, TurnState, TurnStatus } from '../../shared/src/types';
+import type { SentenceStatus, TtsResult, TurnState, TurnStatus } from '../../shared/src/types';
 import {
   type Ctx,
   type PCtx,
@@ -121,13 +121,7 @@ export function synthesizeSentence(
   ctx.withTx(tx => {
     const s = tx.db.replySentence.id.find(job.sentenceId);
     if (!s || s.status !== PENDING) return; // dropped while synthesizing
-    tx.db.audioOut.insert({
-      sessionId: job.sessionId,
-      utteranceId: job.utteranceId,
-      idx: job.idx,
-      pcm: audio.pcm,
-      sampleRate: audio.sampleRate,
-    });
+    tx.db.audioOut.insert(audioRow(job, audio));
     tx.db.replySentence.id.update({ ...s, status: READY });
     const session = tx.db.session.id.find(job.sessionId);
     if (session && session.currentUtteranceId === job.utteranceId && session.turnState !== INTERRUPTED && session.turnState !== SPEAKING) {
@@ -138,6 +132,20 @@ export function synthesizeSentence(
       if (m && !m.firstAudioAt) tx.db.turnMetrics.id.update({ ...m, firstAudioAt: tx.timestamp });
     }
   });
+}
+
+/** audio_out row of one synthesized sentence (word timings empty when TTS gave none). */
+export function audioRow(job: { sessionId: bigint; utteranceId: bigint; idx: number }, audio: TtsResult) {
+  return {
+    sessionId: job.sessionId,
+    utteranceId: job.utteranceId,
+    idx: job.idx,
+    pcm: audio.pcm,
+    sampleRate: audio.sampleRate,
+    words: audio.words?.words ?? [],
+    wordStartsMs: audio.words?.startsMs ?? [],
+    wordEndsMs: audio.words?.endsMs ?? [],
+  };
 }
 
 export function markPlayed(ctx: Ctx, args: { sessionId: bigint; utteranceId: bigint; idx: number }): void {

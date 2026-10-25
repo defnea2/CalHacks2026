@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { auth, call, makeLearner, makeSession, mod, pcm, runTts, session, setup, studentSays, turns, type Req } from './helpers';
+import { base64, fromBase64, parseTtsSse } from '../src/providers';
+import { audioRow } from '../src/voice_out';
+import { auth, call, makeLearner, makeSession, mod, pcm, runTts, session, setup, studentSays, ttsSse, turns, type Req } from './helpers';
 
 function ready() {
   const env = setup();
@@ -9,7 +11,7 @@ function ready() {
   return { ...env, s };
 }
 
-const ttsOk = (req: Req) => ({ status: 200, body: new Uint8Array(4800).fill(req.text.length % 7) });
+const ttsOk = (req: Req) => ({ status: 200, body: ttsSse(new Uint8Array(4800).fill(req.text.length % 7)) });
 const sentences = (h: ReturnType<typeof setup>['h'], utteranceId: bigint) =>
   [...h.db.replySentence.iter()].filter(x => x.utteranceId === utteranceId).sort((a, b) => a.idx - b.idx);
 
@@ -35,7 +37,7 @@ describe('utterances and TTS', () => {
       reqs.push(req);
       return ttsOk(req);
     });
-    expect(reqs[0]!.uri).toBe('https://api.cartesia.ai/tts/bytes');
+    expect(reqs[0]!.uri).toBe('https://api.cartesia.ai/tts/sse');
     expect(reqs[0]!.headers['cartesia-version']).toBe('2026-08-14');
     expect(reqs[0]!.headers['authorization']).toBe('Bearer cartesia-test');
     const body = JSON.parse(reqs[0]!.text);
@@ -45,6 +47,7 @@ describe('utterances and TTS', () => {
       voice: { mode: 'id' },
       output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: 24000 },
       generation_config: { speed: 1 },
+      add_timestamps: true,
     });
     expect(sentences(h, 11n).map(x => x.status)).toEqual(['ready', 'ready']);
     expect(session(h, s.id).turnState).toBe('speaking');
@@ -184,5 +187,35 @@ describe('interrupt', () => {
     });
     expect(calls).toBe(2);
     expect(sentences(h, 8n)[0]!.status).toBe('dropped');
+  });
+});
+
+describe('TTS word timestamps (Cartesia /tts/sse)', () => {
+  it('parses audio chunks and word timestamps; fromBase64 inverts base64', () => {
+    const audio = new Uint8Array(1001).map((_, i) => (i * 37) % 256);
+    expect([...fromBase64(base64(audio))]).toEqual([...audio]);
+    const r = parseTtsSse(ttsSse(audio, [['Here', 0.118, 0.28], ['are', 0.36, 0.44], ['two', 0.52, 0.6]]));
+    expect([...r.pcm]).toEqual([...audio]);
+    expect(r.words).toEqual({ words: ['Here', 'are', 'two'], startsMs: [118, 360, 520], endsMs: [280, 440, 600] });
+  });
+
+  it('an error event or an empty stream is a provider error', () => {
+    expect(() => parseTtsSse('event: error\ndata: {"type":"error","title":"Bad","message":"voice"}\n\n')).toThrow(/tts error: Bad voice/);
+    expect(() => parseTtsSse('event: done\ndata: {"type":"done","done":true}\n\n')).toThrow(/empty audio/);
+  });
+
+  it('stores word timings with the sentence audio (event row built by audioRow)', () => {
+    const { h, agent, s } = ready();
+    call(h, agent, mod.beginUtterance, { sessionId: s.id, utteranceId: 31n, replyToIdx: 0, preemptive: false });
+    call(h, agent, mod.addSentence, { sessionId: s.id, utteranceId: 31n, idx: 0, display: 'Here are two.', speech: 'Here are two.' });
+    runTts(h, () => ({ status: 200, body: ttsSse(new Uint8Array(4800).fill(3), [['Here', 0.1, 0.2], ['are', 0.3, 0.4], ['two.', 0.5, 0.9]]) }));
+    expect(sentences(h, 31n)[0]!.status).toBe('ready');
+    const audio = parseTtsSse(ttsSse(new Uint8Array(8), [['Here', 0.1, 0.2], ['two.', 0.5, 0.9]]));
+    expect(audioRow({ sessionId: 1n, utteranceId: 31n, idx: 0 }, { ...audio, sampleRate: 24000 })).toMatchObject({
+      words: ['Here', 'two.'],
+      wordStartsMs: [100, 500],
+      wordEndsMs: [200, 900],
+    });
+    expect(audioRow({ sessionId: 1n, utteranceId: 31n, idx: 0 }, { pcm: new Uint8Array(2), sampleRate: 24000 })).toMatchObject({ words: [], wordStartsMs: [], wordEndsMs: [] });
   });
 });

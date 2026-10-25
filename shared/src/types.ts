@@ -72,6 +72,13 @@ export interface TtsRequest {
 export interface TtsResult {
   pcm: Uint8Array;
   sampleRate: number;
+  /** Word timestamps (ms from the start of `pcm`), when the provider returned them. */
+  words?: TtsWordTimings;
+}
+export interface TtsWordTimings {
+  words: string[];
+  startsMs: number[];
+  endsMs: number[];
 }
 
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';

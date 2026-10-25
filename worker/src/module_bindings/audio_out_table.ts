@@ -16,4 +16,7 @@ export default __t.row({
   idx: __t.u32(),
   pcm: __t.byteArray(),
   sampleRate: __t.u32().name("sample_rate"),
+  words: __t.array(__t.string()),
+  wordStartsMs: __t.array(__t.u32()).name("word_starts_ms"),
+  wordEndsMs: __t.array(__t.u32()).name("word_ends_ms"),
 });

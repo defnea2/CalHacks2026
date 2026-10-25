@@ -66,6 +66,9 @@ export const MODULE_DEFAULTS = {
   /** "Parker": casual, supportive warmth. Child-friendly tutor voice. */
   CARTESIA_VOICE_ID: '30894953-bcce-41fe-892c-15ce19c843ff',
   CARTESIA_VERSION: '2026-08-14',
+  /** TTS via POST /tts/sse with add_timestamps (word timings for inline board markers);
+   *  false: POST /tts/bytes, no word timings. */
+  TTS_WORD_TIMESTAMPS: true,
   TTS_SPEED: 1.0,
   TTS_LANGUAGE: 'en',
   /** Max board item content size (JSON chars). */

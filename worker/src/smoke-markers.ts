@@ -3,14 +3,14 @@
 // `pnpm --filter worker smoke:markers [tries]`. Prints a per-try line and the rates, never keys.
 import { markerIds, pack, prepareSentence, SentenceChunker, TOOL_NAMES, type ChatMessage } from '@tutor/shared';
 import { loadConfig } from './env';
-import { OpenRouterProvider } from './llm';
+import { createLlm } from './providers';
 import { buildSystemPrompt } from './prompt';
 import { createToolDefs } from './tools/index';
 
 const tries = Number(process.argv[2] ?? 10);
 const cfg = loadConfig();
 const tools = createToolDefs(pack).map(t => ({ name: t.name, description: t.description, parameters: t.parameters }));
-const llm = new OpenRouterProvider({ apiKey: cfg.openrouterApiKey, model: cfg.openrouterModel, reasoningEffort: cfg.reasoningEffort });
+const { llm, info } = createLlm(cfg);
 const phase = pack.phases[Math.min(1, pack.phases.length - 1)]!.id;
 const category = pack.taxonomy[0]!.key;
 
@@ -50,8 +50,9 @@ for (let i = 0; i < tries; i++) {
     for (let round = 0; round < 2; round++) {
       rounds++;
       let roundText = '';
+      let raw: unknown;
       const roundCalls: { id: string; name: string; arguments: string }[] = [];
-      for await (const ev of llm.stream({ messages, tools: round === 1 ? tools : tools, signal: new AbortController().signal })) {
+      for await (const ev of llm.stream({ messages, tools, signal: new AbortController().signal })) {
         if (ev.type === 'text') {
           if (sawTool && ev.delta.trim()) textAfterTool = true;
           text += ev.delta;
@@ -61,12 +62,12 @@ for (let i = 0; i < tries; i++) {
           sawTool = true;
           calls.push(ev.call);
           roundCalls.push(ev.call);
-        }
+        } else if (ev.type === 'done') raw = ev.raw;
       }
       sentences.push(...chunker.flush());
       sawTool = false;
       if (!roundCalls.some(c => c.name === TOOL_NAMES.setTopic)) break;
-      messages.push({ role: 'assistant', content: roundText, toolCalls: roundCalls });
+      messages.push({ role: 'assistant', content: roundText, toolCalls: roundCalls, ...(raw !== undefined ? { raw } : {}) });
       for (const c of roundCalls) {
         const content = c.name === TOOL_NAMES.setTopic ? JSON.stringify({ ok: true, material: { summary: 'multiply top and bottom by the same number' }, notes: [] }) : 'ok';
         messages.push({ role: 'tool', toolCallId: c.id, name: c.name, content });
@@ -104,7 +105,7 @@ for (let i = 0; i < tries; i++) {
   );
 }
 const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : '-');
-console.log(`\nmodel ${cfg.openrouterModel}, ${stats.tries} tries (${stats.failed} failed)`);
+console.log(`\n${info}, ${stats.tries} tries (${stats.failed} failed)`);
 console.log(`replies with a board call: ${stats.repliesWithBoard}/${stats.tries}`);
 console.log(`board calls with id: ${stats.withId}/${stats.boardCalls} (${pct(stats.withId, stats.boardCalls)}), with matching marker: ${stats.matched}/${stats.boardCalls} (${pct(stats.matched, stats.boardCalls)})`);
 console.log(`replies where every board call has its marker: ${stats.repliesAllMatched}/${stats.repliesWithBoard} (${pct(stats.repliesAllMatched, stats.repliesWithBoard)})`);
