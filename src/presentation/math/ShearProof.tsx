@@ -7,7 +7,7 @@ import {
 import "./math.css";
 import "./shear.css";
 
-const UNIT = 56, LEFT = 44, TOP = 58;
+const UNIT = 56, LEFT = 44, TOP = 36;
 export const SLIDE_MS = 1600;
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 export type ProofStage = "slant" | "cut" | "reassembled";
@@ -33,7 +33,7 @@ export function ShearProof({ shape, stage, draggable: canSlant, onShear, animate
   const { base: b, height: h, shear: s } = shape;
   const X = (x: number) => LEFT + x * UNIT, Y = (y: number) => TOP + (h - y) * UNIT;
   const path = (points: readonly Point[]) => points.map(([x, y]) => `${X(x)},${Y(y)}`).join(" ");
-  const width = LEFT * 2 + b * 2 * UNIT + 120, height = TOP + h * UNIT + 74;
+  const width = LEFT * 2 + b * 2 * UNIT + 120, height = TOP + h * UNIT + 50;
   const draggable = canSlant && stage === "slant";
 
   // Translation progress: 0 before the slide, 1 once the wedge sits in its new place.

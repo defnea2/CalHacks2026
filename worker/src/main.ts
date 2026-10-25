@@ -5,6 +5,7 @@ import { Agent } from './agent';
 import { loadConfig } from './env';
 import { createLlm } from './providers';
 import { StdbLink } from './stdb';
+import { teachingOutput } from './teachingOutput';
 
 const cfg = loadConfig();
 const missing = [
@@ -35,7 +36,7 @@ const link = new StdbLink({
 });
 const agent = new Agent({
   transport: link.transport,
-  llm,
+  llm: teachingOutput(llm),
   pack,
   log,
   opts: {
