@@ -106,6 +106,7 @@ export class PlaybackQueue {
   }
 
   private schedule(b: SentenceBlock<AudioBlockIn>): void {
+    const tSched = performance.now();
     const { pcm, sampleRate } = b.data;
     const ints = pcm16ToInt16(pcm);
     const [s, e] = trimRange(ints, this.cfg.TRIM_SILENCE_LEVEL);
@@ -139,6 +140,12 @@ export class PlaybackQueue {
       idx: b.idx,
       durationMs: Math.round(buffer.duration * 1000),
       inMs: Math.round((startAt - now) * 1000),
+      // TEMPORARY latency instrumentation: decode/trim/fade/buffer cost and context times
+      prepMs: Math.round((performance.now() - tSched) * 100) / 100,
+      startAt,
+      endAt,
+      ctxNow: now,
+      outputLatency: (this.ctx as AudioContext & { outputLatency?: number }).outputLatency ?? null,
       trimmedStart: s,
       trimmedEnd: ints.length - e,
     });

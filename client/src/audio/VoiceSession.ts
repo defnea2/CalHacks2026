@@ -41,6 +41,7 @@ export class VoiceSession {
   private stopped = false;
   private readonly onAudio = (_c: unknown, row: AudioOut) => {
     if (row.sessionId !== this.o.sessionId) return;
+    eventLog.log('lat.audioIn', { utteranceId: row.utteranceId.toString(), idx: row.idx, bytes: row.pcm.length });
     this.playback.push({ utteranceId: row.utteranceId, idx: row.idx, pcm: row.pcm, sampleRate: row.sampleRate });
   };
   private readonly onFlush = (_c: unknown, row: PlaybackFlush) => {
@@ -113,7 +114,12 @@ export class VoiceSession {
         const pcm = floatToPcm16(e.pcm);
         const args = { sessionId, phraseId: e.phraseId, seq: e.seq, pcm, final: e.final };
         eventLog.log('vad.chunk', { phraseId: e.phraseId, seq: e.seq, ms: Math.round(e.pcm.length / 16), final: e.final });
-        void callReducer('pushAudio', args, () => conn.reducers.pushAudio(args));
+        // TEMPORARY latency instrumentation: per-chunk reducer round trip with wall clock.
+        const t0 = performance.now();
+        const wall0 = Date.now();
+        void callReducer('pushAudio', args, () => conn.reducers.pushAudio(args)).then(() =>
+          eventLog.log('lat.push', { phraseId: e.phraseId, seq: e.seq, final: e.final, bytes: pcm.length, wall0, ms: Math.round((performance.now() - t0) * 100) / 100 })
+        );
         break;
       }
       case 'speech_start':

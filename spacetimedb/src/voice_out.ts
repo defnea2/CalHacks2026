@@ -18,6 +18,8 @@ import {
 } from './ctx';
 import { onTurnAppended } from './memory';
 import { ProviderError, synthesize, ttsRequest } from './providers';
+import { lat, latTag } from './lat';
+import { dueMs } from './voice_in';
 
 const PENDING: SentenceStatus = 'pending';
 const READY: SentenceStatus = 'ready';
@@ -59,6 +61,7 @@ export function addSentence(
   ctx: Ctx,
   args: { sessionId: bigint; utteranceId: bigint; idx: number; display: string; speech: string }
 ): void {
+  lat('addSentence', { s: args.sessionId, u: args.utteranceId, idx: args.idx, chars: args.speech.length }, ctx.timestamp);
   const session = getActiveSession(ctx, args.sessionId);
   if (args.utteranceId === 0n || session.currentUtteranceId !== args.utteranceId) {
     throw new SenderError(`utterance ${args.utteranceId} is not current (stale or interrupted)`);
@@ -95,13 +98,16 @@ export function addSentence(
 /** Scheduled: one sentence -> audio_out. Skips sentences dropped by an interrupt. */
 export function synthesizeSentence(
   ctx: PCtx,
-  job: { sessionId: bigint; sentenceId: bigint; utteranceId: bigint; idx: number; speech: string },
+  job: { sessionId: bigint; sentenceId: bigint; utteranceId: bigint; idx: number; speech: string; scheduledAt?: unknown },
   attempt = 0
 ): void {
+  latTag({ s: Number(job.sessionId), u: Number(job.utteranceId), idx: job.idx });
+  lat('tts.enter', { s: job.sessionId, u: job.utteranceId, idx: job.idx, due: dueMs(job.scheduledAt), attempt }, ctx.timestamp);
   const live = ctx.withTx(tx => {
     const s = tx.db.replySentence.id.find(job.sentenceId);
     return !!s && s.status === PENDING;
   });
+  lat('tts.read', { s: job.sessionId, u: job.utteranceId, idx: job.idx, live });
   if (!live) return;
 
   let audio;
@@ -139,10 +145,13 @@ export function synthesizeSentence(
       const m = metricsForUtterance(tx, job.sessionId, job.utteranceId);
       if (m && !m.firstAudioAt) tx.db.turnMetrics.id.update({ ...m, firstAudioAt: tx.timestamp });
     }
+    lat('tts.insert', { s: job.sessionId, u: job.utteranceId, idx: job.idx, bytes: audio.pcm.length }, tx.timestamp);
   });
+  lat('tts.exit', { s: job.sessionId, u: job.utteranceId, idx: job.idx });
 }
 
 export function markPlayed(ctx: Ctx, args: { sessionId: bigint; utteranceId: bigint; idx: number }): void {
+  lat('markPlayed', { s: args.sessionId, u: args.utteranceId, idx: args.idx }, ctx.timestamp);
   const s = findSentence(ctx, args.utteranceId, args.idx);
   if (!s || s.sessionId !== args.sessionId) return;
   if (s.status === READY) ctx.db.replySentence.id.update({ ...s, status: PLAYED });
@@ -173,6 +182,7 @@ function finishUtterance(ctx: Ctx, session: SessionRow): void {
 }
 
 export function interrupt(ctx: Ctx, sessionId: bigint): void {
+  lat('interrupt', { s: sessionId }, ctx.timestamp);
   const session = getActiveSession(ctx, sessionId);
   const utteranceId = session.currentUtteranceId;
   if (utteranceId === 0n && session.turnState === LISTENING) return; // nothing to interrupt

@@ -20,7 +20,7 @@ if (missing.length) {
 const ts = () => new Date().toISOString().slice(11, 23);
 const log = (m: string) => console.log(`${ts()} ${m}`);
 
-const llm = new OpenRouterProvider({ apiKey: cfg.openrouterApiKey, model: cfg.openrouterModel, reasoningEffort: cfg.reasoningEffort });
+const llm = new OpenRouterProvider({ apiKey: cfg.openrouterApiKey, model: cfg.openrouterModel, reasoningEffort: cfg.reasoningEffort, ...(process.env.LLM_BASE_URL ? { baseURL: process.env.LLM_BASE_URL } : {}) });
 const link = new StdbLink({
   uri: cfg.spacetimeUri,
   db: cfg.spacetimeDb,

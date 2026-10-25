@@ -2,6 +2,7 @@
 // assembled tool calls; aborts via the AbortSignal. First check #5: reasoning effort `none`
 // gives the fastest first token for openai/gpt-5.6-luna.
 import OpenAI from 'openai';
+import { lat } from './lat';
 import type { ChatMessage, ChatToolCall, LlmEvent, LlmProvider, ToolSpec } from '@tutor/shared';
 
 export interface OpenRouterOptions {
@@ -70,16 +71,26 @@ export class OpenRouterProvider implements LlmProvider {
       }
     };
     try {
+      lat('w.llmRequest', { bodyChars: JSON.stringify(body).length });
       const stream = (await this.client.chat.completions.create(
         body as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
         { signal: o.signal }
       )) as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
       let seq = 0;
+      lat('w.llmHeaders', {});
+      let first = true;
       for await (const chunk of stream) {
+        if (first) {
+          first = false;
+          lat('w.llmFirstChunk', {});
+        }
         const choice = chunk.choices?.[0];
         if (!choice) continue;
         const d = choice.delta;
-        if (d?.content) yield { type: 'text', delta: d.content };
+        if (d?.content) {
+          lat('w.token', { n: d.content.length, end: /[.!?]\s*$/.test(d.content) });
+          yield { type: 'text', delta: d.content };
+        }
         for (const tc of d?.tool_calls ?? []) {
           const idx = tc.index ?? 0;
           if (!pending.has(idx)) {

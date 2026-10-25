@@ -12,6 +12,7 @@ import { SentenceChunker, normalizeForSpeech, type ChatMessage, type LlmProvider
 import { buildMessages } from './prompt';
 import type { ToolResult, ToolRouter } from './router';
 import type { Transport, TurnRow } from './transport';
+import { lat } from './lat';
 
 /** Delays before retrying an LLM round that failed before any output (unstable connections). */
 const LLM_RETRY_DELAYS_MS = [400, 1200];
@@ -155,6 +156,7 @@ export class ReplyRun {
   private async begin(): Promise<void> {
     if (this.aborted) return;
     try {
+      lat('w.beginCall', { s: this.sessionId, u: this.utteranceId });
       await this.deps.transport.beginUtterance({
         sessionId: this.sessionId,
         utteranceId: this.utteranceId,
@@ -162,6 +164,7 @@ export class ReplyRun {
         preemptive: this.preemptive,
       });
       this.began = true;
+      lat('w.beginOk', { s: this.sessionId, u: this.utteranceId });
       this.recordFirstToken();
     } catch (e) {
       this.log(`beginUtterance failed: ${errText(e)}`);
@@ -182,6 +185,7 @@ export class ReplyRun {
       const idx = this.sent.length;
       this.sent.push(display);
       if (idx === 0) this.metric('firstSentenceAt', this.now());
+      lat('w.addSentenceCall', { s: this.sessionId, u: this.utteranceId, idx, chars: display.length });
       try {
         await this.deps.transport.addSentence({
           sessionId: this.sessionId,
@@ -190,6 +194,7 @@ export class ReplyRun {
           display,
           speech: normalizeForSpeech(display) || display,
         });
+        lat('w.addSentenceOk', { s: this.sessionId, u: this.utteranceId, idx });
       } catch (e) {
         this.log(`addSentence ${idx} failed: ${errText(e)}`);
       }
@@ -198,7 +203,9 @@ export class ReplyRun {
 
   private enqueueTool(call: ToolResult['call']): Promise<ToolResult> {
     const skipped: ToolResult = { call, kind: this.deps.router.kindOf(call.name), ok: false, result: 'error: reply was interrupted' };
+    lat('w.toolQueued', { s: this.sessionId, u: this.utteranceId, name: call.name });
     return this.enqueue(async () => {
+      lat('w.toolStart', { s: this.sessionId, u: this.utteranceId, name: call.name });
       const r = await this.deps.router.run(call, {
         sessionId: this.sessionId,
         utteranceId: this.utteranceId,
@@ -206,16 +213,19 @@ export class ReplyRun {
         transport: this.deps.transport,
       });
       this.toolResults.push(r);
+      lat('w.toolOk', { s: this.sessionId, u: this.utteranceId, name: call.name, ok: r.ok });
       return r;
     }, skipped);
   }
 
   private async main(): Promise<void> {
     try {
+      lat('w.runStart', { s: this.sessionId, turn: this.turnIdx, u: this.utteranceId, held: this.p.held, image: this.p.wantImage });
       const [context, image] = await Promise.all([
         this.deps.transport.buildContext({ sessionId: this.sessionId }),
         this.p.wantImage ? this.deps.transport.getSessionImage({ sessionId: this.sessionId }).catch(() => '') : Promise.resolve(''),
       ]);
+      lat('w.ctxDone', { s: this.sessionId, u: this.utteranceId, chars: context.length, imageChars: image.length });
       if (this.aborted) return;
       this.imageIncluded = !!image;
       this.history = buildMessages({
@@ -241,6 +251,7 @@ export class ReplyRun {
         for (let attempt = 0; ; attempt++) {
           let gotEvent = false;
           try {
+            lat('w.llmStream', { s: this.sessionId, u: this.utteranceId, round, msgs: this.history.length, promptChars: JSON.stringify(this.history).length });
             const stream = this.deps.llm.stream({ messages: this.history, tools, signal: this.abort.signal });
             for await (const ev of stream) {
               gotEvent = true;
@@ -248,8 +259,12 @@ export class ReplyRun {
               if (ev.type === 'text') {
                 this.markFirstToken();
                 text += ev.delta;
-                for (const s of chunker.push(ev.delta)) this.enqueueSentence(s);
+                for (const s of chunker.push(ev.delta)) {
+                  lat('w.chunk', { s: this.sessionId, u: this.utteranceId, chars: s.length });
+                  this.enqueueSentence(s);
+                }
               } else if (ev.type === 'tool_call') {
+                lat('w.toolCallEv', { s: this.sessionId, u: this.utteranceId, name: ev.call.name });
                 this.markFirstToken();
                 // A finished sentence before the call belongs before it (board reveal index).
                 for (const s of chunker.flushComplete()) this.enqueueSentence(s);

@@ -60,8 +60,30 @@ export class AudioCapture {
       },
       onFrameProcessed: (probs, frame) => this.onFrame(probs.isSpeech, frame),
     });
+    // TEMPORARY latency instrumentation: per-frame arrival (worklet -> main thread), Silero
+    // inference time and context time, in window.__lat.frames (ring of 4000 frames ≈ 128 s).
+    {
+      const vad = this.vad as unknown as {
+        processFrame: (f: Float32Array) => Promise<void>;
+        frameProcessor: { modelProcessFunc: (f: Float32Array) => Promise<unknown> };
+      };
+      const L = latStore();
+      const origProcess = vad.processFrame;
+      vad.processFrame = async (f: Float32Array) => {
+        L.cur = { i: L.n++, arrive: performance.now(), ctxT: ctx.currentTime, inferMs: 0, done: 0 };
+        await origProcess(f);
+      };
+      const fp = vad.frameProcessor;
+      const origModel = fp.modelProcessFunc;
+      fp.modelProcessFunc = async (f: Float32Array) => {
+        const t = performance.now();
+        const r = await origModel(f);
+        if (L.cur) L.cur.inferMs = performance.now() - t;
+        return r;
+      };
+    }
     await this.vad.start();
-    eventLog.log('capture.started', {});
+    eventLog.log('capture.started', { baseLatency: ctx.baseLatency, sampleRate: ctx.sampleRate });
   }
 
   private stats = { n: 0, levelSum: 0, maxLevel: -100, maxProb: 0, since: 0 };
@@ -89,7 +111,18 @@ export class AudioCapture {
       this.stats = { n: 0, levelSum: 0, maxLevel: -100, maxProb: 0, since: now };
     }
     this.opts.onFrame?.(level, prob);
-    for (const e of this.machine.process(prob, frame, level)) this.opts.onEvent(e);
+    const L = latStore();
+    const cur = L.cur;
+    const evs = this.machine.process(prob, frame, level);
+    if (cur) {
+      cur.done = performance.now();
+      L.frames.push({ ...cur, prob: Math.round(prob * 1000) / 1000, lvl: Math.round(level * 10) / 10, ev: evs.map(e => e.type).join(',') });
+      if (L.frames.length > 4000) L.frames.shift();
+    }
+    for (const e of evs) {
+      if (e.type !== 'noise_state') eventLog.log('lat.vad', { kind: e.type, frame: cur?.i ?? -1, ...(e.type === 'chunk' ? { seq: e.seq, final: e.final, samples: e.pcm.length } : {}) });
+      this.opts.onEvent(e);
+    }
   }
 
   set tutorSpeaking(v: boolean) {
@@ -108,4 +141,13 @@ export class AudioCapture {
     this.stream?.getTracks().forEach(t => t.stop());
     eventLog.log('capture.stopped', {});
   }
+}
+
+// TEMPORARY latency instrumentation store (window.__lat).
+interface LatFrame { i: number; arrive: number; ctxT: number; inferMs: number; done: number }
+interface LatStore { n: number; cur: LatFrame | null; frames: Array<LatFrame & { prob: number; lvl: number; ev: string }> }
+function latStore(): LatStore {
+  const w = window as unknown as { __lat?: LatStore };
+  if (!w.__lat) w.__lat = { n: 0, cur: null, frames: [] };
+  return w.__lat;
 }

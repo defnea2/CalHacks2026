@@ -13,6 +13,7 @@ import { base64 } from './providers';
 import * as sessions from './sessions';
 import * as voiceIn from './voice_in';
 import * as voiceOut from './voice_out';
+import { lat } from './lat';
 
 export default spacetimedb;
 
@@ -149,6 +150,7 @@ export const showBoardItem = spacetimedb.reducer(
     expectedAnswer: t.string(),
   },
   (ctx, args) => {
+    lat('showBoardItem', { s: args.sessionId, kind: args.kind }, ctx.timestamp);
     requireAgent(ctx);
     lesson.showBoardItem(ctx, args);
   }
@@ -192,11 +194,15 @@ export const remember = spacetimedb.reducer(
 // ---------------------------------------------------------------- procedures
 
 /** Agent only. Prompt context text: learner + memory, phase, board, task, topic material. */
-export const buildContext = spacetimedb.procedure({ sessionId: t.u64() }, t.string(), (ctx, { sessionId }) =>
-  ctx.withTx(tx => {
+export const buildContext = spacetimedb.procedure({ sessionId: t.u64() }, t.string(), (ctx, { sessionId }) => {
+  lat('ctx.enter', { s: sessionId }, ctx.timestamp);
+  const out = ctx.withTx(tx => {
     requireAgent(tx);
     return lesson.buildContext(tx, sessionId);
-  }));
+  });
+  lat('ctx.exit', { s: sessionId, chars: out.length });
+  return out;
+});
 
 /** Agent only. set_topic tool: validates + stores topic, returns JSON {ok, error?, material, notes}. */
 export const setTopic = spacetimedb.procedure(

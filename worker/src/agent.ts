@@ -6,6 +6,7 @@
 // call them directly with a fake Transport and a fake LlmProvider.
 import type { LessonPack, LlmProvider, PhraseStatus, SentenceStatus, TurnState, TurnStatus } from '@tutor/shared';
 import { buildSystemPrompt } from './prompt';
+import { lat } from './lat';
 import { ReplyRun, type ReplyDeps } from './reply';
 import { ToolRouter } from './router';
 import { createToolDefs } from './tools/index';
@@ -145,6 +146,7 @@ export class SessionAgent {
   }
 
   setTurn(row: TurnRow): void {
+    if (row.status === READY && this.turns.get(row.idx)?.status !== READY) lat('w.turnReadySeen', { s: this.id, turn: row.idx });
     this.turns.set(row.idx, row);
     this.evaluate();
   }

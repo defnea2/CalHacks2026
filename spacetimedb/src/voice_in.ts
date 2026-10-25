@@ -17,6 +17,7 @@ import {
 } from './ctx';
 import { onTurnAppended } from './memory';
 import { concatBytes, ProviderError, transcribe } from './providers';
+import { lat, latTag } from './lat';
 
 const T_OPEN: TurnStatus = 'open';
 const T_CLOSING: TurnStatus = 'closing';
@@ -68,6 +69,7 @@ export function pushAudio(
   args: { sessionId: bigint; phraseId: number; seq: number; pcm: Uint8Array; final: boolean }
 ): void {
   const { sessionId, phraseId, seq, pcm, final } = args;
+  lat('push', { s: sessionId, p: phraseId, seq, bytes: pcm.length, final }, ctx.timestamp);
   assertPcm(pcm);
   const session = getActiveSession(ctx, sessionId);
   let phrase = findPhrase(ctx, sessionId, phraseId);
@@ -129,6 +131,7 @@ function completeTurn(ctx: Ctx, turn: TurnRow): void {
     return;
   }
   ctx.db.turn.id.update({ ...turn, status: T_READY, closedAt: ctx.timestamp });
+  lat('turnReady', { s: turn.sessionId, turn: turn.idx }, ctx.timestamp);
   const m = metricsFor(ctx, turn.sessionId, turn.idx);
   ctx.db.turnMetrics.id.update({ ...m, sttDoneAt: ctx.timestamp });
   if (session) {
@@ -158,6 +161,7 @@ export function endTurn(ctx: Ctx, sessionId: bigint): void {
   if (!turn || turn.status !== T_OPEN) return;
   const m = metricsFor(ctx, sessionId, turn.idx);
   ctx.db.turnMetrics.id.update({ ...m, turnEndAt: ctx.timestamp });
+  lat('endTurn', { s: sessionId, turn: turn.idx, pending: turn.pendingPhrases }, ctx.timestamp);
   // Phrases still streaming (no final chunk yet) are finalized by their own final chunk.
   const streaming = [...ctx.db.phrase.sessionId.filter(sessionId)].some(p => p.turnIdx === turn.idx && p.status === P_STREAMING);
   if (turn.pendingPhrases > 0 || streaming) ctx.db.turn.id.update({ ...turn, status: T_CLOSING });
@@ -169,6 +173,7 @@ export function finishPhrase(ctx: Ctx, sessionId: bigint, phraseId: number, text
   const phrase = findPhrase(ctx, sessionId, phraseId);
   if (!phrase || phrase.status !== P_TRANSCRIBING) return;
   const clean = (text ?? '').trim();
+  lat('finishPhrase', { s: sessionId, p: phraseId, chars: clean.length }, ctx.timestamp);
   ctx.db.phrase.id.update({
     ...phrase,
     status: clean ? P_DONE : P_DISCARDED,
@@ -191,13 +196,16 @@ export function finishPhrase(ctx: Ctx, sessionId: bigint, phraseId: number, text
 }
 
 /** Scheduled: joins the phrase's chunks by seq and transcribes them in one request. */
-export function transcribePhrase(ctx: PCtx, job: { sessionId: bigint; phraseId: number; attempt: number }): void {
+export function transcribePhrase(ctx: PCtx, job: { sessionId: bigint; phraseId: number; attempt: number; scheduledAt?: unknown }): void {
+  latTag({ s: Number(job.sessionId), p: job.phraseId });
+  lat('stt.enter', { s: job.sessionId, p: job.phraseId, due: dueMs(job.scheduledAt) }, ctx.timestamp);
   const audio = ctx.withTx(tx => {
     const phrase = findPhrase(tx, job.sessionId, job.phraseId);
     if (!phrase || phrase.status !== P_TRANSCRIBING) return null;
     const chunks = [...tx.db.audioIn.bySessionPhrase.filter([job.sessionId, job.phraseId])].sort((a, b) => a.seq - b.seq);
     return concatBytes(chunks.map(c => c.pcm));
   });
+  lat('stt.read', { s: job.sessionId, p: job.phraseId, bytes: audio?.length ?? 0 });
   if (!audio) return;
 
   if (audio.length / BYTES_PER_MS < VOICE_DEFAULTS.VAD_MIN_SPEECH_MS) {
@@ -228,6 +236,13 @@ export function transcribePhrase(ctx: PCtx, job: { sessionId: bigint; phraseId: 
     return;
   }
   ctx.withTx(tx => finishPhrase(tx, job.sessionId, job.phraseId, text));
+  lat('stt.exit', { s: job.sessionId, p: job.phraseId });
+}
+
+/** ScheduleAt.Time -> ms (latency logs). */
+export function dueMs(at: unknown): number | null {
+  const v = (at as { value?: { microsSinceUnixEpoch?: bigint } } | undefined)?.value;
+  return v && typeof v.microsSinceUnixEpoch === 'bigint' ? Number(v.microsSinceUnixEpoch) / 1000 : null;
 }
 
 /** Ends open student turns of a session that is being closed. */

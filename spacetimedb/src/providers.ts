@@ -7,6 +7,7 @@ import { MODULE_DEFAULTS, VOICE_DEFAULTS } from '../../shared/src/config';
 import type { SttResult, TtsRequest, TtsResult } from '../../shared/src/types';
 import type { PCtx } from './ctx';
 import { settings } from './env';
+import { lat } from './lat';
 
 const enc = new TextEncoder();
 
@@ -82,6 +83,7 @@ export function transcribe(ctx: PCtx, pcm: Uint8Array, language: string = MODULE
     ],
     boundary
   );
+  lat('stt.fetchStart', { bytes: body.length });
   const url = `${settings.sttBaseUrl(ctx)}/stt?encoding=pcm_s16le&sample_rate=${VOICE_DEFAULTS.INPUT_SAMPLE_RATE}`;
   let res;
   try {
@@ -98,6 +100,7 @@ export function transcribe(ctx: PCtx, pcm: Uint8Array, language: string = MODULE
   } catch (e) {
     throw new ProviderError(0, `stt fetch failed: ${String(e)}`);
   }
+  lat('stt.fetchEnd', { status: res.status });
   const text = res.text();
   if (res.status !== 200) throw new ProviderError(res.status, errText(res.status, text));
   let json: { text?: unknown; duration?: unknown };
@@ -125,6 +128,7 @@ export function ttsRequest(ctx: PCtx, text: string): TtsRequest {
 
 /** One sentence -> raw PCM16 mono. Throws ProviderError on HTTP failure. */
 export function synthesize(ctx: PCtx, req: TtsRequest): TtsResult {
+  lat('tts.fetchStart', { chars: req.text.length });
   let res;
   try {
     res = ctx.http.fetch('https://api.cartesia.ai/tts/bytes', {
@@ -147,8 +151,10 @@ export function synthesize(ctx: PCtx, req: TtsRequest): TtsResult {
   } catch (e) {
     throw new ProviderError(0, `tts fetch failed: ${String(e)}`);
   }
+  lat('tts.fetchEnd', { status: res.status });
   if (res.status !== 200) throw new ProviderError(res.status, errText(res.status, res.text()));
   const pcm = res.bytes();
+  lat('tts.bytes', { bytes: pcm.length });
   if (pcm.length === 0) throw new ProviderError(502, 'tts: empty audio');
   return { pcm, sampleRate: req.sampleRate };
 }
