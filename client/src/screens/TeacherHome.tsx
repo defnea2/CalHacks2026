@@ -85,7 +85,15 @@ export function ClassSetup({ conn, teacherId }: { conn: DbConnection; teacherId:
   useEffect(() => {
     const sub = subscribe(
       conn,
-      [`SELECT * FROM teacher WHERE id = ${teacherId}`, `SELECT * FROM class_session WHERE teacher_id = ${teacherId}`, 'SELECT * FROM presence', 'SELECT * FROM learner'],
+      [
+        `SELECT * FROM teacher WHERE id = ${teacherId}`,
+        `SELECT * FROM class_session WHERE teacher_id = ${teacherId}`,
+        // Only online students (the waiting / in-session counts) and their learner rows.
+        "SELECT * FROM presence WHERE status = 'waiting'",
+        "SELECT * FROM presence WHERE status = 'in_session'",
+        "SELECT l.* FROM learner l JOIN presence p ON l.id = p.learner_id WHERE p.status = 'waiting'",
+        "SELECT l.* FROM learner l JOIN presence p ON l.id = p.learner_id WHERE p.status = 'in_session'",
+      ],
       `class setup ${teacherId}`
     );
     sub.ready.catch(e => setError(String(e?.message ?? e)));

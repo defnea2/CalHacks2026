@@ -51,8 +51,9 @@ export function Dashboard({ conn, classSessionId }: { conn: DbConnection; classS
         `SELECT * FROM student_cluster WHERE class_session_id = ${cid}`,
         `SELECT * FROM dashboard_state WHERE class_session_id = ${cid}`,
         `SELECT * FROM session WHERE class_session_id = ${cid}`,
-        'SELECT * FROM learner',
-        'SELECT * FROM teacher',
+        // Only the learners of this class's sessions and its teacher (JOIN subscriptions).
+        `SELECT l.* FROM learner l JOIN session s ON l.id = s.learner_id WHERE s.class_session_id = ${cid}`,
+        `SELECT t.* FROM teacher t JOIN class_session c ON t.id = c.teacher_id WHERE c.id = ${cid}`,
       ],
       `dashboard ${cid}`
     );

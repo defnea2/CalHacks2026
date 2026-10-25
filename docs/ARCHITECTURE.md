@@ -516,6 +516,16 @@ Procedures are the module's only way out: STT, TTS and all non-streaming LLM cal
   and the worker all subscribe to narrow SQL queries (`... WHERE session_id = X`). That is why
   observing/impersonating a student cost nothing to build: the observe frame subscribes to the same
   rows as the student's tab, and fan-out to a second client adds no measurable latency.
+  The worker, which serves every session, uses JOIN subscriptions on the active sessions
+  (`SELECT t.* FROM turn t JOIN session s ON t.session_id = s.id WHERE s.active = true`, the same
+  for `phrase`, `reply_sentence`, `board_item` and the sessions' `learner` rows; `worker/src/stdb.ts`).
+  2.13 maintains them incrementally: a session's rows arrive when it starts and are dropped from the
+  worker's cache when it ends. On a database with 36 sessions of history the worker's initial
+  subscription went from 1456 rows (~487 KiB) to 42 rows (~14 KiB)
+  (`pnpm --filter worker exec tsx src/measure-subscriptions.ts`; `src/gen-history.ts` fills a
+  scratch database). The teacher screens subscribe likewise: the dashboard to the learners of its
+  class's sessions and its teacher, class setup to online students only, the overview to the
+  learners of active sessions, the student picker to real learners.
 - **Validation in reducers.** The LLM proposes, the module disposes: phase transitions, beats
   compiled against the live canvas, checks, cluster sizes, presence transitions, interaction payloads
   are all validated in transactions; a rejection is a `SenderError` the worker turns into a repair

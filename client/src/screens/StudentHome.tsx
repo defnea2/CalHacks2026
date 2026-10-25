@@ -18,7 +18,8 @@ export function Initial({ name }: { name: string }) {
 export function StudentHome({ conn }: { conn: DbConnection }) {
   const [error, setError] = useState('');
   useEffect(() => {
-    const sub = subscribe(conn, ['SELECT * FROM learner'], 'students');
+    // The picker lists real students only (simulated ones belong to the teacher's simulation).
+    const sub = subscribe(conn, ['SELECT * FROM learner WHERE is_simulated = false'], 'students');
     sub.ready.catch(e => setError(String(e?.message ?? e)));
     return () => sub.unsubscribe();
   }, [conn]);
