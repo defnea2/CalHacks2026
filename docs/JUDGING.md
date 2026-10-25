@@ -154,10 +154,10 @@ Haiku, AI vs deterministic, why not Node + Postgres, why a worker, wrong model o
 Conflicts between the judging brief and what is on `main`:
 
 1. **Memory notes shown to people.** The brief says showing internal memory notes breaks our own
-   privacy rule. A teacher-only "Student profile" panel (procedure `learnerInsights`, teacher-gated,
-   branch `night/insights-ui`) is in progress and not on `main`. If it ships for the demo, present
-   it as teacher-only, on test data, and update the README privacy section (memory notes would then
-   reach a teacher, not only the model).
+   privacy rule. A teacher-only "Student profile" panel is now on `main` (dashboard → "Profile",
+   route `?profile=<id>&as=<teacherId>`, procedure `learnerInsights`, teacher-gated, optional
+   `INSIGHTS_KEY`; students never see it, guarded by a client test). Decide whether to show it; if
+   so, present it as teacher-only, on test data. The README privacy section says this.
 2. **OpenRouter.** The brief assumes OpenRouter; `main` uses the Anthropic API directly with
    `claude-haiku-5-5`. OpenRouter is only a fallback. Fine for the Anthropic track (Claude is the LLM).
 3. **`check_math` tool.** Does not exist. What exists: code-evaluated check rules and
