@@ -3,7 +3,7 @@ import { SenderError } from 'spacetimedb/server';
 import { MODULE_DEFAULTS } from '../../shared/src/config';
 import { pack } from '../../shared/src/lesson/index';
 import type { SentenceStatus, TurnState } from '../../shared/src/types';
-import { type Ctx, type SessionRow, getSession, updateSession, utteranceSentences } from './ctx';
+import { type Ctx, type SessionRow, cancelTtsJobs, getSession, updateSession, utteranceSentences } from './ctx';
 import { scheduleSessionEnd } from './memory';
 import { closeLiveTurns } from './voice_in';
 
@@ -87,6 +87,7 @@ function closeSession(ctx: Ctx, session: SessionRow): void {
       if (s.status === 'pending' || s.status === 'ready') ctx.db.replySentence.id.update({ ...s, status: DROPPED });
     }
   }
+  cancelTtsJobs(ctx, session.id);
   for (const c of [...ctx.db.audioIn.sessionId.filter(session.id)]) ctx.db.audioIn.id.delete(c.id);
   const fresh = ctx.db.session.id.find(session.id)!;
   updateSession(ctx, fresh, { active: false, endedAt: ctx.timestamp, turnState: LISTENING, currentUtteranceId: 0n });

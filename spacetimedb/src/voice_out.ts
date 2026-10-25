@@ -6,6 +6,7 @@ import {
   type PCtx,
   type SentenceRow,
   type SessionRow,
+  cancelTtsJobs,
   dueIn,
   findSentence,
   findTurn,
@@ -63,6 +64,7 @@ export function beginUtterance(
     for (const s of utteranceSentences(ctx, session.id, old)) {
       if (s.status === PENDING || s.status === READY) ctx.db.replySentence.id.update({ ...s, status: DROPPED });
     }
+    cancelTtsJobs(ctx, session.id, old);
     ctx.db.playbackFlush.insert({ sessionId: session.id, utteranceId: old });
   }
   updateSession(ctx, ctx.db.session.id.find(session.id)!, { currentUtteranceId: args.utteranceId });
@@ -220,6 +222,7 @@ export function interrupt(ctx: Ctx, sessionId: bigint): void {
     for (const s of sentences) {
       if (s.status === PENDING || s.status === READY) ctx.db.replySentence.id.update({ ...s, status: DROPPED });
     }
+    cancelTtsJobs(ctx, sessionId, utteranceId);
     // The worker usually appends the tutor turn as soon as the LLM finishes, before playback
     // ends. Then the turn must be corrected to what the student actually heard.
     const tutorTurn = tutorTurnFor(ctx, sessionId, utteranceId);

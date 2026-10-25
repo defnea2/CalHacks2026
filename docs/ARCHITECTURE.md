@@ -175,18 +175,19 @@ checks the caller's identity in the private `role` table.
 | `uploadPhoto` | client | `sessions.ts` | Task photo (jpeg/png/webp/gif, ≤ 1 MB) |
 | `attachImage(sessionId, mime, data)` | client (session owner) | `turn_photo.ts` | Photo taken during the session (jpeg/png/webp/gif, ≤ 1 MB); replaces a still-pending one, sets `session.pendingPhoto`. Completing the learner's next student turn (`completeTurn`) binds it to that turn (`turn.hasPhoto`). Owner = the identity that started the session, or for class sessions the connection holding the learner's `presence` |
 | `removePendingImage(sessionId)` | client (session owner) | `turn_photo.ts` | Drops the pending photo |
-| `endSession` | client | `sessions.ts` | Closes turns, drops unplayed sentences, schedules final memory extraction + summary |
+| `endSession` | client | `sessions.ts` | Closes turns, drops unplayed sentences and deletes their pending `tts_job`s, schedules final memory extraction + summary |
 | `startConversation` | client (module for sims) | `opening.ts` | Session screen opens (voice auto-starts): tutor speaks first (turnState thinking) |
 | `pushAudio(sessionId, phraseId, seq, pcm, final)` | client | `voice_in.ts` | Buffers a 160 ms chunk; `final` closes the phrase and inserts an `stt_job` due now; emits `speech_activity` |
 | `endTurn` | client | `voice_in.ts` | Turn end from VAD/Smart Turn; the turn is `ready` once every phrase is transcribed |
-| `interrupt` | client | `voice_out.ts` | Barge-in: unplayed sentences dropped, `playback_flush`, turnState interrupted |
+| `interrupt` | client | `voice_out.ts` | Barge-in: unplayed sentences dropped and their pending `tts_job`s deleted, `playback_flush`, turnState interrupted |
+| `interruptUtterance(sessionId, utteranceId)` | client | `voice_out.ts` | Barge-in scoped to the utterance the client was playing: the current one → `interrupt`; one that just finished (learner cut into its last sentence) → its tutor turn marked interrupted + flush; older ones ignored |
 | `markPlayed` | client | `voice_out.ts` | A sentence started playing (drives reveals, first-playback metric, "what was heard") |
 | `reportNoise` | client | `index.ts` | Noise floor of the turn, for metrics |
 | `submitGapAnswer` | client | `lesson.ts` | Gap task answer, checked against the private `board_answer` |
 | `submitTextTurn(sessionId, text, intent)` | client (module for sims) | `text_mode.ts` | Typed turn or a lesson button (`another_way`, `smaller_step`, `continue`, `demonstrate`); interrupts a running reply like barge-in |
 | `setSessionVoice(sessionId, voice)` | client | `text_mode.ts` | Text mode on/off |
 | `submitInteraction(sessionId, kind, payload)` | client | `pipeline.ts` | Canvas manipulation (`math_action`, `activity_action`), `submit`, `choice`; validated against `canvas_state` and the open check |
-| `requestTutor` | client | `pipeline.ts` | Slant-lesson feedback request row |
+| `requestTutor` | client | `pipeline.ts` | Slant-lesson feedback request row (`tutor_request`). No UI calls it today; the worker (`tutorRequests.ts`) serves the rows if one appears |
 | `registerAgent(secret)` | worker | `index.ts` | Registers the worker identity as `agent` |
 | `agentHeartbeat`, `submitTutorResult` | agent | `pipeline.ts` | Heartbeat row 0; result of a `tutor_request` |
 | `beginUtterance`, `beginOpening` | agent | `voice_out.ts`, `opening.ts` | Start a tutor reply (or the opening) with a worker-chosen unique utterance id |
@@ -195,8 +196,10 @@ checks the caller's identity in the private `role` table.
 | `addSentence` | agent | `voice_out.ts` | A free sentence (opening script, tool mode) + `tts_job` |
 | `appendTutorTurn` | agent | `voice_out.ts` | Final text of a tutor utterance (what was heard, if interrupted) |
 | `setTurnState`, `setPhase`, `showBoardItem`, `clearBoard`, `remember`, `recordMetric` | agent | `voice_out.ts`, `lesson.ts`, `memory.ts` | Tool-mode actions and metrics, each validated against the lesson pack |
+| `seedMemory(learnerId, memory)` | agent | `seed.ts` | Seeds a learner's history (notes, mastery, past summaries; JSON validated against the pack taxonomy); replaces earlier seeded rows, keeps live notes |
 | `buildContext(sessionId) → string` | agent (procedure) | `lesson.ts` | Prompt context: learner + memory, phase, board, task, topic material, teacher block for class sessions |
 | `buildLessonRequest(sessionId, requestId) → string` | agent (procedure) | `pipeline.ts` | The team `ModelRequest` for the current lesson state |
+| `prefetchTopic(sessionId) → string` | agent (procedure) | `pipeline.ts` | Topic prefetch before the first lesson reply from the pack's keyword cues (JSON `{ok, category, concept, source, text, hasImage}`); no concept → the worker classifies with the LLM |
 | `setTopic(...) → string` | agent (procedure) | `lesson.ts` | Validates + stores the topic, returns the library material |
 | `getSessionImage(sessionId) → string` | agent (procedure) | `index.ts` | Task photo (or the class's image document) as a data URL |
 | `getTurnImage(sessionId, turnIdx) → string` | agent (procedure) | `turn_photo.ts` | Photo sent with that turn (or the pending one while that turn is still open, for a preemptive reply) as a data URL. The lesson planner puts it into that turn's user message as an image block with "The learner sent a photo with this turn: look at it." (never the system prompt: the cache prefix stays stable) |
@@ -207,6 +210,8 @@ checks the caller's identity in the private `role` table.
 | `createTeacher` | client | `classroom.ts` | |
 | `setPresence(learnerId, status)` | client | `classroom.ts` | offline / waiting / in_session; `waiting` during an active class joins it at once (late joiner) |
 | `startClassSession(teacherId, goals, content, delivery, documentName, documentMime, documentText, documentData, simulatedCount)` | client | `classroom.ts` | Ends the teacher's previous class, links every online student into a new session, starts the simulation |
+| `startClassSessionWith(..., resetSimulated)` | client | `classroom.ts` | `startClassSession` with the sim reset as an option: `false` keeps simulation users' memory and history from earlier runs |
+| `resetSimulatedStudents(count)` | client | `classroom.ts` | Simulation users 1..count (0 = all 20) back to their seed state; refused while one is in a running class |
 | `endClassSession` | client | `classroom.ts` | Ends linked sessions; real students back to `waiting` |
 | `setImpersonation(classSessionId, learnerId)` | client | `classroom.ts` | Teacher observes a student (0 = stop; an overdue refresh then runs at once) |
 | `refreshDashboard(classSessionId) → string` | client (procedure) | `classroom.ts` | Refresh button: one Haiku call → summary + clusters |
@@ -470,8 +475,12 @@ Procedures are the module's only way out: STT, TTS and all non-streaming LLM cal
 - **State lives in the database, not in a server.** Sessions, turns, the canvas, the lesson record,
   memory, presence, the dashboard: all tables. There is no backend server; the client is static
   files, and the worker is just another client.
-- **Every view is a subscription.** The student tab, the teacher dashboard, the overview, the observer
-  and the worker all subscribe to narrow SQL queries (`... WHERE session_id = X`). That is why
+- **Every view is a subscription.** The student tab, the teacher dashboard, the overview and the
+  observer subscribe to narrow SQL queries (`... WHERE session_id = X`). The worker is the
+  exception: it serves all sessions, so it subscribes to `session WHERE active = true` plus the
+  whole `turn` / `phrase` / `reply_sentence` tables, and ignores rows whose session is not active
+  in its cache (a join-filtered subscription is on the after-hackathon list,
+  [SPACETIME_AUDIT.md](SPACETIME_AUDIT.md)). That is why
   observing/impersonating a student cost nothing to build: the observe frame subscribes to the same
   rows as the student's tab, and fan-out to a second client adds no measurable latency.
 - **Validation in reducers.** The LLM proposes, the module disposes: phase transitions, beats
@@ -485,12 +494,15 @@ Procedures are the module's only way out: STT, TTS and all non-streaming LLM cal
 - **Event tables for streams.** Audio (`audio_out`), flushes and speech pings are event rows: delivered
   to subscribers at commit, never stored, no cleanup.
 - **Scheduled tables instead of external queues.** STT, TTS, reading delays, memory windows, simulated
-  students and the 30 s dashboard are rows with `scheduleAt`; retries are new rows; cancellation is a
-  delete or a status check in the job's transaction.
+  students and the 30 s dashboard are rows with `scheduleAt`; cancellation is a delete of the
+  pending job row (barge-in, supersede and `endSession` delete the reply's `tts_job`s) plus a status
+  check in the job's commit transaction for a call already in flight. Retries: STT schedules a new
+  row; TTS retries once inside the same procedure call.
 - **Procedures for side effects, reducers stay pure and fast.** Reducers make no network calls; every
   outbound call is a procedure that commits its result in its own transaction.
-- **One identity model.** The worker authenticates as `agent` via a shared secret once
-  (`registerAgent`); agent-only reducers check `role`.
+- **One identity model, for the worker.** The worker authenticates as `agent` via a shared secret
+  once (`registerAgent`); agent-only reducers check `role`. Client reducers do not check
+  `ctx.sender` (test users, no accounts by spec), except the turn-photo owner check.
 - **Measured overhead is small.** Reducer round trip ~8 ms, commit → subscriber ~7 ms, ~100 ms of
   total system overhead per voice turn ([latency-internal.md](latency-internal.md)).
 
