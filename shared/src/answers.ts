@@ -35,6 +35,15 @@ export function parseFraction(raw: string): [number, number] | null {
   return n === null || d === null || d === 0 ? null : [n, d];
 }
 
+/** Spoken comparison words -> '<' | '>' | '='; symbols map to themselves; null otherwise. */
+export function relationSymbol(s: string): '<' | '>' | '=' | null {
+  const t = clean(s);
+  if (t === '<' || /^(is )?(less|smaller|fewer)( than)?$/.test(t)) return '<';
+  if (t === '>' || /^(is )?(more|bigger|greater|larger)( than)?$/.test(t)) return '>';
+  if (t === '=' || /^(is )?(equal|equals|the same|same|equal to|the same as)$/.test(t)) return '=';
+  return null;
+}
+
 /**
  * Checks a student's answer. Fractions must match in form (3/6 is not accepted for 1/2),
  * because tasks like expanding ask for a specific form. Numbers compare by value.
@@ -52,7 +61,12 @@ export function checkAnswer(expected: ExpectedAnswer, given: string): boolean {
       return e !== null && g !== null && e[0] === g[0] && e[1] === g[1];
     }
     case 'choice':
-    case 'text':
-      return clean(expected.value) === clean(given);
+    case 'text': {
+      const e = clean(expected.value);
+      const g = clean(given);
+      if (e === g) return true;
+      const rel = relationSymbol(g);
+      return rel !== null && rel === relationSymbol(e);
+    }
   }
 }
