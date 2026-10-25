@@ -414,7 +414,7 @@ export function SessionView({ conn, sessionId, settings, readOnly = false }: Ses
           <Captions data={data} tutorShown={tutorShown} />
           {thinking && (
             <div className="lesson-planning" role="status" data-testid="lesson-thinking">
-              <span className="lesson-more">{beats.length ? 'The rest of your lesson is arriving…' : 'Building your visual lesson…'}</span>
+              <span className="lesson-more">{latest.length && !serverOver(latest[0]!.utteranceId) ? 'The rest of your lesson is arriving…' : 'Building your visual lesson…'}</span>
               {!readOnly && <button type="button" onClick={cancelReply}>Cancel</button>}
             </div>
           )}
