@@ -2,13 +2,13 @@
 // `pnpm --filter worker smoke:llm`. Prints events and timings, never keys.
 import { pack, SentenceChunker, normalizeForSpeech, type ChatMessage } from '@tutor/shared';
 import { loadConfig } from './env';
-import { OpenRouterProvider } from './llm';
+import { createLlm } from './providers';
 import { buildSystemPrompt } from './prompt';
 import { createToolDefs } from './tools/index';
 
 const cfg = loadConfig();
 const tools = createToolDefs(pack).map(t => ({ name: t.name, description: t.description, parameters: t.parameters }));
-const llm = new OpenRouterProvider({ apiKey: cfg.openrouterApiKey, model: cfg.openrouterModel, reasoningEffort: cfg.reasoningEffort });
+const { llm, info } = createLlm(cfg);
 const messages: ChatMessage[] = [
   { role: 'system', content: buildSystemPrompt(pack, tools) },
   { role: 'system', content: `Learner: Mia, 10, grade 5, likes pictures.\nOriginal task: Expand 2/3 so the bottom number is 12.\nCurrent phase: ${pack.initialPhase}\nBoard right now: empty` },
@@ -34,7 +34,7 @@ for (let round = 0; round < 3; round++) {
     } else console.log(`${Date.now() - t0}ms done (${ev.finishReason})`);
   }
   for (const s of chunker.flush()) console.log(`end sentence: ${s}`);
-  console.log(`round ${round}: model ${cfg.openrouterModel}, first token ${first} ms, total ${Date.now() - t0} ms`);
+  console.log(`round ${round}: ${info}, first token ${first} ms, total ${Date.now() - t0} ms`);
   if (!calls.length) break;
   // Fake tool results (no SpacetimeDB here).
   messages.push({ role: 'assistant', content: text, toolCalls: calls });

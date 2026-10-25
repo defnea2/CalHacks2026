@@ -1,6 +1,6 @@
 // ToolRouter: one LLM tool call -> one handler run. Never throws: bad JSON, unknown tools,
 // reducer errors and timeouts all come back as "error: ..." results the model can read.
-import type { ChatToolCall, ToolSpec } from '@tutor/shared';
+import { validateJson, type ChatToolCall, type JsonSchema, type ToolSpec } from '@tutor/shared';
 import type { ToolContext, ToolDef } from './tools/types';
 
 export interface ToolResult {
@@ -42,6 +42,10 @@ export class ToolRouter {
     } catch (e) {
       return { call, kind: tool.kind, ok: false, result: `error: invalid arguments: ${errText(e)}` };
     }
+    // Providers may stream tool input without server-side validation (Anthropic eager input
+    // streaming), so check the arguments against the tool's own schema before running it.
+    const problems = validateJson(tool.parameters as JsonSchema, args);
+    if (problems.length) return { call, kind: tool.kind, ok: false, result: `error: invalid arguments: ${problems.slice(0, 3).join('; ')}` };
     const timeoutMs = tool.timeoutMs ?? this.defaultTimeoutMs;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {

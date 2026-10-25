@@ -58,11 +58,22 @@ describe('ToolRouter', () => {
     expect(tr.of('setTopic')[0]).toEqual({ sessionId: 7n, category: pack.taxonomy[0]!.key, concept: '' });
   });
 
+  it('rejects arguments that violate the tool schema before running the handler', async () => {
+    const tr = new FakeTransport();
+    const router = new ToolRouter(createToolDefs(pack), 200);
+    const missing = await router.run(call(TOOL_NAMES.setPhase, { reason: 'no phase given' }), ctx(tr));
+    expect(missing.ok).toBe(false);
+    expect(missing.result).toMatch(/^error: invalid arguments: .*phase.*required/);
+    const badEnum = await router.run(call(TOOL_NAMES.setPhase, { phase: 'not-a-phase', reason: 'x' }), ctx(tr));
+    expect(badEnum.result).toMatch(/^error: invalid arguments: .*must be one of/);
+    expect(tr.of('setPhase')).toEqual([]);
+  });
+
   it('errors never throw: reducer error, bad JSON, unknown tool, timeout', async () => {
     const tr = t();
     tr.fail.setPhase = 'transition not allowed';
     const router = new ToolRouter(createToolDefs(pack), 50);
-    expect((await router.run(call(TOOL_NAMES.setPhase, { phase: 'x', reason: '' }), ctx(tr))).result).toBe('error: transition not allowed');
+    expect((await router.run(call(TOOL_NAMES.setPhase, { phase: phaseId, reason: '' }), ctx(tr))).result).toBe('error: transition not allowed');
     expect((await router.run(call(TOOL_NAMES.setPhase, '{"phase":'), ctx(tr))).result).toMatch(/^error: invalid arguments/);
     expect((await router.run(call(TOOL_NAMES.setPhase, '[1]'), ctx(tr))).result).toMatch(/^error: invalid arguments/);
     expect((await router.run(call('nope', {}), ctx(tr))).result).toBe('error: unknown tool nope');
