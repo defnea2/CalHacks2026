@@ -1,0 +1,6 @@
+packages:
+  - shared
+  - spacetimedb
+  - worker
+  - client
+  - e2e

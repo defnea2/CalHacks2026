@@ -1,0 +1,15 @@
+{
+  "name": "voice-math-tutor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stdb:start": "NO_PROXY=127.0.0.1,localhost spacetime start --data-dir ./.spacetime-data",
+    "stdb:publish": "node scripts/publish.mjs",
+    "stdb:generate": "NO_PROXY=127.0.0.1,localhost spacetime generate --lang typescript --out-dir client/src/module_bindings --module-path spacetimedb && NO_PROXY=127.0.0.1,localhost spacetime generate --lang typescript --out-dir worker/src/module_bindings --module-path spacetimedb",
+    "worker": "pnpm --filter worker start",
+    "client": "pnpm --filter client dev",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "packageManager": "pnpm@9.15.9"
+}
