@@ -47,11 +47,19 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function findLiterals(src: string, ids: string[]): { line: number; id: string; text: string }[] {
   const rawLines = src.split('\n');
   const lines = stripComments(src).split('\n');
-  const res = ids.map(id => ({ id, re: new RegExp(`(['"\`])${escapeRe(id)}\\1`) }));
+  const res = ids.map(id => ({ id, re: new RegExp(`(['"\`])${escapeRe(id)}\\1`, 'g') }));
+  // `type: 'text'` / `.type === 'text'` are discriminators of other unions (OpenAI content parts,
+  // LLM events), never a board kind or phase, so a literal right after `type` is not a hit.
+  const isTypeDiscriminator = (line: string, at: number) => /\btype\s*(?::|===|!==|==|!=)\s*$/.test(line.slice(0, at));
   const hits: { line: number; id: string; text: string }[] = [];
   lines.forEach((line, i) => {
     if (rawLines[i]!.includes(OPT_OUT)) return;
-    for (const { id, re } of res) if (re.test(line)) hits.push({ line: i + 1, id, text: rawLines[i]!.trim() });
+    for (const { id, re } of res)
+      for (const m of line.matchAll(re))
+        if (!isTypeDiscriminator(line, m.index!)) {
+          hits.push({ line: i + 1, id, text: rawLines[i]!.trim() });
+          break;
+        }
   });
   return hits;
 }
