@@ -17,6 +17,9 @@ export class MarkerAnchors {
   /** Markers of a marker-only piece before any sentence: they go to the next sentence start. */
   private leading: SentenceMarker[] = [];
   private lastIdx = -1;
+  /** For the reply log: ids resolved / asked for without a marker. */
+  readonly resolved: string[] = [];
+  readonly missing: string[] = [];
   private lastSpeechLength = 0;
 
   /** Stream time: note the markers of a chunker piece as soon as it is cut. */
@@ -50,9 +53,26 @@ export class MarkerAnchors {
   /** The anchor for a tool's `id`, consumed. Undefined: no such marker (item keeps the
    *  default reveal at the next sentence). */
   take(id: unknown): Anchor | undefined {
-    if (typeof id !== 'string' || !id.trim()) return undefined;
-    const list = this.byId.get(normalizeMarkerId(id));
-    return list?.shift();
+    if (typeof id !== 'string' || !id.trim()) {
+      this.missing.push('(no id)');
+      return undefined;
+    }
+    const key = normalizeMarkerId(id);
+    const a = this.byId.get(key)?.shift();
+    (a ? this.resolved : this.missing).push(key);
+    return a;
+  }
+
+  /** Markers spoken but never claimed by a tool call. */
+  unclaimed(): string[] {
+    return [...this.byId].flatMap(([id, list]) => list.map(() => id));
+  }
+
+  /** One-line summary for the reply log ('' when the reply had no markers). */
+  summary(): string {
+    const un = this.unclaimed();
+    if (!this.resolved.length && !this.missing.length && !un.length) return '';
+    return `markers: ${this.resolved.length} anchored${this.missing.length ? `, no marker for [${this.missing.join(',')}]` : ''}${un.length ? `, unclaimed [${un.join(',')}]` : ''}`;
   }
 
   private push(id: string, a: Anchor): void {

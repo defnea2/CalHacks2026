@@ -1,26 +1,46 @@
 // Real-model check of inline board markers (no SpacetimeDB): does the model write ⟦id⟧ markers
 // in its speech, pass matching ids to the board tool, and put every tool call after its text?
-// `pnpm --filter worker smoke:markers [tries]`. Prints a per-try line and the rates, never keys.
-import { markerIds, pack, prepareSentence, SentenceChunker, TOOL_NAMES, type ChatMessage } from '@tutor/shared';
+// `pnpm --filter worker smoke:markers [tries] [fresh]`. `fresh`: first turn of a session (initial
+// phase, no topic yet, like the E2E fixtures), else mid-lesson with the topic set.
+// Prints a per-try line and the rates, never keys.
+import fs from 'node:fs';
+import { markerIds, markerReminder, pack, prepareSentence, SentenceChunker, TOOL_NAMES, type ChatMessage } from '@tutor/shared';
 import { loadConfig } from './env';
 import { createLlm } from './providers';
 import { buildSystemPrompt } from './prompt';
 import { createToolDefs } from './tools/index';
 
 const tries = Number(process.argv[2] ?? 10);
+// SMOKE_TOPIC_FILE: a real set_topic result (library material is long and changes behaviour).
+const topicResult = process.env.SMOKE_TOPIC_FILE
+  ? fs.readFileSync(process.env.SMOKE_TOPIC_FILE, 'utf8')
+  : JSON.stringify({ ok: true, material: { summary: 'multiply top and bottom by the same number' }, notes: [] });
 const cfg = loadConfig();
 const tools = createToolDefs(pack).map(t => ({ name: t.name, description: t.description, parameters: t.parameters }));
 const { llm, info } = createLlm(cfg);
-const phase = pack.phases[Math.min(1, pack.phases.length - 1)]!.id;
+const fresh = process.argv[3] === 'fresh';
+const phase = fresh ? pack.initialPhase : pack.phases[Math.min(1, pack.phases.length - 1)]!.id;
 const category = pack.taxonomy[0]!.key;
 
-const STUDENT = [
+const STUDENT = fresh
+  ? ['I multiply the top and the bottom by 4.', 'I think I just add 10 to the bottom, so it is 2 over 12?', 'Um, I am not sure. Do I make the top bigger?']
+  : [
   "I don't get how two thirds can be the same as eight twelfths. It has bigger numbers!",
   'Can you show me with a picture why one half is the same as two quarters?',
   'Why do I multiply the top and the bottom by the same number?',
 ];
 
 function conversation(user: string): ChatMessage[] {
+  if (fresh) {
+    return [
+      { role: 'system', content: buildSystemPrompt(pack, tools) },
+      {
+        role: 'system',
+        content: `Learner: Mia, 10, grade 5, likes pictures.\nOriginal task: Expand 2/3 so the bottom number is 12.\nCurrent phase: ${phase}\nBoard right now: empty\n\nTopic: not set yet. Find it and call set_topic.`,
+      },
+      { role: 'user', content: user },
+    ];
+  }
   return [
     { role: 'system', content: buildSystemPrompt(pack, tools) },
     {
@@ -69,7 +89,7 @@ for (let i = 0; i < tries; i++) {
       if (!roundCalls.some(c => c.name === TOOL_NAMES.setTopic)) break;
       messages.push({ role: 'assistant', content: roundText, toolCalls: roundCalls, ...(raw !== undefined ? { raw } : {}) });
       for (const c of roundCalls) {
-        const content = c.name === TOOL_NAMES.setTopic ? JSON.stringify({ ok: true, material: { summary: 'multiply top and bottom by the same number' }, notes: [] }) : 'ok';
+        const content = c.name === TOOL_NAMES.setTopic ? topicResult + (process.env.SMOKE_REMINDER ? `\n\n${markerReminder(TOOL_NAMES.showBoardItem)}` : '') : 'ok';
         messages.push({ role: 'tool', toolCallId: c.id, name: c.name, content });
       }
       text += ' ';
@@ -101,7 +121,8 @@ for (let i = 0; i < tries; i++) {
   const speech = sentences.map(s => prepareSentence(s).speech).join(' ');
   if (/⟦|⟧|\[\[|marker/i.test(speech)) stats.spokenMarker++;
   console.log(
-    `try ${i} (${rounds} rounds, ${Date.now() - t0} ms): markers [${ids.join(',')}] board ids [${boardIds.join(',')}] tools ${calls.map(c => c.name).join(',') || '-'}${textAfterTool ? ' TEXT-AFTER-TOOL' : ''}\n  text: ${text.replace(/\s+/g, ' ').trim()}`
+    `try ${i} (${rounds} rounds, ${Date.now() - t0} ms): markers [${ids.join(',')}] board ids [${boardIds.join(',')}] tools ${calls.map(c => c.name).join(',') || '-'}${textAfterTool ? ' TEXT-AFTER-TOOL' : ''}\n  text: ${text.replace(/\s+/g, ' ').trim()}` +
+      board.map(c => `\n  ${c.name} ${c.arguments.slice(0, 160)}`).join('')
   );
 }
 const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : '-');

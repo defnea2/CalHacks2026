@@ -1,6 +1,6 @@
 // One reply end to end through the Agent: sentences, metrics, tool ordering and tool rounds.
 import { describe, expect, it } from 'vitest';
-import { pack, TOOL_NAMES } from '@tutor/shared';
+import { markerReminder, pack, TOOL_NAMES } from '@tutor/shared';
 import { done, FakeLlm, makeAgent, session, text, tokens, tool, turn, waitFor } from './fakes';
 
 const S = 1n;
@@ -129,7 +129,13 @@ describe('reply', () => {
     ]);
     const { transport } = await answer(llm);
     expect(llm.calls).toHaveLength(2);
-    expect(llm.calls[1]!.messages.at(-1)).toMatchObject({ role: 'tool', toolCallId: 't1', name: TOOL_NAMES.setTopic, content: transport.topicResult });
+    // The result carries the inline-marker reminder (the next round may show board items).
+    expect(llm.calls[1]!.messages.at(-1)).toMatchObject({
+      role: 'tool',
+      toolCallId: 't1',
+      name: TOOL_NAMES.setTopic,
+      content: `${transport.topicResult}\n\n${markerReminder(TOOL_NAMES.showBoardItem)}`,
+    });
     expect(llm.calls[1]!.messages.at(-2)).toMatchObject({ role: 'assistant', content: 'Okay, fractions it is, my friend. ' });
     expect(transport.of('addSentence').map(a => a.idx)).toEqual([0, 1]);
     expect(transport.of('appendTutorTurn')[0]!.text).toBe('Okay, fractions it is, my friend. A fraction is a part of a whole thing.');

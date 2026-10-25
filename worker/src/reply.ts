@@ -14,7 +14,7 @@
 // marker's sentence + speech offset, and the tool stores that as the item's reveal anchor. A
 // tool call whose marker is still in the chunker buffer waits until the round's text is cut
 // (and every later call of the round with it, to keep their order).
-import { SentenceChunker, prepareSentence, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
+import { SentenceChunker, markerReminder, prepareSentence, TOOL_NAMES, type ChatMessage, type LlmProvider, type MetricName } from '@tutor/shared';
 import { MarkerAnchors } from './markers';
 import { buildMessages } from './prompt';
 import type { ToolResult, ToolRouter } from './router';
@@ -226,6 +226,16 @@ export class ReplyRun {
     }, skipped);
   }
 
+  /** A query result goes back to the model for another round that may show board items: remind
+   *  it of the inline markers (long library material otherwise buries the prompt rule; measured
+   *  with the real model: ~70% -> ~100% of board calls with their marker). */
+  private withMarkerReminder(r: ToolResult, nextRound: number): string {
+    const nextOffersTools = !(nextRound >= this.deps.maxToolRounds && nextRound > 0);
+    const board = this.deps.router.kindOf(TOOL_NAMES.showBoardItem) !== 'unknown';
+    if (r.kind !== 'query' || !r.ok || !nextOffersTools || !board) return r.result;
+    return `${r.result}\n\n${markerReminder(TOOL_NAMES.showBoardItem)}`;
+  }
+
   private async main(): Promise<void> {
     try {
       const [context, image] = await Promise.all([
@@ -295,7 +305,7 @@ export class ReplyRun {
         this.history = [
           ...this.history,
           { role: 'assistant', content: text, ...(calls.length ? { toolCalls: calls } : {}), ...(raw !== undefined ? { raw } : {}) },
-          ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: r.result })),
+          ...res.map((r): ChatMessage => ({ role: 'tool', toolCallId: r.call.id, name: r.call.name, content: this.withMarkerReminder(r, round + 1) })),
         ];
         if (!calls.length) break;
         // Query results must go back to the LLM; action results only if nothing was said yet.
@@ -345,8 +355,14 @@ export class ReplyRun {
     const ft = this.firstTokenAt ? `${((this.firstTokenAt - this.startedAt) / 1000).toFixed(2)}s` : '-';
     this.log(
       `${interrupted ? `interrupted${why ? ` (${why})` : ''}` : 'done'}${this.preemptive ? ' [preemptive]' : ''}: ` +
-        `${said.length}/${this.sent.length} sentences, first token ${ft}${tools ? `, tools: ${tools}` : ''}`
+        `${said.length}/${this.sent.length} sentences, first token ${ft}${tools ? `, tools: ${tools}` : ''}` +
+        (this.anchors.summary() ? `, ${this.anchors.summary()}` : '')
     );
+    if (this.anchors.missing.length) {
+      // The model gave an id without writing its marker: keep its text for prompt tuning.
+      const said = this.history.filter(m => m.role === 'assistant').map(m => (typeof m.content === 'string' ? m.content : '')).join(' | ');
+      this.log(`marker text: ${JSON.stringify(said.slice(0, 600))}`);
+    }
   }
 }
 

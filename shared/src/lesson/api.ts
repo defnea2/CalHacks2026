@@ -130,7 +130,8 @@ export function buildToolSpecs(pack: LessonPack): ToolSpec[] {
     {
       name: TOOL_NAMES.showBoardItem,
       description:
-        'Show something on the shared board. Either pass kind + content, or a library taskKey. ' +
+        `Show something on the shared board. Your spoken text must already contain its marker (${markerText('b1')}) right after the words about it, and you pass the same id here. ` +
+        'Either pass kind + content, or a library taskKey. ' +
         pack.boardKinds.map(k => `${k.name}: ${k.description}`).join(' | '),
       parameters: {
         type: 'object',

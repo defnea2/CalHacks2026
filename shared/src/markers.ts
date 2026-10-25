@@ -12,6 +12,10 @@ import { normalizeForSpeech } from './normalizer';
 export const MARKER_OPEN = '⟦';
 export const MARKER_CLOSE = '⟧';
 export const markerText = (id: string) => `${MARKER_OPEN}${id}${MARKER_CLOSE}`;
+/** Appended to query results that go back to the model in the same reply: the long library
+ *  material otherwise pushes the marker rule out of focus (measured with the real model). */
+export const markerReminder = (boardTool: string) =>
+  `(Reminder: in your reply, write ${markerText('b1')} right after the words about each board item, then call ${boardTool} with id "b1" after your text.)`;
 
 const ID = '[A-Za-z0-9_-]{1,24}';
 const WELL_FORMED = new RegExp(String.raw`⟦\s*(${ID})\s*⟧|\[\[\s*(${ID})\s*\]\]`, 'g');
