@@ -73,7 +73,7 @@ async function main() {
           console.log(`${scenario.name}: honest limitation, ${Date.now() - t0}ms`);
           continue;
         }
-        assert.equal(boards.length, 1, `Expected one generated canvas for ${scenario.name}, turn ${i + 1}: ${JSON.stringify(agent.sessions.get(1n)?.live?.toolResults.map(r => ({ tool: r.call.name, result: r.result, input: r.call.arguments })))}`);
+        assert.equal(boards.length, 1, `Expected one generated canvas for ${scenario.name}, turn ${i + 1}: ${JSON.stringify((((agent.sessions.get(1n)?.live as { toolResults?: { call: { name: string; arguments: string }; result: string }[] } | undefined)?.toolResults) ?? []).map(r => ({ tool: r.call.name, result: r.result, input: r.call.arguments })))}`);
         const content = JSON.parse(String(boards[0]!.content));
         assert.deepEqual(validateVoiceCanvasContent(content, { requireGrounding: true }), content, 'Stored plan differs from the grounded plan');
         const sentences = transport.of('addSentence').filter(s => s.utteranceId === tutor.utteranceId);
