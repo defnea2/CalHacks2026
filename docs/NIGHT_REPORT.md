@@ -69,6 +69,8 @@ Merged on `main`: `night/stdb-hardening` (`24db3e5`), `night/identity` (`7fd6c48
 
 E2E status: 1,017 unit tests green on `3f899d7`; the identity branch ran 8/8 on its own. The full browser E2E on `main` fails since ~15:00 PDT with "audio blocks received, 0 played" — the **same failure on the previously green commit `30ef798`**, so it's the machine (likely a stuck macOS `coreaudiod` after load 100+), not the code. Fix: `sudo killall coreaudiod` or reboot, then rerun `pnpm test:e2e`.
 
+**Update 17:27 PDT:** audio recovered by itself. Full E2E on `main` (`e2657dc`): **5/5 sequential PASS** (correct-step, wrong-step, um-pauses, noisy, interrupt); the 3 parallel scenarios ended EXTERNAL (4 external API flakes, exit 0). Turn end → first audio p50 2.44 s.
+
 Small direct commits on `night/integration`: night plan / contract docs, `164eda5` (e2e smoke typecheck fix), this report.
 
 Test status of the final state (`983c230`): 791 unit tests green (teaching 52, shared 157, module 127, client 131, worker 106, team app 218), typecheck clean, static client build. Final full E2E on this state (06:13–06:25, quiet machine): **8/8 PASS**, 0 external flakes; turn end → first audio p50 2.75 s (min 2.62, max 3.17); "Start talking" → opening audio p50 1.06 s. `main` = `09db721` (fast-forwarded 06:27).
